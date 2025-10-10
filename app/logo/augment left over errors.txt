@@ -1,0 +1,2949 @@
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'payments' does not exist in type 'SubscriptionInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 11,
+	"endLineNumber": 251,
+	"endColumn": 19,
+	"relatedInformation": [
+		{
+			"startLineNumber": 9180,
+			"startColumn": 5,
+			"endLineNumber": 9180,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: SubscriptionSelect<DefaultArgs>; include?: SubscriptionInclude<DefaultArgs>; where?: SubscriptionWhereInput; ... 4 more ...; distinct?: SubscriptionScalarFieldEnum | SubscriptionScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'payments' does not exist in type 'SubscriptionInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 11,
+	"endLineNumber": 291,
+	"endColumn": 19,
+	"relatedInformation": [
+		{
+			"startLineNumber": 9084,
+			"startColumn": 5,
+			"endLineNumber": 9084,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: SubscriptionSelect<DefaultArgs>; include?: SubscriptionInclude<DefaultArgs>; where?: SubscriptionWhereInput; ... 4 more ...; distinct?: SubscriptionScalarFieldEnum | SubscriptionScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ subscription: true; user: true; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 403,
+	"startColumn": 9,
+	"endLineNumber": 403,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 403,
+			"startColumn": 9,
+			"endLineNumber": 406,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 427,
+	"startColumn": 45,
+	"endLineNumber": 427,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'tier' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 434,
+	"startColumn": 58,
+	"endLineNumber": 434,
+	"endColumn": 62,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 439,
+	"startColumn": 48,
+	"endLineNumber": 439,
+	"endColumn": 50,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 447,
+	"startColumn": 45,
+	"endLineNumber": 447,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 453,
+	"startColumn": 48,
+	"endLineNumber": 453,
+	"endColumn": 50,
+	"origin": "extHost2"
+}]
+
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/lib/firebase.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'credential' does not exist on type 'UserCredential'.",
+	"source": "ts",
+	"startLineNumber": 52,
+	"startColumn": 26,
+	"endLineNumber": 52,
+	"endColumn": 36,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/lib/errorTranslations.ts",
+	"owner": "typescript",
+	"code": "1117",
+	"severity": 8,
+	"message": "An object literal cannot have multiple properties with the same name.",
+	"source": "ts",
+	"startLineNumber": 122,
+	"startColumn": 5,
+	"endLineNumber": 122,
+	"endColumn": 18,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/lib/services/roleAccessService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type 'unknown' is not assignable to type 'AccessCheckResult'.",
+	"source": "ts",
+	"startLineNumber": 198,
+	"startColumn": 9,
+	"endLineNumber": 198,
+	"endColumn": 15,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/lib/services/roleAccessService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type 'unknown' is not assignable to type 'AccessCheckResult'.",
+	"source": "ts",
+	"startLineNumber": 264,
+	"startColumn": 9,
+	"endLineNumber": 264,
+	"endColumn": 15,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/lib/services/roleAccessService.ts",
+	"owner": "typescript",
+	"code": "18046",
+	"severity": 8,
+	"message": "'response.data' is of type 'unknown'.",
+	"source": "ts",
+	"startLineNumber": 501,
+remove apple sign in method here 
+[{
+	"resource": "/home/gotti/Desktop/frontend/contexts/StudentFirebaseAuth.tsx",
+	"owner": "typescript",
+	"code": "2614",
+	"severity": 8,
+	"message": "Module '\"@/lib/firebase\"' has no exported member 'appleProvider'. Did you mean to use 'import appleProvider from \"@/lib/firebase\"' instead?",
+	"source": "ts",
+	"startLineNumber": 18,
+	"startColumn": 32,
+	"endLineNumber": 18,
+	"endColumn": 45,
+	"origin": "extHost2"
+}]
+	"startColumn": 38,
+	"endLineNumber": 501,
+	"endColumn": 51,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/voiceSimulationService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ user: true; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 116,
+	"startColumn": 9,
+	"endLineNumber": 116,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 116,
+			"startColumn": 9,
+			"endLineNumber": 116,
+			"endColumn": 32,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/voiceSimulationService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/voiceSimulationService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ user: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 214,
+	"startColumn": 9,
+	"endLineNumber": 214,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 214,
+			"startColumn": 9,
+			"endLineNumber": 222,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; userId: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/voiceSimulationService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/voiceSimulationService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ user: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 242,
+	"startColumn": 9,
+	"endLineNumber": 242,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 242,
+			"startColumn": 9,
+			"endLineNumber": 250,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { userId: string; }; orderBy: { createdAt: \"desc\"; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/voiceSimulationService.ts"
+		}
+	],
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts",
+	"owner": "typescript",
+	"code": "2352",
+	"severity": 8,
+	"message": "Conversion of type '{ id: string; status: UserStatus; createdAt: Date; updatedAt: Date; email: string; firstName: string; lastName: string; role: UserRole; subscriptionTier: SubscriptionTier; ... 9 more ...; subscriptions: { ...; }[]; }[]' to type 'UserProfile[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.\n  Type '{ id: string; status: UserStatus; createdAt: Date; updatedAt: Date; email: string; firstName: string; lastName: string; role: UserRole; subscriptionTier: SubscriptionTier; ... 9 more ...; subscriptions: { ...; }[]; }' is missing the following properties from type 'UserProfile': lastActivityAt, socialAuthProvider, socialAuthId, profilePicture",
+	"source": "ts",
+	"startLineNumber": 384,
+	"startColumn": 16,
+	"endLineNumber": 384,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'enrollments' does not exist in type 'UserCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 665,
+	"startColumn": 17,
+	"endLineNumber": 665,
+	"endColumn": 28,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { select: { id: true; title: true; level: true; duration: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 746,
+	"startColumn": 11,
+	"endLineNumber": 746,
+	"endColumn": 18,
+	"relatedInformation": [
+		{
+			"startLineNumber": 746,
+			"startColumn": 11,
+			"endLineNumber": 755,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { userId: string; }; include: never; orderBy: { enrolledAt: \"desc\"; }; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { select: { title: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 856,
+	"startColumn": 11,
+	"endLineNumber": 856,
+	"endColumn": 18,
+	"relatedInformation": [
+		{
+			"startLineNumber": 856,
+			"startColumn": 11,
+			"endLineNumber": 858,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { userId: string; enrolledAt: { gte: Date; }; }; include: never; orderBy: { enrolledAt: \"desc\"; }; take: 5; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/userService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 896,
+	"startColumn": 42,
+	"endLineNumber": 896,
+	"endColumn": 47,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'favorites' does not exist in type 'TestInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 93,
+	"startColumn": 11,
+	"endLineNumber": 93,
+	"endColumn": 20,
+	"relatedInformation": [
+		{
+			"startLineNumber": 13680,
+			"startColumn": 5,
+			"endLineNumber": 13680,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: TestSelect<DefaultArgs>; include?: TestInclude<DefaultArgs>; where: TestWhereUniqueInput; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 119,
+	"startColumn": 16,
+	"endLineNumber": 119,
+	"endColumn": 24,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 119,
+	"startColumn": 33,
+	"endLineNumber": 119,
+	"endColumn": 41,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 120,
+	"startColumn": 30,
+	"endLineNumber": 120,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 121,
+	"startColumn": 40,
+	"endLineNumber": 121,
+	"endColumn": 48,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2741",
+	"severity": 8,
+	"message": "Property 'createdBy' is missing in type '{ isFavorited: boolean; bestScore: number; attemptsCount: number; id: string; status: $Enums.TestStatus; createdAt: Date; updatedAt: Date; level: $Enums.CourseLevel; ... 20 more ...; createdById: string; }' but required in type 'TestWithDetails'.",
+	"source": "ts",
+	"startLineNumber": 128,
+	"startColumn": 13,
+	"endLineNumber": 128,
+	"endColumn": 28,
+	"relatedInformation": [
+		{
+			"startLineNumber": 203,
+			"startColumn": 3,
+			"endLineNumber": 203,
+			"endColumn": 12,
+			"message": "'createdBy' is declared here.",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/types/index.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 130,
+	"startColumn": 27,
+	"endLineNumber": 130,
+	"endColumn": 36,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 130,
+	"startColumn": 44,
+	"endLineNumber": 130,
+	"endColumn": 53,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'favorites' does not exist in type 'TestInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 210,
+	"startColumn": 11,
+	"endLineNumber": 210,
+	"endColumn": 20,
+	"relatedInformation": [
+		{
+			"startLineNumber": 13812,
+			"startColumn": 5,
+			"endLineNumber": 13812,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: TestSelect<DefaultArgs>; include?: TestInclude<DefaultArgs>; where?: TestWhereInput; orderBy?: TestOrderByWithRelationInput | TestOrderByWithRelationInput[]; cursor?: TestWhereUniqueInput; take?: number; skip?: number; distinct?: TestScalarFieldEnum | TestScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ isFavorited: boolean; bestScore: number; attemptsCount: number; id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; ... 20 more ...; createdById: string; }[]' is not assignable to type 'TestWithDetails[]'.\n  Property 'createdBy' is missing in type '{ isFavorited: boolean; bestScore: number; attemptsCount: number; id: string; status: $Enums.TestStatus; createdAt: Date; updatedAt: Date; level: $Enums.CourseLevel; ... 20 more ...; createdById: string; }' but required in type 'TestWithDetails'.",
+	"source": "ts",
+	"startLineNumber": 222,
+	"startColumn": 13,
+	"endLineNumber": 222,
+	"endColumn": 29,
+	"relatedInformation": [
+		{
+			"startLineNumber": 203,
+			"startColumn": 3,
+			"endLineNumber": 203,
+			"endColumn": 12,
+			"message": "'createdBy' is declared here.",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/types/index.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 18,
+	"endLineNumber": 226,
+	"endColumn": 26,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 226,
+	"startColumn": 35,
+	"endLineNumber": 226,
+	"endColumn": 43,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 227,
+	"startColumn": 32,
+	"endLineNumber": 227,
+	"endColumn": 40,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'attempts' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 42,
+	"endLineNumber": 228,
+	"endColumn": 50,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 236,
+	"startColumn": 29,
+	"endLineNumber": 236,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/testService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; status: TestStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; ... 16 more ...; createdById: string; }'.",
+	"source": "ts",
+	"startLineNumber": 236,
+	"startColumn": 46,
+	"endLineNumber": 236,
+	"endColumn": 55,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'payments' does not exist in type 'SubscriptionInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 11,
+	"endLineNumber": 251,
+	"endColumn": 19,
+	"relatedInformation": [
+		{
+			"startLineNumber": 9180,
+			"startColumn": 5,
+			"endLineNumber": 9180,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: SubscriptionSelect<DefaultArgs>; include?: SubscriptionInclude<DefaultArgs>; where?: SubscriptionWhereInput; ... 4 more ...; distinct?: SubscriptionScalarFieldEnum | SubscriptionScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'payments' does not exist in type 'SubscriptionInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 291,
+	"startColumn": 11,
+	"endLineNumber": 291,
+	"endColumn": 19,
+	"relatedInformation": [
+		{
+			"startLineNumber": 9084,
+			"startColumn": 5,
+			"endLineNumber": 9084,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: SubscriptionSelect<DefaultArgs>; include?: SubscriptionInclude<DefaultArgs>; where?: SubscriptionWhereInput; ... 4 more ...; distinct?: SubscriptionScalarFieldEnum | SubscriptionScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ subscription: true; user: true; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 403,
+	"startColumn": 9,
+	"endLineNumber": 403,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 403,
+			"startColumn": 9,
+			"endLineNumber": 406,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 427,
+	"startColumn": 45,
+	"endLineNumber": 427,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'tier' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 434,
+	"startColumn": 58,
+	"endLineNumber": 434,
+	"endColumn": 62,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 439,
+	"startColumn": 48,
+	"endLineNumber": 439,
+	"endColumn": 50,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 447,
+	"startColumn": 45,
+	"endLineNumber": 447,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/subscriptionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 453,
+	"startColumn": 48,
+	"endLineNumber": 453,
+	"endColumn": 50,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/questionBankService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ manager: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 78,
+	"startColumn": 9,
+	"endLineNumber": 78,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 78,
+			"startColumn": 9,
+			"endLineNumber": 86,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ data: { managerId: string; title: string; description: string; pdfUrl: string; extractedQuestions: any; level: any; category: any; isActive: true; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/questionBankService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/questionBankService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ manager: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 353,
+	"startColumn": 9,
+	"endLineNumber": 353,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 353,
+			"startColumn": 9,
+			"endLineNumber": 361,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { managerId: string; }; orderBy: { createdAt: \"desc\"; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/questionBankService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/questionBankService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ manager: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 377,
+	"startColumn": 9,
+	"endLineNumber": 377,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 377,
+			"startColumn": 9,
+			"endLineNumber": 385,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { isActive: true; }; orderBy: { createdAt: \"desc\"; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/questionBankService.ts"
+		}
+	],
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/postService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 137,
+	"startColumn": 17,
+	"endLineNumber": 137,
+	"endColumn": 22,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/postService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 389,
+	"startColumn": 13,
+	"endLineNumber": 389,
+	"endColumn": 18,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/postService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 438,
+	"startColumn": 15,
+	"endLineNumber": 438,
+	"endColumn": 20,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'favorites' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 647,
+	"startColumn": 17,
+	"endLineNumber": 647,
+	"endColumn": 26,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'enrollments' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 723,
+	"startColumn": 45,
+	"endLineNumber": 723,
+	"endColumn": 56,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'enrollments' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 724,
+	"startColumn": 49,
+	"endLineNumber": 724,
+	"endColumn": 60,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'enrollments' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 724,
+	"startColumn": 119,
+	"endLineNumber": 724,
+	"endColumn": 130,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 730,
+	"startColumn": 40,
+	"endLineNumber": 730,
+	"endColumn": 46,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 732,
+	"startColumn": 43,
+	"endLineNumber": 732,
+	"endColumn": 49,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 732,
+	"startColumn": 99,
+	"endLineNumber": 732,
+	"endColumn": 105,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/managerService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 734,
+	"startColumn": 38,
+	"endLineNumber": 734,
+	"endColumn": 44,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'favorites' does not exist in type 'LiveSessionInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 129,
+	"startColumn": 11,
+	"endLineNumber": 129,
+	"endColumn": 20,
+	"relatedInformation": [
+		{
+			"startLineNumber": 18229,
+			"startColumn": 5,
+			"endLineNumber": 18229,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: LiveSessionSelect<DefaultArgs>; include?: LiveSessionInclude<DefaultArgs>; where: LiveSessionWhereUniqueInput; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2741",
+	"severity": 8,
+	"message": "Property 'createdBy' is missing in type '{ participantCount: any; isRegistered: any; isFavorited: boolean; id: string; status: $Enums.LiveSessionStatus; createdAt: Date; updatedAt: Date; level: $Enums.CourseLevel | null; ... 18 more ...; notifyFollowers: boolean; }' but required in type 'LiveSessionWithDetails'.",
+	"source": "ts",
+	"startLineNumber": 152,
+	"startColumn": 13,
+	"endLineNumber": 152,
+	"endColumn": 31,
+	"relatedInformation": [
+		{
+			"startLineNumber": 264,
+			"startColumn": 3,
+			"endLineNumber": 264,
+			"endColumn": 12,
+			"message": "'createdBy' is declared here.",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/types/index.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'participants' does not exist on type '{ id: string; status: LiveSessionStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; ... 15 more ...; notifyFollowers: boolean; }'. Did you mean 'maxParticipants'?",
+	"source": "ts",
+	"startLineNumber": 154,
+	"startColumn": 39,
+	"endLineNumber": 154,
+	"endColumn": 51,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'participants' does not exist on type '{ id: string; status: LiveSessionStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; ... 15 more ...; notifyFollowers: boolean; }'. Did you mean 'maxParticipants'?",
+	"source": "ts",
+	"startLineNumber": 155,
+	"startColumn": 44,
+	"endLineNumber": 155,
+	"endColumn": 56,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; status: LiveSessionStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; ... 15 more ...; notifyFollowers: boolean; }'.",
+	"source": "ts",
+	"startLineNumber": 156,
+	"startColumn": 34,
+	"endLineNumber": 156,
+	"endColumn": 43,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; status: LiveSessionStatus; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; ... 15 more ...; notifyFollowers: boolean; }'.",
+	"source": "ts",
+	"startLineNumber": 156,
+	"startColumn": 58,
+	"endLineNumber": 156,
+	"endColumn": 67,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ createdBy: { id: string; firstName: string; lastName: string; }; _count: { participants: number; }; participants: { id: string; userId: string; liveSessionId: string; joinedAt: Date; leftAt: Date; engagementScore: number; attended: boolean; }[]; } & { ...; }'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 30,
+	"endLineNumber": 252,
+	"endColumn": 39,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/liveSessionService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ createdBy: { id: string; firstName: string; lastName: string; }; _count: { participants: number; }; participants: { id: string; userId: string; liveSessionId: string; joinedAt: Date; leftAt: Date; engagementScore: number; attended: boolean; }[]; } & { ...; }'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 50,
+	"endLineNumber": 252,
+	"endColumn": 59,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/levelDeterminationService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'answers' does not exist in type 'TestAttemptInclude<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 52,
+	"startColumn": 11,
+	"endLineNumber": 52,
+	"endColumn": 18,
+	"relatedInformation": [
+		{
+			"startLineNumber": 16116,
+			"startColumn": 5,
+			"endLineNumber": 16116,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ select?: TestAttemptSelect<DefaultArgs>; include?: TestAttemptInclude<DefaultArgs>; where?: TestAttemptWhereInput; ... 4 more ...; distinct?: TestAttemptScalarFieldEnum | TestAttemptScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/levelDeterminationService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'currentLevel' does not exist in type '(Without<UserUpdateInput, UserUncheckedUpdateInput> & UserUncheckedUpdateInput) | (Without<...> & UserUpdateInput)'.",
+	"source": "ts",
+	"startLineNumber": 434,
+	"startColumn": 11,
+	"endLineNumber": 434,
+	"endColumn": 23,
+	"relatedInformation": [
+		{
+			"startLineNumber": 6929,
+			"startColumn": 5,
+			"endLineNumber": 6929,
+			"endColumn": 9,
+			"message": "The expected type comes from property 'data' which is declared here on type '{ select?: UserSelect<DefaultArgs>; include?: UserInclude<DefaultArgs>; data: (Without<UserUpdateInput, UserUncheckedUpdateInput> & UserUncheckedUpdateInput) | (Without<...> & UserUpdateInput); where: UserWhereUniqueInput; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ originalName: string; filename: string; mimeType: string; mimetype: string; size: number; path: string; url: string; userId: string; category: \"DOCUMENT\" | \"PROFILE_IMAGE\" | \"COURSE_MATERIAL\" | \"POST_MEDIA\" | \"OTHER\"; metadata: string; }' is not assignable to type '(Without<FileCreateInput, FileUncheckedCreateInput> & FileUncheckedCreateInput) | (Without<...> & FileCreateInput)'.\n  Type '{ originalName: string; filename: string; mimeType: string; mimetype: string; size: number; path: string; url: string; userId: string; category: \"DOCUMENT\" | \"PROFILE_IMAGE\" | \"COURSE_MATERIAL\" | \"POST_MEDIA\" | \"OTHER\"; metadata: string; }' is not assignable to type 'Without<FileUncheckedCreateInput, FileCreateInput> & FileCreateInput'.\n    Property 'uploadedById' is missing in type '{ originalName: string; filename: string; mimeType: string; mimetype: string; size: number; path: string; url: string; userId: string; category: \"DOCUMENT\" | \"PROFILE_IMAGE\" | \"COURSE_MATERIAL\" | \"POST_MEDIA\" | \"OTHER\"; metadata: string; }' but required in type 'FileCreateInput'.",
+	"source": "ts",
+	"startLineNumber": 167,
+	"startColumn": 9,
+	"endLineNumber": 167,
+	"endColumn": 13,
+	"relatedInformation": [
+		{
+			"startLineNumber": 65990,
+			"startColumn": 5,
+			"endLineNumber": 65990,
+			"endColumn": 17,
+			"message": "'uploadedById' is declared here.",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		},
+		{
+			"startLineNumber": 49289,
+			"startColumn": 5,
+			"endLineNumber": 49289,
+			"endColumn": 9,
+			"message": "The expected type comes from property 'data' which is declared here on type '{ select?: FileSelect<DefaultArgs>; data: (Without<FileCreateInput, FileUncheckedCreateInput> & FileUncheckedCreateInput) | (Without<...> & FileCreateInput); }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ user: { select: { id: true; firstName: true; lastName: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 228,
+	"startColumn": 9,
+	"endLineNumber": 228,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 228,
+			"startColumn": 9,
+			"endLineNumber": 236,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'cloudinaryPublicId' does not exist in type '(Without<FileCreateInput, FileUncheckedCreateInput> & FileUncheckedCreateInput) | (Without<...> & FileCreateInput)'.",
+	"source": "ts",
+	"startLineNumber": 528,
+	"startColumn": 11,
+	"endLineNumber": 528,
+	"endColumn": 29,
+	"relatedInformation": [
+		{
+			"startLineNumber": 49289,
+			"startColumn": 5,
+			"endLineNumber": 49289,
+			"endColumn": 9,
+			"message": "The expected type comes from property 'data' which is declared here on type '{ select?: FileSelect<DefaultArgs>; data: (Without<FileCreateInput, FileUncheckedCreateInput> & FileUncheckedCreateInput) | (Without<...> & FileCreateInput); }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'string | number | true | JsonObject | JsonArray' is not assignable to parameter of type 'string'.\n  Type 'number' is not assignable to type 'string'.",
+	"source": "ts",
+	"startLineNumber": 568,
+	"startColumn": 54,
+	"endLineNumber": 568,
+	"endColumn": 75,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'cloudinaryPublicId' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; userId: string; metadata: JsonValue; category: string; path: string; originalName: string; url: string; uploadedById: string; filename: string; mimeType: string; mimetype: string; size: number; }'.",
+	"source": "ts",
+	"startLineNumber": 609,
+	"startColumn": 16,
+	"endLineNumber": 609,
+	"endColumn": 34,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2345",
+	"severity": 8,
+	"message": "Argument of type 'string | number | true | JsonObject | JsonArray' is not assignable to parameter of type 'string'.\n  Type 'number' is not assignable to type 'string'.",
+	"source": "ts",
+	"startLineNumber": 610,
+	"startColumn": 53,
+	"endLineNumber": 610,
+	"endColumn": 66,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'cloudinaryPublicId' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; userId: string; metadata: JsonValue; category: string; path: string; originalName: string; url: string; uploadedById: string; filename: string; mimeType: string; mimetype: string; size: number; }'.",
+	"source": "ts",
+	"startLineNumber": 612,
+	"startColumn": 16,
+	"endLineNumber": 612,
+	"endColumn": 34,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/fileUploadService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'cloudinaryPublicId' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; userId: string; metadata: JsonValue; category: string; path: string; originalName: string; url: string; uploadedById: string; filename: string; mimeType: string; mimetype: string; size: number; }'.",
+	"source": "ts",
+	"startLineNumber": 624,
+	"startColumn": 34,
+	"endLineNumber": 624,
+	"endColumn": 52,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/favoriteService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { select: { id: true; title: true; description: true; level: true; category: true; isPublished: true; }; }; test: { select: { id: true; title: true; description: true; level: true; category: true; isPublished: true; }; }; liveSession: { ...; }; post: { ...; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 64,
+	"startColumn": 9,
+	"endLineNumber": 64,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 64,
+			"startColumn": 9,
+			"endLineNumber": 108,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: any; skip: number; take: number; orderBy: { createdAt: \"desc\"; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/favoriteService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/favoriteService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { select: { id: true; title: true; description: true; level: true; category: true; }; }; test: { select: { id: true; title: true; description: true; level: true; category: true; }; }; liveSession: { select: { ...; }; }; post: { ...; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 152,
+	"startColumn": 7,
+	"endLineNumber": 152,
+	"endColumn": 14,
+	"relatedInformation": [
+		{
+			"startLineNumber": 152,
+			"startColumn": 7,
+			"endLineNumber": 191,
+			"endColumn": 8,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ data: { userId: string; contentId: string; contentType: ContentType; folder: string; tags: string[]; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/favoriteService.ts"
+		}
+	],
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts",
+	"owner": "typescript",
+	"code": "2614",
+	"severity": 8,
+	"message": "Module '\"./questionBankService\"' has no exported member 'QuestionBankService'. Did you mean to use 'import QuestionBankService from \"./questionBankService\"' instead?",
+	"source": "ts",
+	"startLineNumber": 3,
+	"startColumn": 10,
+	"endLineNumber": 3,
+	"endColumn": 29,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts",
+	"owner": "typescript",
+	"code": "2561",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, but 'fileName' does not exist in type '(Without<FileCreateInput, FileUncheckedCreateInput> & FileUncheckedCreateInput) | (Without<...> & FileCreateInput)'. Did you mean to write 'filename'?",
+	"source": "ts",
+	"startLineNumber": 92,
+	"startColumn": 11,
+	"endLineNumber": 92,
+	"endColumn": 19,
+	"relatedInformation": [
+		{
+			"startLineNumber": 49289,
+			"startColumn": 5,
+			"endLineNumber": 49289,
+			"endColumn": 9,
+			"message": "The expected type comes from property 'data' which is declared here on type '{ select?: FileSelect<DefaultArgs>; data: (Without<FileCreateInput, FileUncheckedCreateInput> & FileUncheckedCreateInput) | (Without<...> & FileCreateInput); }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts",
+	"owner": "typescript",
+	"code": "2349",
+	"severity": 8,
+	"message": "This expression is not callable.\n  Type '{ default: (dataBuffer: Buffer<ArrayBufferLike>, options?: Options) => Promise<Result>; }' has no call signatures.",
+	"source": "ts",
+	"startLineNumber": 162,
+	"startColumn": 26,
+	"endLineNumber": 162,
+	"endColumn": 34,
+	"relatedInformation": [
+		{
+			"startLineNumber": 8,
+			"startColumn": 1,
+			"endLineNumber": 8,
+			"endColumn": 39,
+			"message": "Type originates at this import. A namespace-style import cannot be called or constructed, and will cause a failure at runtime. Consider using a default import or import require here instead.",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ uploadedBy: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 296,
+	"startColumn": 9,
+	"endLineNumber": 296,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 296,
+			"startColumn": 9,
+			"endLineNumber": 300,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: any; include: never; orderBy: { createdAt: \"desc\"; }; skip: number; take: number; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ uploadedBy: true; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 330,
+	"startColumn": 9,
+	"endLineNumber": 330,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 330,
+			"startColumn": 9,
+			"endLineNumber": 330,
+			"endColumn": 38,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/enhancedFileManagementService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'filePath' does not exist on type '{ uploadedBy: never; } & { id: string; createdAt: Date; updatedAt: Date; userId: string; metadata: JsonValue; category: string; path: string; originalName: string; url: string; ... 4 more ...; size: number; }'.",
+	"source": "ts",
+	"startLineNumber": 347,
+	"startColumn": 29,
+	"endLineNumber": 347,
+	"endColumn": 37,
+	"origin": "extHost2"
+
+
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/emailService.ts",
+	"owner": "typescript",
+	"code": "2393",
+	"severity": 8,
+	"message": "Duplicate function implementation.",
+	"source": "ts",
+	"startLineNumber": 455,
+	"startColumn": 16,
+	"endLineNumber": 455,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/emailService.ts",
+	"owner": "typescript",
+	"code": "2393",
+	"severity": 8,
+	"message": "Duplicate function implementation.",
+	"source": "ts",
+	"startLineNumber": 525,
+	"startColumn": 16,
+	"endLineNumber": 525,
+	"endColumn": 48,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/emailService.ts",
+	"owner": "typescript",
+	"code": "2393",
+	"severity": 8,
+	"message": "Duplicate function implementation.",
+	"source": "ts",
+	"startLineNumber": 584,
+	"startColumn": 16,
+	"endLineNumber": 584,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/emailService.ts",
+	"owner": "typescript",
+	"code": "2393",
+	"severity": 8,
+	"message": "Duplicate function implementation.",
+	"source": "ts",
+	"startLineNumber": 696,
+	"startColumn": 16,
+	"endLineNumber": 696,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/emailService.ts",
+	"owner": "typescript",
+	"code": "2393",
+	"severity": 8,
+	"message": "Duplicate function implementation.",
+	"source": "ts",
+	"startLineNumber": 772,
+	"startColumn": 16,
+	"endLineNumber": 772,
+	"endColumn": 48,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/emailService.ts",
+	"owner": "typescript",
+	"code": "2393",
+	"severity": 8,
+	"message": "Duplicate function implementation.",
+	"source": "ts",
+	"startLineNumber": 842,
+	"startColumn": 16,
+	"endLineNumber": 842,
+	"endColumn": 47,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 54,
+	"startColumn": 15,
+	"endLineNumber": 54,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 115,
+	"startColumn": 15,
+	"endLineNumber": 115,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'progress' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 140,
+	"startColumn": 30,
+	"endLineNumber": 140,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 141,
+	"startColumn": 29,
+	"endLineNumber": 141,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 141,
+	"startColumn": 48,
+	"endLineNumber": 141,
+	"endColumn": 57,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'enrollments' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 142,
+	"startColumn": 37,
+	"endLineNumber": 142,
+	"endColumn": 48,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'progress' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 143,
+	"startColumn": 26,
+	"endLineNumber": 143,
+	"endColumn": 34,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 145,
+	"startColumn": 32,
+	"endLineNumber": 145,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'progress' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 146,
+	"startColumn": 30,
+	"endLineNumber": 146,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 236,
+	"startColumn": 15,
+	"endLineNumber": 236,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'progress' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 250,
+	"startColumn": 30,
+	"endLineNumber": 250,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 29,
+	"endLineNumber": 251,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'favorites' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 251,
+	"startColumn": 48,
+	"endLineNumber": 251,
+	"endColumn": 57,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'enrollments' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 252,
+	"startColumn": 28,
+	"endLineNumber": 252,
+	"endColumn": 39,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'progress' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 253,
+	"startColumn": 26,
+	"endLineNumber": 253,
+	"endColumn": 34,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 255,
+	"startColumn": 32,
+	"endLineNumber": 255,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'progress' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 256,
+	"startColumn": 30,
+	"endLineNumber": 256,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 322,
+	"startColumn": 15,
+	"endLineNumber": 322,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 540,
+	"startColumn": 19,
+	"endLineNumber": 540,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'course' does not exist on type '{ id: string; status: string; createdAt: Date; updatedAt: Date; userId: string; completedAt: Date; progress: number; courseId: string; enrolledAt: Date; lastAccessAt: Date; }'. Did you mean 'courseId'?",
+	"source": "ts",
+	"startLineNumber": 555,
+	"startColumn": 23,
+	"endLineNumber": 555,
+	"endColumn": 29,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'course' does not exist on type '{ id: string; status: string; createdAt: Date; updatedAt: Date; userId: string; completedAt: Date; progress: number; courseId: string; enrolledAt: Date; lastAccessAt: Date; }'. Did you mean 'courseId'?",
+	"source": "ts",
+	"startLineNumber": 556,
+	"startColumn": 34,
+	"endLineNumber": 556,
+	"endColumn": 40,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'course' does not exist on type '{ id: string; status: string; createdAt: Date; updatedAt: Date; userId: string; completedAt: Date; progress: number; courseId: string; enrolledAt: Date; lastAccessAt: Date; }'. Did you mean 'courseId'?",
+	"source": "ts",
+	"startLineNumber": 557,
+	"startColumn": 33,
+	"endLineNumber": 557,
+	"endColumn": 39,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'course' does not exist on type '{ id: string; status: string; createdAt: Date; updatedAt: Date; userId: string; completedAt: Date; progress: number; courseId: string; enrolledAt: Date; lastAccessAt: Date; }'. Did you mean 'courseId'?",
+	"source": "ts",
+	"startLineNumber": 559,
+	"startColumn": 30,
+	"endLineNumber": 559,
+	"endColumn": 36,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'course' does not exist on type '{ id: string; status: string; createdAt: Date; updatedAt: Date; userId: string; completedAt: Date; progress: number; courseId: string; enrolledAt: Date; lastAccessAt: Date; }'. Did you mean 'courseId'?",
+	"source": "ts",
+	"startLineNumber": 561,
+	"startColumn": 36,
+	"endLineNumber": 561,
+	"endColumn": 42,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'course' does not exist on type '{ id: string; status: string; createdAt: Date; updatedAt: Date; userId: string; completedAt: Date; progress: number; courseId: string; enrolledAt: Date; lastAccessAt: Date; }'. Did you mean 'courseId'?",
+	"source": "ts",
+	"startLineNumber": 562,
+	"startColumn": 34,
+	"endLineNumber": 562,
+	"endColumn": 40,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 119,
+	"startColumn": 15,
+	"endLineNumber": 119,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 152,
+	"startColumn": 32,
+	"endLineNumber": 152,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 153,
+	"startColumn": 31,
+	"endLineNumber": 153,
+	"endColumn": 37,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 154,
+	"startColumn": 27,
+	"endLineNumber": 154,
+	"endColumn": 33,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 159,
+	"startColumn": 32,
+	"endLineNumber": 159,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 254,
+	"startColumn": 15,
+	"endLineNumber": 254,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 287,
+	"startColumn": 39,
+	"endLineNumber": 287,
+	"endColumn": 45,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 288,
+	"startColumn": 38,
+	"endLineNumber": 288,
+	"endColumn": 44,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 289,
+	"startColumn": 34,
+	"endLineNumber": 289,
+	"endColumn": 40,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 332,
+	"startColumn": 15,
+	"endLineNumber": 332,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 346,
+	"startColumn": 30,
+	"endLineNumber": 346,
+	"endColumn": 36,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 389,
+	"startColumn": 32,
+	"endLineNumber": 389,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 390,
+	"startColumn": 31,
+	"endLineNumber": 390,
+	"endColumn": 37,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 391,
+	"startColumn": 27,
+	"endLineNumber": 391,
+	"endColumn": 33,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 490,
+	"startColumn": 17,
+	"endLineNumber": 490,
+	"endColumn": 29,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'. Did you mean 'createdById'?",
+	"source": "ts",
+	"startLineNumber": 522,
+	"startColumn": 22,
+	"endLineNumber": 522,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'. Did you mean 'createdById'?",
+	"source": "ts",
+	"startLineNumber": 523,
+	"startColumn": 29,
+	"endLineNumber": 523,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'. Did you mean 'createdById'?",
+	"source": "ts",
+	"startLineNumber": 524,
+	"startColumn": 28,
+	"endLineNumber": 524,
+	"endColumn": 37,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'. Did you mean 'createdById'?",
+	"source": "ts",
+	"startLineNumber": 525,
+	"startColumn": 24,
+	"endLineNumber": 525,
+	"endColumn": 33,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 529,
+	"startColumn": 32,
+	"endLineNumber": 529,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 530,
+	"startColumn": 31,
+	"endLineNumber": 530,
+	"endColumn": 37,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 531,
+	"startColumn": 27,
+	"endLineNumber": 531,
+	"endColumn": 33,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 536,
+	"startColumn": 32,
+	"endLineNumber": 536,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'lesson_items' does not exist in type 'CourseCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 620,
+	"startColumn": 31,
+	"endLineNumber": 620,
+	"endColumn": 43,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; level: CourseLevel; duration: number; title: string; titleEn: string; description: string; descriptionEn: string; category: CourseCategory; ... 10 more ...; enrolledCount: number; }'.",
+	"source": "ts",
+	"startLineNumber": 667,
+	"startColumn": 34,
+	"endLineNumber": 667,
+	"endColumn": 40,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { include: { createdBy: { select: { id: true; firstName: true; lastName: true; role: true; }; }; _count: { select: { enrollments: true; lesson_items: true; }; }; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 708,
+	"startColumn": 11,
+	"endLineNumber": 708,
+	"endColumn": 18,
+	"relatedInformation": [
+		{
+			"startLineNumber": 708,
+			"startColumn": 11,
+			"endLineNumber": 727,
+			"endColumn": 12,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { userId: string; }; skip: number; take: number; orderBy: { enrolledAt: \"desc\"; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 734,
+	"startColumn": 48,
+	"endLineNumber": 734,
+	"endColumn": 54,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'id' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 738,
+	"startColumn": 33,
+	"endLineNumber": 738,
+	"endColumn": 35,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 739,
+	"startColumn": 36,
+	"endLineNumber": 739,
+	"endColumn": 41,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'description' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 740,
+	"startColumn": 42,
+	"endLineNumber": 740,
+	"endColumn": 53,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'level' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 741,
+	"startColumn": 36,
+	"endLineNumber": 741,
+	"endColumn": 41,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'category' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 742,
+	"startColumn": 39,
+	"endLineNumber": 742,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'duration' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 743,
+	"startColumn": 39,
+	"endLineNumber": 743,
+	"endColumn": 47,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'price' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 744,
+	"startColumn": 36,
+	"endLineNumber": 744,
+	"endColumn": 41,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'tags' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 745,
+	"startColumn": 35,
+	"endLineNumber": 745,
+	"endColumn": 39,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'thumbnail' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 746,
+	"startColumn": 40,
+	"endLineNumber": 746,
+	"endColumn": 49,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'isPublished' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 747,
+	"startColumn": 42,
+	"endLineNumber": 747,
+	"endColumn": 53,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'createdAt' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 748,
+	"startColumn": 40,
+	"endLineNumber": 748,
+	"endColumn": 49,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'updatedAt' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 749,
+	"startColumn": 40,
+	"endLineNumber": 749,
+	"endColumn": 49,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 751,
+	"startColumn": 35,
+	"endLineNumber": 751,
+	"endColumn": 44,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'createdById' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 751,
+	"startColumn": 70,
+	"endLineNumber": 751,
+	"endColumn": 81,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 752,
+	"startColumn": 42,
+	"endLineNumber": 752,
+	"endColumn": 51,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 753,
+	"startColumn": 41,
+	"endLineNumber": 753,
+	"endColumn": 50,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'createdBy' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 754,
+	"startColumn": 37,
+	"endLineNumber": 754,
+	"endColumn": 46,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 758,
+	"startColumn": 45,
+	"endLineNumber": 758,
+	"endColumn": 51,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 759,
+	"startColumn": 44,
+	"endLineNumber": 759,
+	"endColumn": 50,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 760,
+	"startColumn": 40,
+	"endLineNumber": 760,
+	"endColumn": 46,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { select: { id: true; _count: { select: { lesson_items: true; }; }; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 902,
+	"startColumn": 9,
+	"endLineNumber": 902,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 902,
+			"startColumn": 9,
+			"endLineNumber": 909,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { id: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ userId: string; lessonId: string; completedAt: Date; }' is not assignable to type '(Without<LessonCompletionCreateInput, LessonCompletionUncheckedCreateInput> & LessonCompletionUncheckedCreateInput) | (Without<...> & LessonCompletionCreateInput)'.\n  Type '{ userId: string; lessonId: string; completedAt: Date; }' is not assignable to type 'Without<LessonCompletionUncheckedCreateInput, LessonCompletionCreateInput> & LessonCompletionCreateInput'.\n    Property 'updatedAt' is missing in type '{ userId: string; lessonId: string; completedAt: Date; }' but required in type 'LessonCompletionCreateInput'.",
+	"source": "ts",
+	"startLineNumber": 946,
+	"startColumn": 9,
+	"endLineNumber": 946,
+	"endColumn": 13,
+	"relatedInformation": [
+		{
+			"startLineNumber": 65918,
+			"startColumn": 5,
+			"endLineNumber": 65918,
+			"endColumn": 14,
+			"message": "'updatedAt' is declared here.",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		},
+		{
+			"startLineNumber": 48273,
+			"startColumn": 5,
+			"endLineNumber": 48273,
+			"endColumn": 9,
+			"message": "The expected type comes from property 'data' which is declared here on type '{ select?: LessonCompletionSelect<DefaultArgs>; data: (Without<LessonCompletionCreateInput, LessonCompletionUncheckedCreateInput> & LessonCompletionUncheckedCreateInput) | (Without<...> & LessonCompletionCreateInput); }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2561",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, but 'lesson' does not exist in type 'LessonCompletionWhereInput'. Did you mean to write 'lessonId'?",
+	"source": "ts",
+	"startLineNumber": 957,
+	"startColumn": 11,
+	"endLineNumber": 957,
+	"endColumn": 17,
+	"relatedInformation": [
+		{
+			"startLineNumber": 48234,
+			"startColumn": 5,
+			"endLineNumber": 48234,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'where' which is declared here on type 'Subset<LessonCompletionCountArgs<DefaultArgs>, LessonCompletionCountArgs<DefaultArgs>>'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/courseContentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 961,
+	"startColumn": 42,
+	"endLineNumber": 961,
+	"endColumn": 48,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 131,
+	"startColumn": 21,
+	"endLineNumber": 131,
+	"endColumn": 26,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 140,
+	"startColumn": 17,
+	"endLineNumber": 140,
+	"endColumn": 22,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2561",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, but 'comment' does not exist in type 'LikeWhereInput'. Did you mean to write 'commentId'?",
+	"source": "ts",
+	"startLineNumber": 160,
+	"startColumn": 13,
+	"endLineNumber": 160,
+	"endColumn": 20,
+	"relatedInformation": [
+		{
+			"startLineNumber": 33298,
+			"startColumn": 5,
+			"endLineNumber": 33298,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'where' which is declared here on type '{ select?: LikeSelect<DefaultArgs>; where?: LikeWhereInput; orderBy?: LikeOrderByWithRelationInput | LikeOrderByWithRelationInput[]; cursor?: LikeWhereUniqueInput; take?: number; skip?: number; distinct?: LikeScalarFieldEnum | LikeScalarFieldEnum[]; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/node_modules/.prisma/client/index.d.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 175,
+	"startColumn": 25,
+	"endLineNumber": 175,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'post' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 176,
+	"startColumn": 23,
+	"endLineNumber": 176,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'replies' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 177,
+	"startColumn": 26,
+	"endLineNumber": 177,
+	"endColumn": 33,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'post' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 183,
+	"startColumn": 25,
+	"endLineNumber": 183,
+	"endColumn": 29,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 191,
+	"startColumn": 25,
+	"endLineNumber": 191,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 193,
+	"startColumn": 37,
+	"endLineNumber": 193,
+	"endColumn": 43,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 194,
+	"startColumn": 39,
+	"endLineNumber": 194,
+	"endColumn": 45,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 302,
+	"startColumn": 15,
+	"endLineNumber": 302,
+	"endColumn": 20,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 321,
+	"startColumn": 25,
+	"endLineNumber": 321,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'post' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 322,
+	"startColumn": 23,
+	"endLineNumber": 322,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'parent' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'parentId'?",
+	"source": "ts",
+	"startLineNumber": 323,
+	"startColumn": 25,
+	"endLineNumber": 323,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 325,
+	"startColumn": 25,
+	"endLineNumber": 325,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 410,
+	"startColumn": 15,
+	"endLineNumber": 410,
+	"endColumn": 20,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 424,
+	"startColumn": 32,
+	"endLineNumber": 424,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'post' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 425,
+	"startColumn": 30,
+	"endLineNumber": 425,
+	"endColumn": 34,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'parent' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'parentId'?",
+	"source": "ts",
+	"startLineNumber": 426,
+	"startColumn": 32,
+	"endLineNumber": 426,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 428,
+	"startColumn": 32,
+	"endLineNumber": 428,
+	"endColumn": 38,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 597,
+	"startColumn": 19,
+	"endLineNumber": 597,
+	"endColumn": 24,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2353",
+	"severity": 8,
+	"message": "Object literal may only specify known properties, and 'likes' does not exist in type 'CommentCountOutputTypeSelect<DefaultArgs>'.",
+	"source": "ts",
+	"startLineNumber": 606,
+	"startColumn": 15,
+	"endLineNumber": 606,
+	"endColumn": 20,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 636,
+	"startColumn": 25,
+	"endLineNumber": 636,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'post' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 637,
+	"startColumn": 23,
+	"endLineNumber": 637,
+	"endColumn": 27,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'parent' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'parentId'?",
+	"source": "ts",
+	"startLineNumber": 638,
+	"startColumn": 25,
+	"endLineNumber": 638,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'replies' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 639,
+	"startColumn": 26,
+	"endLineNumber": 639,
+	"endColumn": 33,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'post' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 645,
+	"startColumn": 25,
+	"endLineNumber": 645,
+	"endColumn": 29,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property '_count' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'.",
+	"source": "ts",
+	"startLineNumber": 651,
+	"startColumn": 25,
+	"endLineNumber": 651,
+	"endColumn": 31,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 653,
+	"startColumn": 37,
+	"endLineNumber": 653,
+	"endColumn": 43,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/commentService.ts",
+	"owner": "typescript",
+	"code": "2551",
+	"severity": 8,
+	"message": "Property 'author' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; content: string; authorId: string; postId: string; parentId: string; }'. Did you mean 'authorId'?",
+	"source": "ts",
+	"startLineNumber": 654,
+	"startColumn": 39,
+	"endLineNumber": 654,
+	"endColumn": 45,
+	"origin": "extHost2"
+}]
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ user: { select: { firstName: true; lastName: true; email: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 415,
+	"startColumn": 9,
+	"endLineNumber": 415,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 415,
+			"startColumn": 9,
+			"endLineNumber": 423,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { verificationCode: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2322",
+	"severity": 8,
+	"message": "Type '{ course: { select: { id: true; title: true; level: true; }; }; }' is not assignable to type 'never'.",
+	"source": "ts",
+	"startLineNumber": 542,
+	"startColumn": 9,
+	"endLineNumber": 542,
+	"endColumn": 16,
+	"relatedInformation": [
+		{
+			"startLineNumber": 542,
+			"startColumn": 9,
+			"endLineNumber": 550,
+			"endColumn": 10,
+			"message": "The expected type comes from property 'include' which is declared here on type '{ where: { userId: string; status: string; }; include: never; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 559,
+	"startColumn": 43,
+	"endLineNumber": 559,
+	"endColumn": 48,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 567,
+	"startColumn": 66,
+	"endLineNumber": 567,
+	"endColumn": 71,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 568,
+	"startColumn": 102,
+	"endLineNumber": 568,
+	"endColumn": 107,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'level' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 569,
+	"startColumn": 38,
+	"endLineNumber": 569,
+	"endColumn": 43,
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/certificateService.ts",
+	"owner": "typescript",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type 'never'.",
+	"source": "ts",
+	"startLineNumber": 570,
+	"startColumn": 43,
+	"endLineNumber": 570,
+	"endColumn": 48,
+	"origin": "extHost2"
+}]
+
+
+[{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/authService.ts",
+	"owner": "typescript",
+	"code": "2739",
+	"severity": 8,
+	"message": "Type '{ dateOfBirth: Date; id: string; status: UserStatus; createdAt: Date; updatedAt: Date; email: string; firstName: string; lastName: string; role: UserRole; ... 8 more ...; emailVerifiedAt: Date; }' is missing the following properties from type 'UserProfile': lastActivityAt, socialAuthProvider, socialAuthId, profilePicture",
+	"source": "ts",
+	"startLineNumber": 102,
+	"startColumn": 16,
+	"endLineNumber": 102,
+	"endColumn": 20,
+	"relatedInformation": [
+		{
+			"startLineNumber": 25,
+			"startColumn": 59,
+			"endLineNumber": 25,
+			"endColumn": 63,
+			"message": "The expected type comes from property 'user' which is declared here on type '{ user: UserProfile; tokens: AuthTokens; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/authService.ts"
+		}
+	],
+	"origin": "extHost2"
+},{
+	"resource": "/home/gotti/Desktop/frontend/backend/src/services/authService.ts",
+	"owner": "typescript",
+	"code": "2739",
+	"severity": 8,
+	"message": "Type '{ dateOfBirth: Date; id: string; status: UserStatus; createdAt: Date; updatedAt: Date; email: string; firstName: string; lastName: string; role: UserRole; ... 8 more ...; emailVerifiedAt: Date; }' is missing the following properties from type 'UserProfile': lastActivityAt, socialAuthProvider, socialAuthId, profilePicture",
+	"source": "ts",
+	"startLineNumber": 182,
+	"startColumn": 16,
+	"endLineNumber": 182,
+	"endColumn": 20,
+	"relatedInformation": [
+		{
+			"startLineNumber": 112,
+			"startColumn": 64,
+			"endLineNumber": 112,
+			"endColumn": 68,
+			"message": "The expected type comes from property 'user' which is declared here on type '{ user: UserProfile; tokens: AuthTokens; }'",
+			"resource": "/home/gotti/Desktop/frontend/backend/src/services/authService.ts"
+		}
+	],
+	"origin": "extHost2"
+}]
