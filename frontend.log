@@ -1,0 +1,110 @@
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.2.4
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.116:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 3.2s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 1068ms (101 modules)
+ ○ Compiling /welcome ...
+ ✓ Compiled /welcome in 11.5s (1054 modules)
+ GET /welcome 200 in 12275ms
+ ○ Compiling /admin/login ...
+ ✓ Compiled /admin/login in 3.2s (1243 modules)
+ GET /admin/login 200 in 3623ms
+ ○ Compiling /manager ...
+ ✓ Compiled /manager in 842ms (1258 modules)
+ GET /manager 200 in 1123ms
+ ○ Compiling /connexion ...
+ ✓ Compiled /connexion in 1346ms (1319 modules)
+ GET /connexion 200 in 1610ms
+ ○ Compiling /admin ...
+ ✓ Compiled /admin in 598ms (1304 modules)
+ GET /admin 200 in 966ms
+ GET /admin/login 200 in 69ms
+ GET /manager 200 in 70ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1054ms (1308 modules)
+ GET /grid.svg 404 in 1244ms
+ GET /manager 200 in 131ms
+ GET /grid.svg 404 in 50ms
+ GET /connexion 200 in 229ms
+ GET /connexion 200 in 68ms
+ GET /connexion 200 in 69ms
+[Error: ENOENT: no such file or directory, stat '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'stat',
+  path: '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'
+}
+ ⨯ unhandledRejection: [Error: ENOENT: no such file or directory, stat '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'stat',
+  path: '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'
+}
+ ⨯ unhandledRejection:  [Error: ENOENT: no such file or directory, stat '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'] {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'stat',
+  path: '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'
+}
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, stat '/home/gotti/Desktop/frontend/.next/cache/webpack/server-development/0.pack.gz'
+ ✓ Compiled in 2.1s (586 modules)
+ ⨯ [Error: ENOENT: no such file or directory, open '/home/gotti/Desktop/frontend/.next/server/app-paths-manifest.json'] {
+  errno: -2,
+  syscall: 'open',
+  code: 'ENOENT',
+  path: '/home/gotti/Desktop/frontend/.next/server/app-paths-manifest.json',
+  page: '/connexion'
+}
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 3.4s (1621 modules)
+ GET /connexion 500 in 4167ms
+ GET /connexion 200 in 185ms
+ GET /connexion 200 in 78ms
+ GET /connexion 200 in 101ms
+ GET /connexion 200 in 111ms
+ GET /connexion 200 in 103ms
+ GET /connexion 200 in 114ms
+ GET /connexion 200 in 110ms
+ GET /connexion 200 in 137ms
+ GET /connexion 200 in 581ms
+ GET /connexion 200 in 559ms
+ GET /connexion 200 in 168ms
+ GET /connexion 200 in 210ms
+ ○ Compiling /_not-found ...
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled /_not-found in 3.5s (1639 modules)
+ GET /_next/static/css/app/layout.css?v=1758463197536 404 in 4340ms
+ GET /_next/static/css/app/layout.css?v=1758463197480 404 in 4360ms
+ GET /_next/static/chunks/main-app.js?v=1758463197536 404 in 5392ms
+ GET /connexion 200 in 1853ms
+ GET /connexion 200 in 2331ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 1067ms
+ GET /_next/static/css/app/layout.css?v=1758463202360 404 in 186ms
+ GET /_next/static/css/app/layout.css?v=1758463202362 404 in 190ms
+ GET /connexion 200 in 471ms
+ GET /_next/static/chunks/app/connexion/page.js 404 in 260ms
+ GET /_next/static/chunks/main-app.js?v=1758463202362 404 in 218ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 209ms
+ GET /_next/static/css/app/layout.css?v=1758463203668 404 in 118ms
+ GET /connexion 200 in 422ms
+ GET /_next/static/css/app/layout.css?v=1758463204060 404 in 74ms
+ GET /_next/static/chunks/app/connexion/page.js 404 in 344ms
+ GET /_next/static/chunks/main-app.js?v=1758463203668 404 in 252ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 228ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 194ms
+ GET /_next/static/chunks/main-app.js?v=1758463204060 404 in 200ms
+ GET /_next/static/chunks/app/connexion/page.js 404 in 139ms
+ GET /_next/static/chunks/app/connexion/page.js 404 in 79ms
+ ✓ Compiled in 2s (1639 modules)
+ ✓ Compiled in 1264ms (932 modules)
+[?25h

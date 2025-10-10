@@ -1,0 +1,1 @@
+Test content for Cloudinary upload

@@ -1,0 +1,110 @@
+// app/layout.tsx
+import "./globals.css"
+import type { Metadata } from "next"
+import { Inter, Poppins } from 'next/font/google'
+import { ThemeProvider } from "@/components/theme-provider"
+import { LanguageProvider } from "@/components/language-provider"
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
+const poppins = Poppins({ subsets: ["latin"], weight: ["600", "700"], variable: "--font-poppins" })
+
+export const metadata: Metadata = {
+  title: "TCF/TEF Prep",
+  description: "Premium bilingual learning platform for TCF/TEF.",
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="fr" suppressHydrationWarning>
+      <body
+        className={`${inter.variable} ${poppins.variable} font-sans min-h-screen bg-white text-neutral-900 dark:bg-[#0A0A0A] dark:text-white`}
+      >
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <LanguageProvider>{children}</LanguageProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}
+
+// components/page-shell.tsx
+"use client"
+
+import type React from "react"
+import SiteHeader from "@/components/site-header"
+import PromoRibbon from "@/components/promo-ribbon"
+import SiteFooter from "@/components/site-footer"
+
+export default function PageShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-white text-neutral-900 dark:bg-[#0A0A0A] dark:text-white flex flex-col">
+      <SiteHeader />
+      <PromoRibbon />
+      <div className="flex-1">{children}</div>
+      <SiteFooter />
+    </div>
+  )
+}
+
+// app/documentation/page.tsx
+import React from "react"
+import { t } from "@/app/i18n"
+import Checklist from "@/components/checklist"
+import PageShell from "@/components/page-shell"
+
+export default function DocumentationPage() {
+  return (
+    <PageShell>
+      <div className="max-w-2xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-bold font-[var(--font-poppins)]">
+          {t("Documentation", "Documentation")}
+        </h1>
+        <Checklist
+          title={t("Tâches livrées (✓)", "Tasks delivered (✓)")}
+          items={[
+            { label: t("Page d'accueil", "Home page"), done: true },
+            { label: t("Page de documentation", "Documentation page"), done: true },
+            { label: t("Page de contact", "Contact page"), done: true },
+          ]}
+        />
+        <Checklist
+          title={t("Infrastructure UI (✓)", "UI Infrastructure (✓)")}
+          items={[
+            { label: t("LanguageProvider global (App Layout)", "Global LanguageProvider (App Layout)"), done: true },
+            { label: t("ThemeProvider global (App Layout)", "Global ThemeProvider (App Layout)"), done: true },
+          ]}
+        />
+        <section className="mt-8 space-y-3">
+          <h2 className="text-xl font-semibold font-[var(--font-poppins)]">
+            {t("Guide d’utilisation — langue & thème", "Usage guide — language & theme")}
+          </h2>
+          <ol className="list-decimal pl-6 text-sm space-y-2">
+            <li>
+              {t(
+                "Changer de langue: utilisez le sélecteur FR/EN dans l’en‑tête. Le choix est mémorisé et appliqué sur toutes les pages.",
+                "Switch language: use the FR/EN selector in the header. Your choice is remembered and applied across all pages.",
+              )}
+            </li>
+            <li>
+              {t(
+                "Basculer le thème: utilisez l’icône soleil/lune dans l’en‑tête. Le thème sombre/clair est conservé entre les pages.",
+                "Toggle theme: use the sun/moon icon in the header. Dark/Light theme persists across pages.",
+              )}
+            </li>
+            <li>
+              {t(
+                "Accessibilité: focus visible au clavier, textes bilingues, et aria mis en place.",
+                "Accessibility: keyboard-visible focus, bilingual texts, and aria in place.",
+              )}
+            </li>
+          </ol>
+        </section>
+        <footer className="mt-16">
+          <a href="https://example.com" className="text-sm text-neutral-500 hover:text-neutral-700">
+            {t("Retour au site", "Back to site")}
+          </a>
+        </footer>
+      </div>
+    </PageShell>
+  )
+}
