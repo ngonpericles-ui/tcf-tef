@@ -29,7 +29,7 @@ export default function SocialAuthButtons({
       setLoading(provider)
       
       // Send to backend for verification and user creation
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/social/${provider}`, {
+      const response = await fetch(`${(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) || 'http://localhost:3001/api'}/auth/social/${provider}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

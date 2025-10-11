@@ -35,7 +35,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: process.env.NODE_ENV === 'production' 
+      baseURL: (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') 
         ? 'https://aura-ca-backend-amqz7no0a-ngonpericles-educms-projects.vercel.app/api'
         : 'http://localhost:3001/api',
       timeout: 30000, // 30 seconds - increased for better reliability

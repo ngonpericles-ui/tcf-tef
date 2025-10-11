@@ -79,7 +79,7 @@ export default function AdminAudioSimulationPage() {
       formData.append("resource_type", "video") // Cloudinary uses 'video' for audio files
 
       const cloudinaryResponse = await fetch(
-        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/upload`,
+        `https://api.cloudinary.com/v1_1/${(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) || 'ddhhzeewn'}/upload`,
         {
           method: "POST",
           body: formData,

@@ -56,7 +56,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     this.props.onError?.(error, errorInfo.componentStack)
 
     // In development, log detailed error info
-    if (process.env.NODE_ENV === 'development') {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
       console.group('🚨 Error Boundary Caught Error')
       console.error('Error:', error)
       console.error('Error Info:', errorInfo)
@@ -97,7 +97,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {process.env.NODE_ENV === 'development' && this.state.error && (
+              {typeof process !== 'undefined' && process.env?.NODE_ENV === 'development' && this.state.error && (
                 <div className="rounded-md bg-muted p-3">
                   <p className="text-xs font-mono text-muted-foreground">
                     {this.state.error.message}

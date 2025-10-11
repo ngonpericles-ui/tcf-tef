@@ -40,7 +40,7 @@ export default function GoogleAuthButton({
       const idToken = await user.getIdToken()
       
       // Send to backend for verification and user creation
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/social/google`, {
+      const response = await fetch(`${(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) || 'http://localhost:3001/api'}/auth/social/google`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
