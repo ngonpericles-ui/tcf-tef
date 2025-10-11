@@ -9,7 +9,7 @@ export default function AboutPage() {
   const { lang } = useLang()
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
 
-  const FOUNDER_IMAGE = process.env.NEXT_PUBLIC_FOUNDER_IMAGE_URL ||
+  const FOUNDER_IMAGE = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_FOUNDER_IMAGE_URL) ||
     "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=85&w=600&auto=format&fit=crop&ixlib=rb-4.0.3"
 
   const coreFeatures = [

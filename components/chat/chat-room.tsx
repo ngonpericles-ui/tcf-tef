@@ -81,7 +81,7 @@ export default function ChatRoom() {
     if (!user) return
 
     // Initialize socket connection
-    const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001', {
+    const newSocket = io((typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) || 'http://localhost:3001', {
       transports: ['websocket', 'polling']
     })
 

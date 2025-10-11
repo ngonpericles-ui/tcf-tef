@@ -39,7 +39,7 @@ const nextConfig = {
     optimizeCss: false,
   },
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    removeConsole: process.env.NODE_ENV === 'production' || false,
   },
   // Enhanced webpack configuration for chunk loading fixes
   webpack: (config, { dev, isServer, webpack }) => {
@@ -113,7 +113,7 @@ const nextConfig = {
   },
   // Public runtime config
   publicRuntimeConfig: {
-    basePath: process.env.NODE_ENV === 'production' ? '' : '',
+    basePath: (process.env.NODE_ENV === 'production') ? '' : '',
   },
   // Add output configuration for better chunk handling
   output: 'standalone',

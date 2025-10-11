@@ -123,7 +123,7 @@ export const getFirebaseErrorMessage = (errorCode: string): string => {
 }
 
 // Connect to Firebase Auth emulator in development
-if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATOR === 'true') {
+if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development' && process.env?.NEXT_PUBLIC_FIREBASE_USE_EMULATOR === 'true') {
   try {
     connectAuthEmulator(auth, 'http://localhost:9099')
   } catch (error) {
