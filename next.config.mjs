@@ -49,7 +49,7 @@ const nextConfig = {
       use: ['@svgr/webpack'],
     })
 
-    // Fix for webpack module loading issues
+    // Only apply client-specific tweaks
     if (!isServer) {
       // Improve module resolution
       config.resolve = {
@@ -62,12 +62,11 @@ const nextConfig = {
           crypto: false,
           stream: false,
           util: false,
-          buffer: false,
-          process: false,
+          buffer: false
         },
         alias: {
           ...config.resolve.alias,
-          // Fix for React 19 compatibility
+          // React 19 compatibility (no-op aliases kept)
           'react': 'react',
           'react-dom': 'react-dom',
         },
@@ -98,26 +97,12 @@ const nextConfig = {
         },
       }
 
-      // Add chunk loading error handling
-      config.plugins.push(
-        new webpack.DefinePlugin({
-          'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
-        })
-      )
-
       // Improve chunk loading with retry mechanism
       config.output = {
         ...config.output,
         chunkLoadingGlobal: 'webpackChunkTCF_TEF',
         globalObject: 'self',
       }
-
-      // Add module loading error handling
-      config.plugins.push(
-        new webpack.ProvidePlugin({
-          process: 'process/browser',
-        })
-      )
     }
 
     return config
