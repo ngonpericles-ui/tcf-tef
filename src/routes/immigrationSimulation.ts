@@ -14,6 +14,27 @@ const ImmigrationSimulationService = require('../services/immigrationSimulationS
 // STUDENT ROUTES
 
 /**
+ * @route GET /api/immigration-simulation
+ * @desc Test endpoint - check if service is available
+ * @access Public
+ */
+router.get('/', async (req, res) => {
+  res.json({
+    success: true,
+    message: 'Immigration Simulation API is available',
+    endpoints: {
+      userHistory: 'GET /history/user',
+      monthlyCount: 'GET /monthly-count/user',
+      createSimulation: 'POST /create',
+      startSimulation: 'POST /start/:id',
+      endSimulation: 'POST /end/:id',
+      getSimulation: 'GET /:id'
+    },
+    note: 'Most endpoints require authentication and Pro subscription'
+  });
+});
+
+/**
  * @route GET /api/immigration-simulation/history/user
  * @desc Get user's immigration simulation history
  * @access Private (Student)

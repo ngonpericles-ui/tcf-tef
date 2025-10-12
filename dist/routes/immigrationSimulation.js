@@ -12,6 +12,21 @@ const i18nService_1 = __importDefault(require("../services/i18nService"));
 const router = express_1.default.Router();
 const prisma = new client_1.PrismaClient();
 const ImmigrationSimulationService = require('../services/immigrationSimulationService');
+router.get('/', async (req, res) => {
+    res.json({
+        success: true,
+        message: 'Immigration Simulation API is available',
+        endpoints: {
+            userHistory: 'GET /history/user',
+            monthlyCount: 'GET /monthly-count/user',
+            createSimulation: 'POST /create',
+            startSimulation: 'POST /start/:id',
+            endSimulation: 'POST /end/:id',
+            getSimulation: 'GET /:id'
+        },
+        note: 'Most endpoints require authentication and Pro subscription'
+    });
+});
 router.get('/history/user', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user.id;

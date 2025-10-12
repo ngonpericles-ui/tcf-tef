@@ -7533,3 +7533,9 @@
 {"level":"info","message":"🔗 Database: Connected","service":"tcf-tef-platform","timestamp":"2025-10-10T18:40:36.978Z"}
 {"level":"info","message":"💬 Socket.IO chat service initialized","service":"tcf-tef-platform","timestamp":"2025-10-10T18:40:36.978Z"}
 {"level":"info","message":"SIGTERM received, shutting down gracefully","service":"tcf-tef-platform","timestamp":"2025-10-10T18:40:46.025Z"}
+{"level":"info","message":"Socket.IO chat service initialized","service":"tcf-tef-platform","timestamp":"2025-10-11T15:23:57.733Z"}
+{"level":"info","message":"🚀 Server running on port 3001","service":"tcf-tef-platform","timestamp":"2025-10-11T15:23:57.739Z"}
+{"level":"info","message":"📊 Environment: development","service":"tcf-tef-platform","timestamp":"2025-10-11T15:23:57.739Z"}
+{"level":"info","message":"🔗 Database: Connected","service":"tcf-tef-platform","timestamp":"2025-10-11T15:23:57.740Z"}
+{"level":"info","message":"💬 Socket.IO chat service initialized","service":"tcf-tef-platform","timestamp":"2025-10-11T15:23:57.740Z"}
+{"level":"info","message":"SIGTERM received, shutting down gracefully","service":"tcf-tef-platform","timestamp":"2025-10-11T15:24:04.399Z"}
