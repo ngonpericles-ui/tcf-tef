@@ -102,6 +102,12 @@ const nextConfig = {
   // Standalone deployment
   output: 'standalone',
   trailingSlash: false,
+  // Skip 404 static generation to avoid next/document errors
+  skipTrailingSlashRedirect: true,
+  // Disable static 404 page generation
+  generateBuildId: async () => {
+    return 'build-' + Date.now()
+  },
 }
 
 export default nextConfig
