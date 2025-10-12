@@ -78,8 +78,9 @@ export default function ExamRunnerPage() {
       try {
         setLoading(true)
         const response = await apiClient.post(`/simulations/${params.id}/start`)
-        if (response.data.success) {
-          const examData = response.data.data
+        const responseData = response.data as any
+        if (responseData.success) {
+          const examData = responseData.data
           setSession(examData)
           setTimeRemaining(examData.timeRemaining)
           
@@ -243,18 +244,19 @@ export default function ExamRunnerPage() {
         timeSpent: session.duration * 60 - timeRemaining
       })
 
-      if (response.data.success) {
+      const responseData = response.data as any
+      if (responseData.success) {
         toast.success(t("Examen soumis avec succès", "Exam submitted successfully"))
 
         // Show AI teacher feedback notification
-        if (response.data.data.teacherFeedbackId) {
+        if (responseData.data.teacherFeedbackId) {
           toast.info(t(
             "Feedback de votre professeur IA généré avec succès !",
             "AI teacher feedback generated successfully!"
           ))
         }
 
-        router.push(`/tcf-tef-simulation/results/${response.data.data.resultId}`)
+        router.push(`/tcf-tef-simulation/results/${responseData.data.resultId}`)
       }
     } catch (error) {
       console.error('Error submitting exam:', error)
