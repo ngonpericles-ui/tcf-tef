@@ -15,7 +15,7 @@ const nextConfig = {
       },
     ],
   },
-  // Performance optimizations for development and production
+  // Force dynamic rendering for all routes
   experimental: {
     optimizePackageImports: [
       'lucide-react',
@@ -33,25 +33,21 @@ const nextConfig = {
       '@radix-ui/react-toast',
       '@radix-ui/react-tooltip',
     ],
-    // Fix for React 19 and chunk loading issues
     webpackBuildWorker: true,
-    // Improve chunk loading reliability
     optimizeCss: false,
   },
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' || false,
+    removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Enhanced webpack configuration for chunk loading fixes
-  webpack: (config, { dev, isServer, webpack }) => {
+  // Enhanced webpack configuration
+  webpack: (config, { dev, isServer }) => {
     // Handle SVG imports
     config.module.rules.push({
       test: /\.svg$/,
       use: ['@svgr/webpack'],
     })
 
-    // Only apply client-specific tweaks
     if (!isServer) {
-      // Improve module resolution
       config.resolve = {
         ...config.resolve,
         fallback: {
@@ -66,20 +62,17 @@ const nextConfig = {
         },
         alias: {
           ...config.resolve.alias,
-          // React 19 compatibility (no-op aliases kept)
           'react': 'react',
           'react-dom': 'react-dom',
         },
       }
 
-      // Fix chunk loading and module loading
       config.optimization = {
         ...config.optimization,
         splitChunks: {
           ...config.optimization.splitChunks,
           cacheGroups: {
             ...config.optimization.splitChunks?.cacheGroups,
-            // Create more stable chunks
             vendor: {
               test: /[\\/]node_modules[\\/]/,
               name: 'vendors',
@@ -97,7 +90,6 @@ const nextConfig = {
         },
       }
 
-      // Improve chunk loading with retry mechanism
       config.output = {
         ...config.output,
         chunkLoadingGlobal: 'webpackChunkTCF_TEF',
@@ -107,21 +99,9 @@ const nextConfig = {
 
     return config
   },
-  // Prevent port conflicts
-  serverRuntimeConfig: {
-    port: process.env.PORT || 3000,
-  },
-  // Public runtime config
-  publicRuntimeConfig: {
-    basePath: (process.env.NODE_ENV === 'production') ? '' : '',
-  },
-  // Add output configuration for standalone deployment
+  // Standalone deployment
   output: 'standalone',
-  // Disable static optimization for error pages
   trailingSlash: false,
-  generateBuildId: async () => {
-    return 'build-' + Date.now()
-  },
 }
 
 export default nextConfig

@@ -7,6 +7,10 @@ import { AuthProvider } from "@/contexts/AuthContext"
 import ErrorBoundary from "@/components/error-boundary"
 import ChunkErrorHandler from "@/components/chunk-error-handler"
 
+// Force dynamic rendering for all routes
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata: Metadata = {
   title: "TCF/TEF Prep Platform",
   description: "Premium bilingual learning platform for TCF/TEF preparation with personalized AI coaching.",
