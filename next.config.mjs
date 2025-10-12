@@ -115,7 +115,7 @@ const nextConfig = {
   publicRuntimeConfig: {
     basePath: (process.env.NODE_ENV === 'production') ? '' : '',
   },
-  // Add output configuration for better chunk handling
+  // Add output configuration for standalone deployment
   output: 'standalone',
 }
 

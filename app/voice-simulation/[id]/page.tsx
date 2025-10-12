@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+
+// Generate static params for static export
 import { useParams, useRouter } from 'next/navigation';
 import { SharedDataProvider, useSharedData } from '@/components/shared-data-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

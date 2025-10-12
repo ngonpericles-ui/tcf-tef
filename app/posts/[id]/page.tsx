@@ -1,6 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
+
+// Generate static params for static export
 import { useParams, useRouter } from "next/navigation"
 import PageShell from "@/components/page-shell"
 import { managerPosts } from "@/components/manager-data"
