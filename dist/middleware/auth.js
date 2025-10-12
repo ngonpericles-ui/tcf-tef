@@ -8,12 +8,15 @@ const logger_1 = require("../utils/logger");
 const authenticate = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            throw new errorHandler_1.AuthenticationError('Authorization header is required');
+        let token;
+        if (authHeader) {
+            token = authHeader.startsWith('Bearer ')
+                ? authHeader.substring(7)
+                : authHeader;
         }
-        const token = authHeader.startsWith('Bearer ')
-            ? authHeader.substring(7)
-            : authHeader;
+        if (!token && req.cookies?.accessToken) {
+            token = req.cookies.accessToken;
+        }
         if (!token) {
             throw new errorHandler_1.AuthenticationError('Token is required');
         }
@@ -49,12 +52,15 @@ exports.authenticate = authenticate;
 const optionalAuthenticate = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return next();
+        let token;
+        if (authHeader) {
+            token = authHeader.startsWith('Bearer ')
+                ? authHeader.substring(7)
+                : authHeader;
         }
-        const token = authHeader.startsWith('Bearer ')
-            ? authHeader.substring(7)
-            : authHeader;
+        if (!token && req.cookies?.accessToken) {
+            token = req.cookies.accessToken;
+        }
         if (!token) {
             return next();
         }

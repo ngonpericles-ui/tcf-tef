@@ -19,15 +19,20 @@ declare global {
  */
 export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
   try {
+    // Try to get token from Authorization header first
     const authHeader = req.headers.authorization;
+    let token: string | undefined;
 
-    if (!authHeader) {
-      throw new AuthenticationError('Authorization header is required');
+    if (authHeader) {
+      token = authHeader.startsWith('Bearer ')
+        ? authHeader.substring(7)
+        : authHeader;
     }
 
-    const token = authHeader.startsWith('Bearer ')
-      ? authHeader.substring(7)
-      : authHeader;
+    // If no token in header, try to get from cookies
+    if (!token && req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    }
 
     if (!token) {
       throw new AuthenticationError('Token is required');
@@ -70,15 +75,20 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
  */
 export const optionalAuthenticate = (req: Request, res: Response, next: NextFunction): void => {
   try {
+    // Try to get token from Authorization header first
     const authHeader = req.headers.authorization;
+    let token: string | undefined;
     
-    if (!authHeader) {
-      return next();
+    if (authHeader) {
+      token = authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : authHeader;
     }
 
-    const token = authHeader.startsWith('Bearer ') 
-      ? authHeader.substring(7) 
-      : authHeader;
+    // If no token in header, try to get from cookies
+    if (!token && req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    }
 
     if (!token) {
       return next();

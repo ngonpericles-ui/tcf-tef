@@ -9,6 +9,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const compression_1 = __importDefault(require("compression"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const productionRateLimiter_1 = require("./middleware/productionRateLimiter");
 const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
 const http_1 = require("http");
@@ -118,6 +119,7 @@ else {
 }
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
+app.use((0, cookie_parser_1.default)());
 app.use((0, compression_1.default)());
 app.use((0, morgan_1.default)('combined', {
     stream: {

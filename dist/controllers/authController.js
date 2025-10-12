@@ -13,6 +13,18 @@ _a = AuthController;
 AuthController.register = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const registerData = req.body;
     const result = await authService_1.AuthService.register(registerData);
+    res.cookie('accessToken', result.tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000
+    });
+    res.cookie('refreshToken', result.tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     const response = {
         success: true,
         data: {
@@ -30,6 +42,18 @@ AuthController.register = (0, errorHandler_1.asyncHandler)(async (req, res) => {
 AuthController.registerAdmin = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const registerData = req.body;
     const result = await authService_1.AuthService.registerAdmin(registerData);
+    res.cookie('accessToken', result.tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000
+    });
+    res.cookie('refreshToken', result.tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     const response = {
         success: true,
         data: {
@@ -47,6 +71,18 @@ AuthController.registerAdmin = (0, errorHandler_1.asyncHandler)(async (req, res)
 AuthController.login = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const loginData = req.body;
     const result = await authService_1.AuthService.login(loginData);
+    res.cookie('accessToken', result.tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000
+    });
+    res.cookie('refreshToken', result.tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     const response = {
         success: true,
         data: {
@@ -64,6 +100,18 @@ AuthController.login = (0, errorHandler_1.asyncHandler)(async (req, res) => {
 AuthController.refreshToken = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const refreshData = req.body;
     const tokens = await authService_1.AuthService.refreshToken(refreshData);
+    res.cookie('accessToken', tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000
+    });
+    res.cookie('refreshToken', tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+    });
     const response = {
         success: true,
         data: { tokens },
@@ -76,6 +124,16 @@ AuthController.logout = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     if (refreshToken) {
         await authService_1.AuthService.logout(refreshToken);
     }
+    res.clearCookie('accessToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none'
+    });
+    res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none'
+    });
     const response = {
         success: true,
         message: 'Logout successful'
@@ -92,6 +150,16 @@ AuthController.logoutAll = (0, errorHandler_1.asyncHandler)(async (req, res) => 
         return;
     }
     await authService_1.AuthService.logoutAll(userId);
+    res.clearCookie('accessToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none'
+    });
+    res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none'
+    });
     const response = {
         success: true,
         message: 'Logged out from all devices successfully'
@@ -191,6 +259,18 @@ AuthController.googleAuth = (0, errorHandler_1.asyncHandler)(async (req, res) =>
         profileImage
     });
     if (result.success) {
+        res.cookie('accessToken', result.tokens.accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'none',
+            maxAge: 24 * 60 * 60 * 1000
+        });
+        res.cookie('refreshToken', result.tokens.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'none',
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
         const response = {
             success: true,
             data: {

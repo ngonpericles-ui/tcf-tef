@@ -14,6 +14,21 @@ export class AuthController {
 
     const result = await AuthService.register(registerData);
 
+    // Set tokens as HTTP-only cookies
+    res.cookie('accessToken', result.tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    res.cookie('refreshToken', result.tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     const response: ApiResponse = {
       success: true,
       data: {
@@ -38,6 +53,21 @@ export class AuthController {
     const registerData: RegisterRequest = req.body;
 
     const result = await AuthService.registerAdmin(registerData);
+
+    // Set tokens as HTTP-only cookies
+    res.cookie('accessToken', result.tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    res.cookie('refreshToken', result.tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
 
     const response: ApiResponse = {
       success: true,
@@ -64,6 +94,21 @@ export class AuthController {
 
     const result = await AuthService.login(loginData);
 
+    // Set tokens as HTTP-only cookies
+    res.cookie('accessToken', result.tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    res.cookie('refreshToken', result.tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     const response: ApiResponse = {
       success: true,
       data: {
@@ -89,6 +134,21 @@ export class AuthController {
 
     const tokens = await AuthService.refreshToken(refreshData);
 
+    // Set tokens as HTTP-only cookies
+    res.cookie('accessToken', tokens.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     const response: ApiResponse = {
       success: true,
       data: { tokens },
@@ -107,6 +167,19 @@ export class AuthController {
     if (refreshToken) {
       await AuthService.logout(refreshToken);
     }
+
+    // Clear cookies
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none'
+    });
+
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none'
+    });
 
     const response: ApiResponse = {
       success: true,
@@ -131,6 +204,19 @@ export class AuthController {
     }
 
     await AuthService.logoutAll(userId);
+
+    // Clear cookies
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none'
+    });
+
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none'
+    });
 
     const response: ApiResponse = {
       success: true,
@@ -272,6 +358,21 @@ export class AuthController {
     });
 
     if (result.success) {
+      // Set tokens as HTTP-only cookies
+      res.cookie('accessToken', result.tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      });
+
+      res.cookie('refreshToken', result.tokens.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'none',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
       const response: ApiResponse = {
         success: true,
         data: {
