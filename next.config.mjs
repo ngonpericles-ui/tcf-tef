@@ -117,6 +117,11 @@ const nextConfig = {
   },
   // Add output configuration for standalone deployment
   output: 'standalone',
+  // Disable static optimization for error pages
+  trailingSlash: false,
+  generateBuildId: async () => {
+    return 'build-' + Date.now()
+  },
 }
 
 export default nextConfig
