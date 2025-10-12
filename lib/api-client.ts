@@ -34,14 +34,20 @@ class ApiClient {
   private refreshToken: string | null = null
 
   constructor() {
+    // Get API URL from environment variables (works in both client and server)
+    const apiUrl = typeof window !== 'undefined'
+      ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'https://backendaura.onrender.com/api'
+      : process.env.NEXT_PUBLIC_API_URL || 'https://backendaura.onrender.com/api'
+
+    console.log('🔧 API Client initialized with baseURL:', apiUrl)
+
     this.client = axios.create({
-      baseURL: (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') 
-        ? 'https://aura-ca-backend-amqz7no0a-ngonpericles-educms-projects.vercel.app/api'
-        : 'http://localhost:3001/api',
+      baseURL: apiUrl,
       timeout: 30000, // 30 seconds - increased for better reliability
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: true, // Enable cookies for CORS
     })
 
     // Load tokens from localStorage on initialization
