@@ -61,15 +61,30 @@ const server = createServer(app);
 app.use(helmet());
 
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3004',
+  ...config.corsOrigin.split(',').map(origin => origin.trim())
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',  // Frontend
-    config.corsOrigin
-  ],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️  CORS blocked origin: ${origin}`);
+      callback(null, false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+console.log('✅ CORS configured for origins:', allowedOrigins);
 
 // Rate limiting - Different limits for different environments
 const limiter = rateLimit({
