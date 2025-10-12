@@ -61,15 +61,28 @@ const chatRoomService_1 = require("./services/chatRoomService");
 const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 app.use((0, helmet_1.default)());
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3004',
+    ...environment_1.config.corsOrigin.split(',').map(origin => origin.trim())
+];
 app.use((0, cors_1.default)({
-    origin: [
-        'http://localhost:3000',
-        environment_1.config.corsOrigin
-    ],
+    origin: (origin, callback) => {
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        }
+        else {
+            console.warn(`⚠️  CORS blocked origin: ${origin}`);
+            callback(null, false);
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+console.log('✅ CORS configured for origins:', allowedOrigins);
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: environment_1.config.rateLimitWindowMs,
     max: environment_1.config.rateLimitMaxRequests,
