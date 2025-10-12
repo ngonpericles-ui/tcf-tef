@@ -80,6 +80,7 @@ const stopRecordingSchema = {
 router.get('/config', agoraController_1.AgoraController.getConfig);
 router.get('/health', agoraController_1.AgoraController.healthCheck);
 router.post('/rtc/token', auth_1.authenticate, (0, validation_1.validate)(rtcTokenSchema), agoraController_1.AgoraController.generateRTCToken);
+router.post('/token', auth_1.authenticate, (0, validation_1.validate)(rtcTokenSchema), agoraController_1.AgoraController.generateRTCToken);
 router.post('/rtm/token', auth_1.authenticate, (0, validation_1.validate)(rtmTokenSchema), agoraController_1.AgoraController.generateRTMToken);
 router.post('/recording/start', auth_1.authenticate, (0, auth_1.requireRole)(['SENIOR_MANAGER', 'JUNIOR_MANAGER', 'ADMIN']), (0, validation_1.validate)(startRecordingSchema), agoraController_1.AgoraController.startRecording);
 router.post('/recording/stop', auth_1.authenticate, (0, auth_1.requireRole)(['SENIOR_MANAGER', 'JUNIOR_MANAGER', 'ADMIN']), (0, validation_1.validate)(stopRecordingSchema), agoraController_1.AgoraController.stopRecording);

@@ -194,6 +194,9 @@ router.get('/health', AgoraController.healthCheck);
  */
 router.post('/rtc/token', authenticate, validate(rtcTokenSchema), AgoraController.generateRTCToken);
 
+// Alias route for convenience
+router.post('/token', authenticate, validate(rtcTokenSchema), AgoraController.generateRTCToken);
+
 /**
  * @swagger
  * /api/agora/rtm/token:
