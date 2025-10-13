@@ -692,12 +692,27 @@ router.get('/level-history', authenticate, async (req: Request, res: Response, n
     }
 
     const history = await LevelAssessmentService.getLevelHistory(userId);
+    const latestAssessment = history[0]; // Most recent assessment (ordered by createdAt DESC)
 
+    // Return the full assessment data from database, not just the level string
     res.json({
       success: true,
       data: {
         history,
-        currentLevel: await LevelAssessmentService.getCurrentLevel(userId)
+        currentLevel: latestAssessment?.determinedLevel || 'A1',
+        // Include the complete assessment object with all fields
+        currentAssessment: latestAssessment ? {
+          currentLevel: latestAssessment.determinedLevel,
+          subLevel: latestAssessment.subLevel || 1,
+          confidence: latestAssessment.confidence * 100, // Convert to percentage
+          strengths: latestAssessment.strengths || [],
+          weaknesses: latestAssessment.weaknesses || [],
+          recommendations: latestAssessment.recommendations || [],
+          nextLevelRequirements: latestAssessment.nextLevelRequirements || [],
+          estimatedTimeToNextLevel: latestAssessment.estimatedTimeToNext || '3-6 mois',
+          lastAssessmentDate: latestAssessment.createdAt,
+          totalAssessments: history.length
+        } : null
       }
     });
   } catch (error) {

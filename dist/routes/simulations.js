@@ -585,11 +585,24 @@ router.get('/level-history', auth_1.authenticate, async (req, res, next) => {
             });
         }
         const history = await levelAssessmentService_1.LevelAssessmentService.getLevelHistory(userId);
+        const latestAssessment = history[0];
         res.json({
             success: true,
             data: {
                 history,
-                currentLevel: await levelAssessmentService_1.LevelAssessmentService.getCurrentLevel(userId)
+                currentLevel: latestAssessment?.determinedLevel || 'A1',
+                currentAssessment: latestAssessment ? {
+                    currentLevel: latestAssessment.determinedLevel,
+                    subLevel: latestAssessment.subLevel || 1,
+                    confidence: latestAssessment.confidence * 100,
+                    strengths: latestAssessment.strengths || [],
+                    weaknesses: latestAssessment.weaknesses || [],
+                    recommendations: latestAssessment.recommendations || [],
+                    nextLevelRequirements: latestAssessment.nextLevelRequirements || [],
+                    estimatedTimeToNextLevel: latestAssessment.estimatedTimeToNext || '3-6 mois',
+                    lastAssessmentDate: latestAssessment.createdAt,
+                    totalAssessments: history.length
+                } : null
             }
         });
     }
