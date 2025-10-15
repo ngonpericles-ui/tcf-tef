@@ -128,36 +128,14 @@ export default function TestNiveauPage() {
         // Use the complete assessment data from the new backend API structure
         const assessmentData = response.data.currentAssessment
         setCurrentLevel(assessmentData as LevelAssessment)
-      } else if (response.success && response.data) {
-        // Fallback for when no assessment exists yet
-        setCurrentLevel({
-          currentLevel: response.data.currentLevel || 'A1',
-          subLevel: 1,
-          confidence: 50,
-          strengths: [],
-          weaknesses: [],
-          recommendations: ['Commencez par un test de niveau pour obtenir une évaluation personnalisée'],
-          nextLevelRequirements: [],
-          estimatedTimeToNextLevel: '3-6 mois',
-          lastAssessmentDate: null,
-          totalAssessments: 0
-        } as LevelAssessment)
+      } else {
+        // No assessment exists yet - don't set fallback data
+        setCurrentLevel(null)
       }
     } catch (error) {
       console.error('Error fetching current level:', error)
-      // Set default level if API fails
-      setCurrentLevel({
-        currentLevel: 'A1',
-        subLevel: 1,
-        confidence: 50,
-        strengths: ['Débutant en français'],
-        weaknesses: ['Évaluation nécessaire'],
-        recommendations: ['Effectuer un test de niveau pour une évaluation détaillée'],
-        nextLevelRequirements: ['Vocabulaire de base', 'Grammaire élémentaire'],
-        estimatedTimeToNextLevel: '3-6 mois',
-        lastAssessmentDate: null,
-        totalAssessments: 0
-      } as LevelAssessment)
+      // Don't set fallback data - user needs to take a test first
+      setCurrentLevel(null)
     } finally {
       setLevelLoading(false)
     }
@@ -262,90 +240,124 @@ export default function TestNiveauPage() {
       </div>
 
       {/* Current Level Assessment Section */}
-      {!levelLoading && currentLevel && (
+      {!levelLoading && (
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 py-16">
           <div className="container mx-auto px-4">
             <div className="max-w-4xl mx-auto">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-foreground mb-4">
-                  {t("Votre Niveau Actuel", "Your Current Level")}
-                </h2>
-                <p className="text-lg text-muted-foreground">
-                  {t("Basé sur vos performances précédentes", "Based on your previous performance")}
-                </p>
-              </div>
+              {currentLevel ? (
+                <>
+                  <div className="text-center mb-8">
+                    <h2 className="text-3xl font-bold text-foreground mb-4">
+                      {t("Votre Niveau Actuel", "Your Current Level")}
+                    </h2>
+                    <p className="text-lg text-muted-foreground">
+                      {t("Basé sur vos performances précédentes", "Based on your previous performance")}
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Current Level Card */}
-                <Card className="text-center p-6 bg-white/80 backdrop-blur-sm border-2 border-blue-200">
-                  <CardHeader>
-                    <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                      <Award className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <CardTitle className="text-2xl font-bold text-blue-600">
-                      {currentLevel.currentLevel}
-                    </CardTitle>
-                    <CardDescription className="text-base">
-                      {t("Niveau actuel", "Current level")}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm text-muted-foreground">
-                      {t("Confiance:", "Confidence:")} {Math.round(currentLevel.confidence)}%
-                    </div>
-                  </CardContent>
-                </Card>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Current Level Card */}
+                    <Card className="text-center p-6 bg-white/80 backdrop-blur-sm border-2 border-blue-200">
+                      <CardHeader>
+                        <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                          <Award className="w-8 h-8 text-blue-600" />
+                        </div>
+                        <CardTitle className="text-2xl font-bold text-blue-600">
+                          {currentLevel.currentLevel}
+                        </CardTitle>
+                        <CardDescription className="text-base">
+                          {t("Niveau actuel", "Current level")}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm text-muted-foreground">
+                          {t("Confiance:", "Confidence:")} {Math.round(currentLevel.confidence)}%
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                {/* Strengths Card */}
-                <Card className="p-6 bg-white/80 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-green-600 flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5" />
-                      {t("Points forts", "Strengths")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2 text-sm">
-                      {currentLevel.strengths && currentLevel.strengths.length > 0 ? (
-                        currentLevel.strengths.slice(0, 3).map((strength, index) => (
-                          <li key={index} className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span>{strength}</span>
-                          </li>
-                        ))
-                      ) : (
-                        <li className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                          <span className="text-gray-500">Effectuer un test pour identifier vos forces</span>
-                        </li>
-                      )}
-                    </ul>
-                  </CardContent>
-                </Card>
+                    {/* Strengths Card */}
+                    <Card className="p-6 bg-white/80 backdrop-blur-sm">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-semibold text-green-600 flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5" />
+                          {t("Points forts", "Strengths")}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2 text-sm">
+                          {currentLevel.strengths && currentLevel.strengths.length > 0 ? (
+                            currentLevel.strengths.slice(0, 3).map((strength, index) => (
+                              <li key={index} className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span>{strength}</span>
+                              </li>
+                            ))
+                          ) : (
+                            <li className="flex items-center gap-2">
+                              <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                              <span className="text-gray-500">Effectuer un test pour identifier vos forces</span>
+                            </li>
+                          )}
+                        </ul>
+                      </CardContent>
+                    </Card>
 
-                {/* Next Level Card */}
-                <Card className="p-6 bg-white/80 backdrop-blur-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-purple-600 flex items-center gap-2">
-                      <Target className="w-5 h-5" />
-                      {t("Objectif suivant", "Next goal")}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-sm space-y-2">
-                      <div className="font-medium">
-                        {t("Temps estimé:", "Estimated time:")} {currentLevel.estimatedTimeToNextLevel}
-                      </div>
-                      <div className="text-muted-foreground">
-                        {currentLevel.recommendations && currentLevel.recommendations.length > 0 
-                          ? currentLevel.recommendations[0]
-                          : t("Effectuez un test pour des recommandations personnalisées", "Take a test for personalized recommendations")
-                        }
-                      </div>
+                    {/* Next Level Card */}
+                    <Card className="p-6 bg-white/80 backdrop-blur-sm">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-semibold text-purple-600 flex items-center gap-2">
+                          <Target className="w-5 h-5" />
+                          {t("Objectif suivant", "Next goal")}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm space-y-2">
+                          <div className="font-medium">
+                            {t("Temps estimé:", "Estimated time:")} {currentLevel.estimatedTimeToNextLevel}
+                          </div>
+                          <div className="text-muted-foreground">
+                            {currentLevel.recommendations && currentLevel.recommendations.length > 0 
+                              ? currentLevel.recommendations[0]
+                              : t("Effectuez un test pour des recommandations personnalisées", "Take a test for personalized recommendations")
+                            }
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </>
+              ) : (
+                // Show message when no assessment exists
+                <div className="text-center py-12">
+                  <div className="mx-auto w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                    <Target className="w-10 h-10 text-gray-400" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-foreground mb-4">
+                    {t("Aucune évaluation disponible", "No Assessment Available")}
+                  </h2>
+                  <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+                    {t(
+                      "Vous n'avez pas encore effectué de test de niveau. Commencez par passer un test pour obtenir une évaluation personnalisée de votre niveau de français.",
+                      "You haven't taken a level test yet. Start by taking a test to get a personalized assessment of your French level."
+                    )}
+                  </p>
+                  <div className="flex items-center justify-center space-x-4 text-sm text-muted-foreground">
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
+                      <span>—</span>
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
+                      <span>—</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
+                      <span>—</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
