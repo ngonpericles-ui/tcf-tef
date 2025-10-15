@@ -124,23 +124,38 @@ export default function TestNiveauPage() {
     try {
       setLevelLoading(true)
       const response = await apiClient.get('/simulations/level-history')
-      if (response.success && response.data) {
-        // Set current level from the API response
-        const currentLevelData = {
-          level: response.data.currentLevel || 'A1',
-          confidence: response.data.history.length > 0 ? response.data.history[0].confidence : 0.5,
-          lastAssessment: response.data.history.length > 0 ? response.data.history[0].createdAt : null,
-          totalAssessments: response.data.history.length
-        }
-        setCurrentLevel(currentLevelData as LevelAssessment)
+      if (response.success && response.data && response.data.currentAssessment) {
+        // Use the complete assessment data from the new backend API structure
+        const assessmentData = response.data.currentAssessment
+        setCurrentLevel(assessmentData as LevelAssessment)
+      } else if (response.success && response.data) {
+        // Fallback for when no assessment exists yet
+        setCurrentLevel({
+          currentLevel: response.data.currentLevel || 'A1',
+          subLevel: 1,
+          confidence: 50,
+          strengths: [],
+          weaknesses: [],
+          recommendations: ['Commencez par un test de niveau pour obtenir une évaluation personnalisée'],
+          nextLevelRequirements: [],
+          estimatedTimeToNextLevel: '3-6 mois',
+          lastAssessmentDate: null,
+          totalAssessments: 0
+        } as LevelAssessment)
       }
     } catch (error) {
       console.error('Error fetching current level:', error)
       // Set default level if API fails
       setCurrentLevel({
-        level: 'A1',
-        confidence: 0.5,
-        lastAssessment: null,
+        currentLevel: 'A1',
+        subLevel: 1,
+        confidence: 50,
+        strengths: ['Débutant en français'],
+        weaknesses: ['Évaluation nécessaire'],
+        recommendations: ['Effectuer un test de niveau pour une évaluation détaillée'],
+        nextLevelRequirements: ['Vocabulaire de base', 'Grammaire élémentaire'],
+        estimatedTimeToNextLevel: '3-6 mois',
+        lastAssessmentDate: null,
         totalAssessments: 0
       } as LevelAssessment)
     } finally {
@@ -291,12 +306,19 @@ export default function TestNiveauPage() {
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2 text-sm">
-                      {currentLevel.strengths.slice(0, 3).map((strength, index) => (
-                        <li key={index} className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span>{strength}</span>
+                      {currentLevel.strengths && currentLevel.strengths.length > 0 ? (
+                        currentLevel.strengths.slice(0, 3).map((strength, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span>{strength}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                          <span className="text-gray-500">Effectuer un test pour identifier vos forces</span>
                         </li>
-                      ))}
+                      )}
                     </ul>
                   </CardContent>
                 </Card>
@@ -315,7 +337,10 @@ export default function TestNiveauPage() {
                         {t("Temps estimé:", "Estimated time:")} {currentLevel.estimatedTimeToNextLevel}
                       </div>
                       <div className="text-muted-foreground">
-                        {currentLevel.recommendations[0]}
+                        {currentLevel.recommendations && currentLevel.recommendations.length > 0 
+                          ? currentLevel.recommendations[0]
+                          : t("Effectuez un test pour des recommandations personnalisées", "Take a test for personalized recommendations")
+                        }
                       </div>
                     </div>
                   </CardContent>
