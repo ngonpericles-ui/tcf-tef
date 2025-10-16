@@ -37,7 +37,7 @@ interface UserStats {
   averageScore: number
   currentStreak: number
   totalStudyTime: string
-  level: string
+  level: string | null // null when user hasn't taken any tests
   achievements: number
 }
 
@@ -52,7 +52,7 @@ export default function ProfilePage() {
     averageScore: 0,
     currentStreak: 0,
     totalStudyTime: "0h 0m",
-    level: "A1",
+    level: null, // No level until user takes a test
     achievements: 0,
   })
   const [subscriptionHistory, setSubscriptionHistory] = useState<any[]>([])
@@ -77,7 +77,8 @@ export default function ProfilePage() {
   const fetchUserProfile = async () => {
     try {
       const response = await apiClient.get('/users/profile')
-      const profile = (response as any).data as UserProfile
+      // Backend returns data nested under data.user
+      const profile = (response as any).data?.user as UserProfile
       setUserProfile(profile)
       setFormData({
         firstName: profile?.firstName || "",
@@ -94,40 +95,34 @@ export default function ProfilePage() {
 
   const fetchUserStats = async () => {
     try {
-      const [learningStatsResponse, levelHistoryResponse] = await Promise.all([
-        apiClient.get('/learning-session/stats'),
-        apiClient.get('/simulations/level-history')
-      ])
-
-      const learningStats = ((learningStatsResponse as any).data || {}) as any
+      // Only fetch level history since learning-session endpoint doesn't exist
+      const levelHistoryResponse = await apiClient.get('/simulations/level-history')
       const levelData = ((levelHistoryResponse as any).data || {}) as any
 
-      const totalMinutes = Number(learningStats.totalStudyTime ?? 0)
-      const hours = Math.floor(totalMinutes / 60)
-      const minutes = totalMinutes % 60
-      const studyTimeFormatted = `${hours}h ${minutes}m`
-
-      // Get current level from AI Level Assessment system
-      const currentLevel = levelData.currentLevel || "A1"
-      const testsCompleted = levelData.history?.length || 0
-
+      // Check if user has any actual assessments
+      const hasAssessments = levelData.currentAssessment && levelData.history && levelData.history.length > 0
+      const testsCompleted = hasAssessments ? levelData.history.length : 0
+      
+      // Only show level if user has taken tests and has assessments
+      const currentLevel = hasAssessments ? levelData.currentLevel : null
+      
       setUserStats({
         testsCompleted: testsCompleted,
-        averageScore: learningStats.averageScore || 0,
-        currentStreak: learningStats.currentStreak || 0,
-        totalStudyTime: studyTimeFormatted,
-        level: currentLevel,
-        achievements: learningStats.achievements || 0
+        averageScore: 0, // Will be calculated from actual test results later
+        currentStreak: 0, // Will be implemented when streak logic exists
+        totalStudyTime: "0h 0m", // Will be implemented when study time tracking exists
+        level: currentLevel, // null if no assessments
+        achievements: 0 // Will be implemented when achievement system exists
       })
     } catch (error) {
       console.error('Error fetching user stats:', error)
-      // Fallback to default values if API fails
+      // For users with no assessments, don't show any hardcoded data
       setUserStats({
         testsCompleted: 0,
         averageScore: 0,
         currentStreak: 0,
         totalStudyTime: "0h 0m",
-        level: "A1",
+        level: null, // No level until they take a test
         achievements: 0
       })
     } finally {
@@ -209,8 +204,8 @@ export default function ProfilePage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-8">
           <ProfileImageUpload
             currentImage={userProfile?.profilePicture}
-            userName={`${userProfile?.firstName || ''} ${userProfile?.lastName || ''}`.trim() || user?.email || 'User'}
-            onImageUpdate={(newUrl) => {
+            userId={user?.userId}
+            onImageChange={(newUrl) => {
               if (userProfile) {
                 setUserProfile({ ...userProfile, profilePicture: newUrl });
               }
@@ -241,15 +236,25 @@ export default function ProfilePage() {
               </Link>
             </div>
             <div className="flex items-center gap-4 text-sm">
-              <Badge variant="outline" className="bg-[#007BFF]/10 text-[#007BFF] border-[#007BFF]/20">
-                {t("Niveau", "Level")} {userStats.level}
-              </Badge>
+              {userStats.level ? (
+                <Badge variant="outline" className="bg-[#007BFF]/10 text-[#007BFF] border-[#007BFF]/20">
+                  {t("Niveau", "Level")} {userStats.level}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+                  {t("Niveau à déterminer", "Level pending")}
+                </Badge>
+              )}
               <span className="text-muted-foreground">
                 {userStats.testsCompleted} {t("tests complétés", "tests completed")}
               </span>
-              {userProfile?.firstName && (
+              {userProfile?.firstName && userProfile.lastName ? (
                 <span className="text-muted-foreground">
                   {userProfile.firstName} {userProfile.lastName}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  {t("Complétez votre profil", "Complete your profile")}
                 </span>
               )}
             </div>
