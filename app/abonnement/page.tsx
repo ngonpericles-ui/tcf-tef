@@ -42,9 +42,12 @@ export default function SubscriptionPage() {
         setError(null)
 
         // Load available subscription plans
-        const plansResponse = await apiClient.get('/subscription-plans')
+        const plansResponse = await apiClient.get('/subscriptions/plans')
         if (plansResponse.success && plansResponse.data) {
-          setPlans(Array.isArray(plansResponse.data) ? plansResponse.data : [])
+          const plansData = (plansResponse.data as any).plans || plansResponse.data
+          const plansArray = Array.isArray(plansData) ? plansData : []
+          console.log('📡 Subscription plans loaded:', plansArray)
+          setPlans(plansArray)
         }
 
         // Load current user subscription
@@ -215,12 +218,14 @@ export default function SubscriptionPage() {
   const handleContinue = () => {
     if (selectedPlan) {
       // Store selection in localStorage for payment page
+      const selectedPlanData = plans.find((p) => p.id === selectedPlan)
+      const monthlyPrice = selectedPlanData?.monthlyPrice || 0
       localStorage.setItem(
         "selectedPlan",
         JSON.stringify({
           plan: selectedPlan,
           period: period,
-          price: getPrice(plans.find((p) => p.id === selectedPlan)?.monthlyPrice || 0),
+          price: getPrice(monthlyPrice),
           nextBilling: getNextBillingDate(),
         }),
       )
@@ -349,7 +354,7 @@ export default function SubscriptionPage() {
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-foreground">
-                  {formatPrice(getPrice(plans.find((p) => p.id === selectedPlan)?.monthlyPrice || 0))} CFA
+                  {formatPrice(getPrice((plans.find((p) => p.id === selectedPlan)?.monthlyPrice) || 0))} CFA
                 </div>
                 <div className="text-sm text-muted-foreground">
                   /

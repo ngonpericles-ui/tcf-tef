@@ -29,8 +29,11 @@ export default function UsersManagement() {
 
   // Fetch users and stats from backend
   useEffect(() => {
-    fetchUsersAndStats()
-  }, [searchTerm, filterRole, filterSubscription, filterStatus])
+    // Only fetch if user is authenticated
+    if (user && user.role === 'ADMIN') {
+      fetchUsersAndStats()
+    }
+  }, [searchTerm, filterRole, filterSubscription, filterStatus, user])
 
   const fetchUsersAndStats = async () => {
     try {
@@ -198,6 +201,18 @@ export default function UsersManagement() {
       default:
         return subscription || "Aucun"
     }
+  }
+
+  // Show loading if user is not authenticated or not admin
+  if (!user || user.role !== 'ADMIN') {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">Chargement...</p>
+        </div>
+      </div>
+    )
   }
 
   return (

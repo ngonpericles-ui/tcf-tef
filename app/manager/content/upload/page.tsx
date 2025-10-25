@@ -30,6 +30,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import apiClient from "@/lib/api-client"
+import { toast } from "sonner"
 
 interface UploadedFile {
   id: string
@@ -49,7 +50,7 @@ interface ManagerRole {
 interface BulkSettings {
   title: string
   levels: string[]
-  subscription: string
+  subscriptions: string[]
   category: string
 }
 
@@ -70,7 +71,7 @@ function ManagerBulkUploadPageContent() {
   const [bulkSettings, setBulkSettings] = useState<BulkSettings>({
     title: "",
     levels: [],
-    subscription: "",
+    subscriptions: [],
     category: "",
   })
 
@@ -291,11 +292,14 @@ function ManagerBulkUploadPageContent() {
         })
       }
 
+      // Show success message
+      toast.success(t("Fichiers téléchargés avec succès!", "Files uploaded successfully!"))
+      
       // Redirect to content management page
       router.push("/manager/content")
     } catch (error) {
       console.error('Error uploading files:', error)
-      alert(t("Erreur lors du téléchargement", "Error uploading files"))
+      toast.error(t("Erreur lors du téléchargement", "Error uploading files"))
     } finally {
       setUploading(false)
     }

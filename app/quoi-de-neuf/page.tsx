@@ -14,6 +14,15 @@ import SiteHeader from "@/components/site-header"
 import { useAuth } from "@/contexts/AuthContext"
 import apiClient from "@/lib/api-client"
 
+type Comment = {
+  id: string
+  author: string
+  avatar?: string
+  content: string
+  createdAt: string
+  userId?: string
+}
+
 type Post = {
   id: string
   author: string
@@ -37,6 +46,7 @@ type Post = {
   targetTier?: string
   createdAt?: string
   updatedAt?: string
+  commentsList?: Comment[]
 }
 
 
@@ -57,10 +67,16 @@ export default function QuoiDeNeufPage() {
   const [newPostContent, setNewPostContent] = useState("")
   const [newPostTitle, setNewPostTitle] = useState("")
   const [subscribed] = useState(true) // Mock subscription status
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [commentText, setCommentText] = useState<Record<string, string>>({})
+  const [loadedComments, setLoadedComments] = useState<Record<string, Comment[]>>({})
+  const [userLikedPosts, setUserLikedPosts] = useState<Set<string>>(new Set())
+  const [userSharedPosts, setUserSharedPosts] = useState<Set<string>>(new Set())
 
   // Fetch posts from backend
   useEffect(() => {
     const fetchPosts = async () => {
+      console.log('🔄 Fetching posts...')
       try {
         setLoading(true)
         const response = await apiClient.get('/posts', {
@@ -73,32 +89,38 @@ export default function QuoiDeNeufPage() {
         })
 
         if (response.success && response.data) {
-          const backendPosts = response.data.map((post: any) => ({
-            id: post.id,
-            author: `${post.author?.firstName || ''} ${post.author?.lastName || ''}`.trim() || post.author?.email || 'Manager',
-            role: post.author?.role === 'ADMIN' ? 'Admin' : 'Manager',
-            verified: true,
-            time: new Date(post.createdAt).toLocaleDateString('fr-FR'),
-            title: post.title,
-            preview: post.excerpt || post.content?.substring(0, 200) + '...' || '',
-            content: post.content,
-            excerpt: post.excerpt,
-            media: post.media,
-            public: post.visibility === 'PUBLIC',
-            likes: post._count?.likes || 0,
-            comments: post._count?.comments || 0,
-            shares: post._count?.shares || 0,
-            avatar: post.author?.profileImage || undefined,
-            authorId: post.authorId,
-            status: post.status,
-            visibility: post.visibility,
-            level: post.level,
-            targetTier: post.targetTier,
-            createdAt: post.createdAt,
-            updatedAt: post.updatedAt
-          }))
+          console.log('📡 Posts response:', response.data)
+          const backendPosts = (response.data as any[]).map((post: any) => {
+            console.log('📝 Post data:', { id: post.id, title: post.title, likes: post._count?.likes })
+            return {
+              id: post.id,
+              author: `${post.author?.firstName || ''} ${post.author?.lastName || ''}`.trim() || post.author?.email || 'Manager',
+              role: (post.author?.role === 'ADMIN' ? 'Admin' : 'Manager') as "Manager" | "Admin" | "SENIOR_MANAGER" | "JUNIOR_MANAGER" | "ADMIN",
+              verified: true,
+              time: new Date(post.createdAt).toLocaleDateString('fr-FR'),
+              title: post.title,
+              preview: post.excerpt || post.content?.substring(0, 200) + '...' || '',
+              content: post.content,
+              excerpt: post.excerpt,
+              media: post.media,
+              public: post.visibility === 'PUBLIC',
+              likes: post._count?.likes || 0,
+              comments: post._count?.comments || 0,
+              shares: post._count?.shares || 0,
+              avatar: post.author?.profileImage || undefined,
+              authorId: post.authorId,
+              status: post.status,
+              visibility: post.visibility,
+              level: post.level,
+              targetTier: post.targetTier,
+              createdAt: post.createdAt,
+              updatedAt: post.updatedAt
+            }
+          })
 
-          setPosts(backendPosts)
+          setPosts(backendPosts as Post[])
+
+          console.log('✅ Posts loaded with like counts:', backendPosts.map(p => ({ id: p.id, title: p.title, likes: p.likes })))
         }
       } catch (error) {
         console.error('Error fetching posts:', error)
@@ -109,8 +131,40 @@ export default function QuoiDeNeufPage() {
       }
     }
 
+    // Fetch user's liked posts if authenticated
+    const fetchUserLikes = async () => {
+      if (!isAuthenticated || !user) {
+        setUserLikedPosts(new Set<string>())
+        return
+      }
+
+      try {
+        console.log('🔄 Fetching user liked posts...')
+        const response = await apiClient.get('/likes/user', {
+          params: {
+            contentType: 'POST',
+            limit: 1000
+          }
+        })
+
+        if (response.success && response.data) {
+          const likedPostIds = new Set<string>()
+          const likes = (response.data as any).likes || []
+          likes.forEach((like: any) => {
+            likedPostIds.add(like.contentId)
+          })
+          setUserLikedPosts(likedPostIds)
+          console.log('✅ User liked posts loaded:', Array.from(likedPostIds))
+        }
+      } catch (error) {
+        console.error('Error fetching user likes:', error)
+        setUserLikedPosts(new Set<string>())
+      }
+    }
+
     fetchPosts()
-  }, [])
+    fetchUserLikes()
+  }, [isAuthenticated, user])
 
   const handleCreatePost = async () => {
     if (!newPostTitle.trim() || !newPostContent.trim()) return
@@ -134,7 +188,7 @@ export default function QuoiDeNeufPage() {
 
       if (response.success && response.data) {
         const newPost: Post = {
-          id: response.data.post.id,
+          id: (response.data as any).post.id,
           author: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || 'Manager',
           role: user.role === 'ADMIN' ? 'Admin' : 'Manager',
           verified: true,
@@ -164,10 +218,135 @@ export default function QuoiDeNeufPage() {
     }
   }
 
-  const handleLike = (postId: string) => {
-    setPosts(posts.map(post => 
-      post.id === postId ? { ...post, likes: post.likes + 1 } : post
-    ))
+  const handleLike = async (postId: string) => {
+    try {
+      console.log('🔄 Liking post:', postId)
+      const response = await apiClient.post(`/posts/${postId}/like`)
+      console.log('📡 Like response:', response)
+      
+      if ((response as any).success) {
+        // Backend returns { liked: true/false, likeCount: number } in data
+        const { liked, likeCount } = (response as any).data || {}
+        console.log('💖 Like data:', { liked, likeCount })
+        
+        // Update like count in posts - ALWAYS use backend count
+        setPosts(posts.map(post =>
+          post.id === postId ? { ...post, likes: likeCount } : post
+        ))
+        
+        // Update user liked posts state
+        setUserLikedPosts(prev => {
+          const newSet = new Set(prev)
+          if (liked) {
+            newSet.add(postId)
+          } else {
+            newSet.delete(postId)
+          }
+          return newSet
+        })
+      } else {
+        console.error('❌ Like failed:', (response as any).message)
+      }
+    } catch (error) {
+      console.error('❌ Error liking post:', error)
+    }
+  }
+
+  const handleShare = async (postId: string) => {
+    try {
+      console.log('🔄 Sharing post:', postId)
+      const response = await apiClient.post(`/posts/${postId}/share`)
+      console.log('📡 Share response:', response)
+
+      if ((response as any).success) {
+        // Backend returns { shared: true/false, shareCount: number } in data
+        const { shared, shareCount } = (response as any).data || {}
+        console.log('📤 Share data:', { shared, shareCount })
+
+        // Update share count in posts - ALWAYS use backend count
+        setPosts(posts.map(post =>
+          post.id === postId ? { ...post, shares: shareCount } : post
+        ))
+
+        // Update user shared posts state
+        setUserSharedPosts(prev => {
+          const newSet = new Set(prev)
+          if (shared) {
+            newSet.add(postId)
+          } else {
+            newSet.delete(postId)
+          }
+          return newSet
+        })
+      } else {
+        console.error('❌ Share failed:', (response as any).message)
+      }
+    } catch (error) {
+      console.error('❌ Error sharing post:', error)
+    }
+  }
+
+  const handleToggleComments = async (postId: string) => {
+    const newExpanded = new Set(expandedComments)
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId)
+    } else {
+      newExpanded.add(postId)
+      // Fetch comments if not already loaded
+      if (!loadedComments[postId]) {
+        try {
+          const response = await apiClient.get(`/posts/${postId}/comments`)
+          if ((response as any).success) {
+            const comments = ((response as any).data || []).map((comment: any) => ({
+              id: comment.id,
+              author: `${comment.author?.firstName || ''} ${comment.author?.lastName || ''}`.trim() || comment.author?.email || 'User',
+              avatar: comment.author?.profileImage,
+              content: comment.content,
+              createdAt: comment.createdAt,
+              userId: comment.author?.id
+            }))
+            setLoadedComments({ ...loadedComments, [postId]: comments })
+          }
+        } catch (error) {
+          console.error('Error fetching comments:', error)
+        }
+      }
+    }
+    setExpandedComments(newExpanded)
+  }
+
+  const handleAddComment = async (postId: string) => {
+    const text = commentText[postId]?.trim()
+    if (!text) return
+
+    try {
+      const response = await apiClient.post(`/posts/${postId}/comments`, {
+        content: text
+      })
+      if ((response as any).success) {
+        // Update local state
+        setPosts(posts.map(post =>
+          post.id === postId ? { ...post, comments: post.comments + 1 } : post
+        ))
+        // Add new comment to loaded comments
+        const newComment: Comment = {
+          id: (response as any).data?.id || Date.now().toString(),
+          author: user?.firstName + ' ' + user?.lastName || user?.email || 'You',
+          avatar: user?.profileImage,
+          content: text,
+          createdAt: new Date().toISOString(),
+          userId: user?.id
+        }
+        setLoadedComments({
+          ...loadedComments,
+          [postId]: [...(loadedComments[postId] || []), newComment]
+        })
+        // Clear comment text
+        setCommentText({ ...commentText, [postId]: '' })
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error)
+    }
   }
 
 
@@ -378,14 +557,19 @@ export default function QuoiDeNeufPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleLike(p.id)}
-                                className="flex items-center gap-2 text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 p-2"
+                                className={`flex items-center gap-2 p-2 ${
+                                  userLikedPosts.has(p.id)
+                                    ? "text-red-500 bg-red-50 dark:bg-red-950/20"
+                                    : "text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                }`}
                               >
-                                <Heart className="h-5 w-5" />
+                                <Heart className={`h-5 w-5 ${userLikedPosts.has(p.id) ? "fill-current" : ""}`} />
                                 <span className="font-medium">{p.likes}</span>
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={() => handleToggleComments(p.id)}
                                 className="flex items-center gap-2 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 p-2"
                               >
                                 <MessageSquare className="h-5 w-5" />
@@ -395,12 +579,69 @@ export default function QuoiDeNeufPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="flex items-center gap-2 text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 p-2"
+                                onClick={() => handleShare(p.id)}
                               >
                                 <Share2 className="h-5 w-5" />
                                 <span className="font-medium">{p.shares}</span>
                               </Button>
                             </div>
                           </div>
+
+                          {/* Comment Section */}
+                          {expandedComments.has(p.id) && (
+                            <div className="mt-4 pt-4 border-t border-border space-y-3">
+                              {/* Display existing comments */}
+                              {loadedComments[p.id] && loadedComments[p.id].length > 0 && (
+                                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                                  {loadedComments[p.id].map((comment) => (
+                                    <div key={comment.id} className="flex gap-3 p-2 bg-muted/30 rounded-lg">
+                                      <div className="flex-shrink-0">
+                                        {comment.avatar ? (
+                                          <Image
+                                            src={comment.avatar}
+                                            alt={comment.author}
+                                            width={32}
+                                            height={32}
+                                            className="h-8 w-8 rounded-full object-cover"
+                                          />
+                                        ) : (
+                                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                                            <User className="h-4 w-4 text-white" />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-semibold text-sm">{comment.author}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {new Date(comment.createdAt).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US')}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-foreground mt-1 break-words">{comment.content}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Comment input */}
+                              <div className="flex gap-2">
+                                <Input
+                                  placeholder={t("Ajouter un commentaire...", "Add a comment...")}
+                                  value={commentText[p.id] || ''}
+                                  onChange={(e) => setCommentText({ ...commentText, [p.id]: e.target.value })}
+                                  className="flex-1"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAddComment(p.id)}
+                                  disabled={!commentText[p.id]?.trim()}
+                                  className="bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black"
+                                >
+                                  {t("Envoyer", "Send")}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </article>
                     ))

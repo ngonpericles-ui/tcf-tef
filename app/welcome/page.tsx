@@ -21,24 +21,25 @@ export default function WelcomePage() {
   const { isAuthenticated, user, loading } = useAuth()
   
 
-  // Redirect non-students away from welcome page
+  // Redirect authenticated users to their dashboards
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      // Only students should see the welcome page
-      if (user.role !== "USER" && user.role !== "STUDENT") {
-        // Redirect managers and admins to their dashboards
-        switch (user.role) {
-          case "ADMIN":
-            router.push("/admin")
-            break
-          case "SENIOR_MANAGER":
-          case "JUNIOR_MANAGER":
-            router.push("/manager/dashboard")
-            break
-          default:
-            router.push("/home")
-            break
-        }
+      // Redirect based on role to their respective dashboards
+      switch (user.role) {
+        case "ADMIN":
+          router.push("/admin")
+          break
+        case "SENIOR_MANAGER":
+        case "JUNIOR_MANAGER":
+          router.push("/manager")
+          break
+        case "STUDENT":
+        case "USER":
+          router.push("/home")
+          break
+        default:
+          // Unknown role, stay on welcome page
+          break
       }
     }
   }, [loading, isAuthenticated, user, router])
@@ -260,7 +261,8 @@ export default function WelcomePage() {
                       alt={image.alt}
                       fill
                       className="object-cover"
-                      priority={i === 0}
+                      priority={true}
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent" />
           </div>
@@ -732,13 +734,11 @@ export default function WelcomePage() {
             <p className="text-xl text-muted-foreground mb-12">
               {t("Rejoignez la révolution de l'apprentissage du français", "Join the revolution of French learning")}
             </p>
-            <div className="flex justify-center">
-              <Link href="/inscription">
-                <Button size="lg" className="rounded-full bg-gray-800 hover:bg-gray-900 text-white font-semibold px-12 py-6 text-lg">
-                  {t("Commencer gratuitement", "Start for free")}
-                </Button>
-              </Link>
-          </div>
+            <Link href="/inscription">
+              <Button size="lg" className="rounded-full bg-gray-800 hover:bg-gray-900 text-white font-semibold px-12 py-6 text-lg">
+                {t("Commencer gratuitement", "Start for free")}
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

@@ -25,6 +25,14 @@ export interface Course {
   rating: number // added rating field
   enrolledCount: string // added enrolled count
   difficulty: number // added difficulty level (1-5)
+  lessonsData?: Array<{
+    id: string
+    title: string
+    content?: string
+    videoUrl?: string
+    duration?: number
+    order: number
+  }>
 }
 
 export const courses: Course[] = []

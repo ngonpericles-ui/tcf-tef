@@ -43,37 +43,12 @@ export default function AdminDashboard() {
   const [showDebug, setShowDebug] = useState(false)
   const [testResults, setTestResults] = useState<any>(null)
 
-  useEffect(() => {
-    if (!loading) {
-      if (!isAuthenticated) {
-        // Redirect to admin login if not authenticated
-        router.replace('/admin/login')
-      } else if (!isAdmin) {
-        // If authenticated but not admin, redirect to appropriate dashboard
-        if (user?.role === 'USER') {
-          router.replace('/home')
-        } else if (user?.role === 'SENIOR_MANAGER' || user?.role === 'JUNIOR_MANAGER') {
-          router.replace('/manager/dashboard')
-        } else {
-          router.replace('/welcome')
-        }
-      }
-    }
-  }, [isAuthenticated, isAdmin, loading, router, user])
+  // Authentication is handled by the admin layout
+  // No need for additional auth checks here
 
-  // Show loading while checking authentication
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground">Loading...</div>
-      </div>
-    )
-  }
+  // Loading is handled by the admin layout
 
-  // Redirect to login (this shouldn't render due to useEffect redirect)
-  if (!isAuthenticated || !isAdmin) {
-    return null
-  }
+  // Authentication is handled by the admin layout
 
   const stats = useMemo(() => ([
     {
@@ -101,14 +76,6 @@ export default function AdminDashboard() {
       bgColor: "bg-green-50 dark:bg-green-900/20",
     },
     {
-      title: "Revenus Mensuels",
-      value: `${statsData.monthlyRevenue} CFA`,
-      change: "0%",
-      icon: DollarSign,
-      color: "text-yellow-600 dark:text-yellow-400",
-      bgColor: "bg-yellow-50 dark:bg-yellow-900/20",
-    },
-    {
       title: "Taux de Réussite",
       value: `${statsData.successRate}%`,
       change: "0%",
@@ -119,7 +86,15 @@ export default function AdminDashboard() {
   ]), [statsData])
 
   // Replace approvals with simple system status info panel
-  const systemStatus = { status: statsData.system, lastUpdate: new Date().toLocaleTimeString() }
+  const [lastUpdate, setLastUpdate] = useState('')
+  const [debugTimestamp, setDebugTimestamp] = useState('')
+  
+  useEffect(() => {
+    setLastUpdate(new Date().toLocaleTimeString())
+    setDebugTimestamp(new Date().toLocaleString('fr-FR'))
+  }, [])
+  
+  const systemStatus = { status: statsData.system, lastUpdate }
 
   // Get user name for welcome message
   const userName = useMemo(() => {
@@ -145,9 +120,9 @@ export default function AdminDashboard() {
       }
       
       try {
-        // Use real database endpoints
+        // Use real database endpoints - defer heavy queries
         const [usersRes, dashboardRes] = await Promise.all([
-          apiClient.get<any>('/admin/users?limit=1000').catch(() => ({ success: false, data: [] })),
+          apiClient.get<any>('/admin/users?limit=50').catch(() => ({ success: false, data: [] })), // Reduced from 1000 to 50
           apiClient.get<any>('/admin/dashboard').catch(() => ({ success: false, data: { stats: {}, recentActivities: [] } }))
         ])
         
@@ -239,10 +214,15 @@ export default function AdminDashboard() {
       }
     }
     
-    fetchStats()
+    // Defer initial fetch to allow redirect to complete first
+    const initialTimer = setTimeout(fetchStats, 1000) // 1 second delay
+    
     // Refresh every 2 minutes to avoid rate limiting (backend allows 100 requests per 15 minutes)
     timer = setInterval(fetchStats, 120000) // 2 minutes = 120,000ms
-    return () => clearInterval(timer)
+    return () => {
+      clearTimeout(initialTimer)
+      clearInterval(timer)
+    }
   }, [])
 
   // Lightweight activity ping so admin stays counted as online
@@ -364,7 +344,7 @@ export default function AdminDashboard() {
               <p><strong>Utilisateur ID:</strong> {user?.id}</p>
               <p><strong>Utilisateurs en ligne:</strong> {statsData.onlineUsers}</p>
               <p><strong>Total utilisateurs:</strong> {statsData.totalUsers}</p>
-              <p><strong>Dernière actualisation:</strong> {new Date().toLocaleString('fr-FR')}</p>
+              <p><strong>Dernière actualisation:</strong> {debugTimestamp}</p>
             </div>
           </div>
         )}

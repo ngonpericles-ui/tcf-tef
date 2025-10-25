@@ -72,11 +72,41 @@ function SimulationPageContent() {
   const [simulations, setSimulations] = useState<VoiceSimulation[]>([]);
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [subscriptionTier, setSubscriptionTier] = useState<string>('FREE');
+  const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
 
   useEffect(() => {
-    fetchSimulations();
-    fetchMonthlyCount();
-  }, []);
+    // Only check access when userProfile is loaded
+    if (userProfile) {
+      checkSubscriptionAccess();
+      setHasCheckedAccess(true);
+    }
+  }, [userProfile]);
+
+  useEffect(() => {
+    // Only fetch data if access is granted
+    if (hasCheckedAccess && (subscriptionTier === 'PREMIUM' || subscriptionTier === 'PRO')) {
+      fetchSimulations();
+      fetchMonthlyCount();
+    }
+  }, [hasCheckedAccess, subscriptionTier]);
+
+  const checkSubscriptionAccess = async () => {
+    try {
+      // Check user subscription tier
+      const userTier = userProfile?.subscriptionTier || 'FREE';
+      setSubscriptionTier(userTier);
+
+      // Voice simulations require Premium or Pro subscription
+      if (userTier === 'FREE' || userTier === 'ESSENTIAL') {
+        toast.error('Les simulations vocales nécessitent un abonnement Premium ou Pro');
+        router.push('/abonnement');
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    }
+  };
 
   const fetchSimulations = async () => {
     try {
@@ -252,6 +282,28 @@ function SimulationPageContent() {
             </div>
           </div>
         </div>
+
+        {/* Subscription Access Alert */}
+        {(subscriptionTier === 'FREE' || subscriptionTier === 'ESSENTIAL') && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="flex items-start">
+              <Crown className="w-5 h-5 text-red-500 mt-0.5 mr-3" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">Abonnement requis</h3>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                  Les simulations vocales sont réservées aux abonnés Premium et Pro. 
+                  <Button
+                    size="sm" 
+                    className="ml-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                    onClick={() => router.push('/abonnement')}
+                  >
+                    Passer à Premium
+                  </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Status Alerts */}
         {monthlyCount >= 2 && (

@@ -1,72 +1,80 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { BookOpen, Headphones, PenSquare, Brain, GraduationCap, Mic, FileText, ArrowRight, Star, Clock, Users } from "lucide-react"
 import Link from "next/link"
 import { useLang } from "./language-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { apiClient } from "@/lib/api-client"
 
-const tiles = [
-  { 
-    key: "grammar", 
-    icon: GraduationCap, 
-    color: "#8E44AD", 
+const baseTiles = [
+  {
+    key: "grammar",
+    icon: GraduationCap,
+    color: "#8E44AD",
     filter: "grammaire",
+    category: "GRAMMAR",
     courses: 0,
     level: "A1-C2",
     description: { fr: "Maîtrisez la grammaire française", en: "Master French grammar" }
   },
-  { 
-    key: "listening", 
-    icon: Headphones, 
-    color: "#007BFF", 
+  {
+    key: "listening",
+    icon: Headphones,
+    color: "#007BFF",
     filter: "comprehension-orale",
+    category: "LISTENING",
     courses: 0,
     level: "A2-C1",
     description: { fr: "Développez votre compréhension orale", en: "Develop your listening skills" }
   },
-  { 
-    key: "reading", 
-    icon: FileText, 
-    color: "#16A085", 
+  {
+    key: "reading",
+    icon: FileText,
+    color: "#16A085",
     filter: "comprehension-ecrite",
+    category: "READING",
     courses: 0,
     level: "A1-C2",
     description: { fr: "Améliorez votre lecture", en: "Improve your reading" }
   },
-  { 
-    key: "vocab", 
-    icon: BookOpen, 
-    color: "#2ECC71", 
+  {
+    key: "vocab",
+    icon: BookOpen,
+    color: "#2ECC71",
     filter: "vocabulaire",
+    category: "VOCABULARY",
     courses: 0,
     level: "A1-C2",
     description: { fr: "Enrichissez votre vocabulaire", en: "Expand your vocabulary" }
   },
-  { 
-    key: "writing", 
-    icon: PenSquare, 
-    color: "#F39C12", 
+  {
+    key: "writing",
+    icon: PenSquare,
+    color: "#F39C12",
     filter: "expression-ecrite",
+    category: "WRITING",
     courses: 0,
     level: "B1-C2",
     description: { fr: "Perfectionnez votre écriture", en: "Perfect your writing" }
   },
-  { 
-    key: "oral", 
-    icon: Mic, 
-    color: "#9B59B6", 
+  {
+    key: "oral",
+    icon: Mic,
+    color: "#9B59B6",
     filter: "expression-orale",
+    category: "ORAL",
     courses: 0,
     level: "A2-C2",
     description: { fr: "Parlez avec confiance", en: "Speak with confidence" }
   },
-  { 
-    key: "sims", 
-    icon: Brain, 
-    color: "#E74C3C", 
+  {
+    key: "sims",
+    icon: Brain,
+    color: "#E74C3C",
     filter: "tcf-tef",
+    category: "TCF_TEF",
     courses: 0,
     level: "B1-C2",
     description: { fr: "Méthodologie complète TCF/TEF", en: "Complete TCF/TEF methodology" }
@@ -75,8 +83,47 @@ const tiles = [
 
 export default function CourseExplorer() {
   const { t, lang } = useLang()
-  
-  const memoizedTiles = useMemo(() => tiles, [])
+  const [tiles, setTiles] = useState(baseTiles)
+
+  // Fetch course counts for each category
+  useEffect(() => {
+    const fetchCourseCounts = async () => {
+      try {
+        console.log('🔄 Fetching courses for explorer...')
+        const response = await apiClient.get('/courses')
+        console.log('📡 Explorer API Response:', response)
+        if ((response as any).success) {
+          const courses = (response as any).data || []
+          console.log('📚 Courses fetched:', courses.length)
+
+          // Count courses by category
+          const categoryCounts: Record<string, number> = {}
+          courses.forEach((course: any) => {
+            const category = course.category
+            categoryCounts[category] = (categoryCounts[category] || 0) + 1
+          })
+          console.log('📊 Category counts:', categoryCounts)
+
+          // Update tiles with actual course counts
+          const updatedTiles = baseTiles.map(tile => ({
+            ...tile,
+            courses: categoryCounts[tile.category] || 0
+          }))
+          console.log('✅ Updated tiles:', updatedTiles)
+          setTiles(updatedTiles as any)
+        } else {
+          console.error('❌ API response not successful')
+        }
+      } catch (error) {
+        console.error('❌ Error fetching course counts:', error)
+        // Keep default tiles if fetch fails
+      }
+    }
+
+    fetchCourseCounts()
+  }, [])
+
+  const memoizedTiles = useMemo(() => tiles, [tiles])
   
   return (
     <section id="cours" aria-labelledby="explorer-title" className="py-10">

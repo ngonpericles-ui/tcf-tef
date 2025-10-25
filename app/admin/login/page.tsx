@@ -19,45 +19,65 @@ export default function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const { language, setLanguage, t } = useLanguage()
   const { theme, setTheme } = useTheme()
   const { login, isAuthenticated, isAdmin, loading } = useAuth()
   const router = useRouter()
 
-  // If already authenticated as admin, redirect to dashboard
+  // If already authenticated as admin, redirect to dashboard (but not if showing success message)
   useEffect(() => {
-    if (!loading && isAuthenticated && isAdmin) {
+    if (!loading && isAuthenticated && isAdmin && !showSuccessMessage) {
       router.replace('/admin')
     }
-  }, [loading, isAuthenticated, isAdmin, router])
+  }, [loading, isAuthenticated, isAdmin, showSuccessMessage, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
-    setSuccess("")
+    // Don't clear success message here - let it show if login succeeds
 
     try {
+      // Clear any existing session before admin login
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth')
+        localStorage.removeItem('role')
+        localStorage.removeItem('user_id')
+        localStorage.removeItem('user_subscription_tier')
+        // Clear cookies
+        document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'user_subscription_tier=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      }
       const result = await login(username, password)
 
       if (result.success && result.user?.role === 'ADMIN') {
-        // Show success message
+        // Show success message briefly
         const userName = result.user.firstName && result.user.lastName
           ? `${result.user.firstName} ${result.user.lastName}`
           : result.user.email
 
         setSuccess(t("admin.login.success", `Connexion réussie! Bienvenue ${userName}`))
+        setShowSuccessMessage(true) // Prevent immediate redirect
 
-        // Immediate redirect to admin dashboard
-        router.replace("/admin")
+        // Show success message for 2 seconds before redirecting
+        setTimeout(() => {
+          setShowSuccessMessage(false) // Allow redirect
+          router.replace("/admin")
+        }, 2000) // 2 second delay to show success message
       } else if (result.success && result.user?.role !== 'ADMIN') {
         setError(t("Accès refusé. Seuls les administrateurs peuvent accéder à cette section.", "Access denied. Only administrators can access this section."))
+        setSuccess("") // Clear success message on error
       } else {
         setError(result.error || t("Identifiants incorrects", "Invalid credentials"))
+        setSuccess("") // Clear success message on error
       }
     } catch (error) {
       console.error('Login error:', error)
       setError(t("Erreur de connexion. Veuillez réessayer.", "Connection error. Please try again."))
+      setSuccess("") // Clear success message on error
     } finally {
       setIsLoading(false)
     }

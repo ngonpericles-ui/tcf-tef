@@ -28,6 +28,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
+import { toast } from "sonner"
 // import { useAuth } from "@/components/auth-provider"
 
 interface UploadedFile {
@@ -45,7 +46,7 @@ function AdminBulkUploadPageContent() {
   const searchParams = useSearchParams()
   // const { user } = useAuth()
   const user = { id: 'admin', role: 'ADMIN' } // Placeholder for now
-  const contentType = searchParams.get("type") || "course"
+  const contentType = searchParams?.get("type") || "course"
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isDragging, setIsDragging] = useState(false)
@@ -57,9 +58,9 @@ function AdminBulkUploadPageContent() {
 
   const [bulkSettings, setBulkSettings] = useState({
     title: "",
-    level: "",
-    subscription: "",
-    category: "",
+    levels: [] as string[],
+    subscriptions: [] as string[],
+    category: "Grammaire", // Set default category to Grammaire
   })
 
   // Admin has full access to all levels and subscription tiers
@@ -105,6 +106,12 @@ function AdminBulkUploadPageContent() {
       description: t("Téléchargez du contenu pour la simulation IA", "Upload content for AI simulation"),
       icon: Settings,
       color: "purple",
+    },
+    "simulation-paper": {
+      title: t("Papiers de Simulation", "Simulation Papers"),
+      description: t("Téléchargez des papiers d'examen pour la simulation", "Upload exam papers for simulation"),
+      icon: FileText,
+      color: "indigo",
     },
     "test-result": {
       title: t("Résultat de Test", "Test Result"),
@@ -176,33 +183,74 @@ function AdminBulkUploadPageContent() {
   const handleContinue = async () => {
     if (uploadedFiles.length === 0 || !user) return
 
+    // Validate that at least one level and subscription are selected
+    if (bulkSettings.levels.length === 0 || bulkSettings.subscriptions.length === 0) {
+      alert(t("Veuillez sélectionner au moins un niveau et un abonnement", "Please select at least one level and subscription"))
+      return
+    }
+
     setUploading(true)
 
     try {
-      // Upload each file to the backend
+      // ✅ FIXED: Upload each file ONCE with multiple levels and subscriptions
       for (const file of uploadedFiles) {
         const formData = new FormData()
         formData.append('file', file.file)
-        formData.append('title', bulkSettings.title || file.name.replace(/\.[^/.]+$/, ""))
-        formData.append('description', `Uploaded ${contentType} content`)
-        formData.append('level', bulkSettings.level || "A1")
-        formData.append('subscriptionTier', mapSubscriptionTier(bulkSettings.subscription || "Gratuit"))
-        formData.append('category', mapCategory(bulkSettings.category || "Général"))
-        formData.append('contentType', mapContentType(contentType))
+
+        const title = bulkSettings.title || file.name.replace(/\.[^/.]+$/, "")
+        const description = `Uploaded ${contentType} content`
+        const level = bulkSettings.levels[0]
+        const subscriptionTier = mapSubscriptionTier(bulkSettings.subscriptions[0])
+        const availableLevels = JSON.stringify(bulkSettings.levels)
+        const availableTiers = JSON.stringify(bulkSettings.subscriptions.map(s => mapSubscriptionTier(s)))
+        const category = mapCategory(bulkSettings.category || "Général")
+        const contentTypeValue = mapContentType(contentType)
+
+        formData.append('title', title)
+        formData.append('description', description)
+        formData.append('level', level)
+        formData.append('subscriptionTier', subscriptionTier)
+        formData.append('availableLevels', availableLevels)
+        formData.append('availableTiers', availableTiers)
+        formData.append('category', category)
+        formData.append('contentType', contentTypeValue)
         formData.append('duration', '60')
 
-        await apiClient.post('/content-management/upload', formData, {
+        console.log('📤 Uploading file with data:', {
+          title,
+          description,
+          level,
+          subscriptionTier,
+          availableLevels,
+          availableTiers,
+          category,
+          contentType: contentTypeValue,
+          fileName: file.name
+        })
+
+        const response = await apiClient.post('/content-management/upload', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         })
+
+        if (!response.success) {
+          console.error('❌ Upload failed:', response)
+          throw new Error(response.error?.message || 'Upload failed')
+        }
+
+        console.log('✅ File uploaded successfully:', response.data)
       }
+
+      // Show success message
+      toast.success(t("Fichiers téléchargés avec succès!", "Files uploaded successfully!"))
 
       // Redirect to content management page
       router.push("/admin/content")
-    } catch (error) {
-      console.error('Error uploading files:', error)
-      alert(t("Erreur lors du téléchargement", "Error uploading files"))
+    } catch (error: any) {
+      console.error('❌ Error uploading files:', error)
+      const errorMessage = error.response?.data?.message || error.message || t("Erreur lors du téléchargement", "Error uploading files")
+      toast.error(errorMessage)
     } finally {
       setUploading(false)
     }
@@ -223,14 +271,16 @@ function AdminBulkUploadPageContent() {
       'course': 'NOTE',
       'video': 'VIDEO',
       'test': 'TEST',
-      'simulation': 'SIMULATION'
+      'test-corrections': 'CORRIGER_TCF',
+      'simulation': 'SIMULATION',
+      'simulation-paper': 'SIMULATION',
+      'note': 'NOTE'
     }
     return mapping[type] || 'NOTE'
   }
 
   const mapCategory = (category: string) => {
     const mapping: { [key: string]: string } = {
-      'Général': 'GRAMMAR',
       'Grammaire': 'GRAMMAR',
       'Écoute': 'LISTENING',
       'Lecture': 'READING',
@@ -519,41 +569,77 @@ function AdminBulkUploadPageContent() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-foreground">{t("Niveau par défaut", "Default Level")}</Label>
-                  <Select
-                    value={bulkSettings.level}
-                    onValueChange={(value) => setBulkSettings((prev) => ({ ...prev, level: value }))}
-                  >
-                    <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700 text-foreground">
-                      <SelectValue placeholder={t("Sélectionner un niveau", "Select a level")} />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-gray-200 dark:border-gray-700">
-                      {adminLevelRestrictions.map((level) => (
-                        <SelectItem key={level} value={level} className="text-foreground hover:bg-muted">
+                  <Label className="text-foreground">{t("Niveaux", "Levels")}</Label>
+                  <div className="space-y-2 p-3 bg-muted rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-foreground">{t("Sélectionner les niveaux", "Select levels")}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setBulkSettings((prev) => ({ ...prev, levels: adminLevelRestrictions }))}
+                        className="text-xs text-blue-500 hover:text-blue-600"
+                      >
+                        {t("Tous", "All")}
+                      </Button>
+                    </div>
+                    {adminLevelRestrictions.map((level) => (
+                      <div key={level} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`level-${level}`}
+                          checked={bulkSettings.levels.includes(level)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setBulkSettings((prev) => ({ ...prev, levels: [...prev.levels, level] }))
+                            } else {
+                              setBulkSettings((prev) => ({ ...prev, levels: prev.levels.filter((l) => l !== level) }))
+                            }
+                          }}
+                          className="border-gray-200 dark:border-gray-700"
+                        />
+                        <Label htmlFor={`level-${level}`} className="text-sm text-foreground cursor-pointer">
                           {level}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-foreground">{t("Abonnement par défaut", "Default Subscription")}</Label>
-                  <Select
-                    value={bulkSettings.subscription}
-                    onValueChange={(value) => setBulkSettings((prev) => ({ ...prev, subscription: value }))}
-                  >
-                    <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700 text-foreground">
-                      <SelectValue placeholder={t("Sélectionner un abonnement", "Select a subscription")} />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-gray-200 dark:border-gray-700">
-                      {adminSubscriptionRestrictions.map((sub) => (
-                        <SelectItem key={sub} value={sub} className="text-foreground hover:bg-muted">
+                  <Label className="text-foreground">{t("Abonnements", "Subscriptions")}</Label>
+                  <div className="space-y-2 p-3 bg-muted rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-foreground">{t("Sélectionner les abonnements", "Select subscriptions")}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setBulkSettings((prev) => ({ ...prev, subscriptions: adminSubscriptionRestrictions }))}
+                        className="text-xs text-blue-500 hover:text-blue-600"
+                      >
+                        {t("Tous", "All")}
+                      </Button>
+                    </div>
+                    {adminSubscriptionRestrictions.map((sub) => (
+                      <div key={sub} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`sub-${sub}`}
+                          checked={bulkSettings.subscriptions.includes(sub)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setBulkSettings((prev) => ({ ...prev, subscriptions: [...prev.subscriptions, sub] }))
+                            } else {
+                              setBulkSettings((prev) => ({ ...prev, subscriptions: prev.subscriptions.filter((s) => s !== sub) }))
+                            }
+                          }}
+                          className="border-gray-200 dark:border-gray-700"
+                        />
+                        <Label htmlFor={`sub-${sub}`} className="text-sm text-foreground cursor-pointer">
                           {sub}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -566,21 +652,49 @@ function AdminBulkUploadPageContent() {
                       <SelectValue placeholder={t("Sélectionner une catégorie", "Select a category")} />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-gray-200 dark:border-gray-700">
-                      <SelectItem value="Général" className="text-foreground hover:bg-muted">
-                        {t("Général", "General")}
-                      </SelectItem>
-                      <SelectItem value="Grammaire" className="text-foreground hover:bg-muted">
-                        {t("Grammaire", "Grammar")}
-                      </SelectItem>
-                      <SelectItem value="Vocabulaire" className="text-foreground hover:bg-muted">
-                        {t("Vocabulaire", "Vocabulary")}
-                      </SelectItem>
-                      <SelectItem value="Compréhension" className="text-foreground hover:bg-muted">
-                        {t("Compréhension", "Comprehension")}
-                      </SelectItem>
-                      <SelectItem value="TCF/TEF" className="text-foreground hover:bg-muted">
-                        TCF/TEF
-                      </SelectItem>
+                      {contentType === "test-corrections" ? (
+                        <>
+                          <SelectItem value="TCF" className="text-foreground hover:bg-muted">
+                            TCF
+                          </SelectItem>
+                          <SelectItem value="TEF" className="text-foreground hover:bg-muted">
+                            TEF
+                          </SelectItem>
+                        </>
+                      ) : contentType === "simulation-paper" ? (
+                        <>
+                          <SelectItem value="TCF" className="text-foreground hover:bg-muted">
+                            TCF
+                          </SelectItem>
+                          <SelectItem value="TEF" className="text-foreground hover:bg-muted">
+                            TEF
+                          </SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="Grammaire" className="text-foreground hover:bg-muted">
+                            {t("Grammaire", "Grammar")}
+                          </SelectItem>
+                          <SelectItem value="Écoute" className="text-foreground hover:bg-muted">
+                            {t("Compréhension orale", "Listening")}
+                          </SelectItem>
+                          <SelectItem value="Lecture" className="text-foreground hover:bg-muted">
+                            {t("Compréhension écrite", "Reading")}
+                          </SelectItem>
+                          <SelectItem value="Vocabulaire" className="text-foreground hover:bg-muted">
+                            {t("Vocabulaire", "Vocabulary")}
+                          </SelectItem>
+                          <SelectItem value="Écriture" className="text-foreground hover:bg-muted">
+                            {t("Expression écrite", "Writing")}
+                          </SelectItem>
+                          <SelectItem value="Oral" className="text-foreground hover:bg-muted">
+                            {t("Expression orale", "Oral")}
+                          </SelectItem>
+                          <SelectItem value="TCF/TEF" className="text-foreground hover:bg-muted">
+                            {t("TCF/TEF", "TCF/TEF")}
+                          </SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

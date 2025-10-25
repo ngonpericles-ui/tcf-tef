@@ -47,7 +47,6 @@ const navigation = [
   { name: "Managers", nameEn: "Managers", href: "/admin/managers", icon: UserCheck },
   { name: "Sessions Live", nameEn: "Live Sessions", href: "/admin/live-sessions", icon: Video },
   { name: "Étudiants", nameEn: "Students", href: "/admin/students", icon: Users },
-  { name: "Modération", nameEn: "Moderation", href: "/admin/moderation", icon: Shield },
   { name: "Analytics", nameEn: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { name: "Marketplace", nameEn: "Marketplace", href: "/admin/marketplace", icon: Store },
   { name: "Abonnements", nameEn: "Subscriptions", href: "/admin/subscriptions", icon: CreditCard },
@@ -60,51 +59,43 @@ function AdminLayoutInner({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [forceLoading, setForceLoading] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
   const { language, setLanguage, t } = useLanguage()
   const { theme, setTheme } = useTheme()
   const { user, isAuthenticated, isAdmin, loading } = useAuth()
 
+  // Force loading to stop after 2 seconds maximum
   useEffect(() => {
-    if (loading) return
+    // Reset forceLoading to true when component mounts
+    setForceLoading(true)
+    
+    const timer = setTimeout(() => {
+      setForceLoading(false)
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
 
-    const hasAuthCookie = typeof document !== 'undefined' && document.cookie.includes('auth=1')
-
-    // If authenticated admin hits /admin/login, redirect to dashboard
-    if (isAuthenticated && isAdmin && pathname === "/admin/login") {
-      router.replace('/admin')
-      return
-    }
-
-    // If authenticated but not admin → force to login
-    if (isAuthenticated && !isAdmin && pathname !== "/admin/login") {
-      router.replace('/admin/login')
-      return
-    }
-
-    // If unauthenticated and no cookie, keep them on login only
-    if (!isAuthenticated && pathname !== "/admin/login") {
-      router.replace('/admin/login')
-    }
-  }, [loading, isAuthenticated, isAdmin, pathname, router])
-
-  if (pathname === "/admin/login") {
-    return <Suspense fallback={null}>{children}</Suspense>
+  // Simple authentication check like manager layout
+  // If no authenticated admin user, just render children (login page)
+  if (!user || !isAdmin) {
+    return <>{children}</>
   }
 
-  // Show loading while checking authentication
-  if (loading || (!isAuthenticated && pathname !== "/admin/login")) {
+  if (loading && forceLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-400">Chargement du panneau d'administration...</p>
+        </div>
       </div>
     )
   }
 
-  // Show loading if not admin and not on login page
-  if (!isAdmin && pathname !== "/admin/login") {
-    return null
+  if (pathname === "/admin/login") {
+    return <Suspense fallback={null}>{children}</Suspense>
   }
 
   const toggleTheme = () => {

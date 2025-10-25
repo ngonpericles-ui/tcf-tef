@@ -6,6 +6,7 @@ import { LanguageProvider } from "@/components/language-provider"
 import { AuthProvider } from "@/contexts/AuthContext"
 import ErrorBoundary from "@/components/error-boundary"
 import ChunkErrorHandler from "@/components/chunk-error-handler"
+import { Toaster } from "sonner"
 
 // Force dynamic rendering for all routes
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <LanguageProvider>
               <AuthProvider>
                 <div className="min-h-screen transition-colors duration-200">{children}</div>
+                <Toaster position="top-right" richColors />
               </AuthProvider>
             </LanguageProvider>
           </ThemeProvider>

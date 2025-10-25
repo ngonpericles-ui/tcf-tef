@@ -1,156 +1,184 @@
 import { NextResponse, NextRequest } from "next/server"
 
+// 🎯 CLEAN ROLE-BASED REDIRECTION LOGIC
+// Based on 4 roles: STUDENT, JUNIOR_MANAGER, SENIOR_MANAGER, ADMIN
+
+// Role constants
+const ROLES = {
+  STUDENT: 'STUDENT',
+  JUNIOR_MANAGER: 'JUNIOR_MANAGER', 
+  SENIOR_MANAGER: 'SENIOR_MANAGER',
+  ADMIN: 'ADMIN'
+} as const
+
+// Route categories
+const ADMIN_ROUTES = ['/admin']
+const MANAGER_ROUTES = ['/manager', '/senior-manager', '/junior-manager'] 
+const STUDENT_ROUTES = [
+  '/home', '/cours', '/profil', '/quoi-de-neuf', '/favoris', '/messages', 
+  '/notifications', '/tcf-simulation', '/tcf-tef-simulation', '/simulation-vocale', 
+  '/immigration-simulations', '/live', '/achievements', '/abonnement', '/corriger', 
+  '/test-results', '/search', '/explore', '/chat', '/marketplace', '/settings', '/payment'
+]
+
 export function middleware(req: NextRequest) {
   const url = req.nextUrl
 
   // Handle Pro+ only access for /avantages-pro
   if (url.pathname === "/avantages-pro") {
     const isAuth = req.cookies.get('auth')?.value === '1'
-    
-    // Check multiple possible cookie names for subscription tier
     const subscriptionTier = req.cookies.get('subscriptionTier')?.value || 
-                            req.cookies.get('user_subscription_tier')?.value ||
-                            req.cookies.get('subscription_tier')?.value ||
-                            req.cookies.get('tier')?.value
-    
+                        req.cookies.get('user_subscription_tier')?.value ||
+                        req.cookies.get('subscription_tier')?.value ||
+                        req.cookies.get('tier')?.value
 
-                            console.log('🔍 Middleware Debug for /avantages-pro:', {
-      pathname: url.pathname,
-      isAuth,
-      subscriptionTier,
-      userAgent: req.headers.get('user-agent'),
-      allCookies: Object.fromEntries(Array.from(req.cookies).map(([key, cookie]) => [key, cookie.value]))
-    })
-    
     if (!isAuth) {
-      // Not authenticated - redirect to login
       console.log('🚫 User not authenticated, redirecting to /connexion')
       url.pathname = "/connexion"
       return NextResponse.redirect(url)
     }
     
-    // Check for Pro subscription (case insensitive)
-    // Pro tier is the highest tier that grants access to /avantages-pro
     const isProUser = subscriptionTier && (
       subscriptionTier.toUpperCase() === 'PRO' ||
       subscriptionTier.toUpperCase() === 'PRO+'
     )
     
     if (!isProUser) {
-
-      // Not Pro user - let the component handle the subscription check
-      // This allows the page to load and show appropriate upgrade message
       console.log('⚠️ User is not Pro, subscriptionTier:', subscriptionTier)
     }
   }
 
-  // Role-based section access control
+  // 🔐 AUTHENTICATION & ROLE DETECTION
   const isAuth = req.cookies.get('auth')?.value === '1'
   const role = req.cookies.get('role')?.value
+  const userId = req.cookies.get('user_id')?.value
 
-  // Admin section protection
-  if (url.pathname.startsWith('/admin')) {
-    if (!isAuth || role !== 'ADMIN') {
-      console.log('🚫 Unauthorized access to admin section, redirecting to admin login')
-      // Only redirect to /admin/login if not already there to avoid infinite loop
-      if (url.pathname !== '/admin/login') {
-        url.pathname = '/admin/login'
-        return NextResponse.redirect(url)
-      }
-    }
+  // Determine route type
+  const isAdminRoute = ADMIN_ROUTES.some(route => url.pathname.startsWith(route))
+  const isManagerRoute = MANAGER_ROUTES.some(route => url.pathname.startsWith(route))
+  const isStudentRoute = STUDENT_ROUTES.some(route => url.pathname.startsWith(route))
+
+  console.log(`🔍 Route Check: ${url.pathname} | Auth: ${isAuth} | Role: ${role}`)
+
+  // 🔑 LOGIN PAGES - Always allow access regardless of existing session
+  if (url.pathname === '/admin/login' || url.pathname === '/connexion' || url.pathname === '/manager') {
+    console.log(`✅ ALLOWED: Login page access (existing role: ${role})`)
+    return NextResponse.next()
   }
 
-  // Manager section protection
-  if (url.pathname.startsWith('/manager') || url.pathname.startsWith('/senior-manager') || url.pathname.startsWith('/junior-manager')) {
-    const isManager = role === 'SENIOR_MANAGER' || role === 'JUNIOR_MANAGER' || role === 'ADMIN'
-    if (!isAuth || !isManager) {
-      console.log('🚫 Unauthorized access to manager section, redirecting to manager login')
-      // Only redirect to /manager if not already there to avoid infinite loop
-      if (url.pathname !== '/manager') {
-        url.pathname = '/manager'
-        return NextResponse.redirect(url)
-      }
+  // 🚫 UNAUTHENTICATED USERS
+  if (!isAuth) {
+    // Allow access to login pages, welcome page, and static assets
+    if (url.pathname === '/connexion' || url.pathname === '/welcome' || url.pathname === '/admin/login' || url.pathname === '/manager' || 
+        url.pathname.startsWith('/logo/') || url.pathname.startsWith('/images/') || url.pathname.startsWith('/_next/') || 
+        url.pathname.startsWith('/favicon') || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg') || 
+        url.pathname.endsWith('.jpeg') || url.pathname.endsWith('.gif') || url.pathname.endsWith('.svg') ||
+        url.pathname.endsWith('.ico') || url.pathname.endsWith('.css') || url.pathname.endsWith('.js')) {
+      console.log(`✅ ALLOWED: Unauthenticated access to ${url.pathname}`)
+      return NextResponse.next()
     }
-  }
-
-  // Student section protection (home, courses, etc.)
-  if (url.pathname.startsWith('/home') || url.pathname.startsWith('/cours') || url.pathname.startsWith('/profil')) {
-    const isStudent = role === 'USER' || role === 'STUDENT'
-    if (!isAuth || !isStudent) {
-      console.log('🚫 Unauthorized access to student section, redirecting to student login')
+    
+    // Redirect admin routes to admin login
+    if (isAdminRoute) {
+      console.log(`🚫 BLOCKED: Unauthenticated user → /admin/login`)
+      url.pathname = '/admin/login'
+      return NextResponse.redirect(url)
+    }
+    
+    // Redirect manager routes to manager login
+    if (isManagerRoute) {
+      console.log(`🚫 BLOCKED: Unauthenticated user → /manager`)
+      url.pathname = '/manager'
+      return NextResponse.redirect(url)
+    }
+    
+    // Redirect student routes to student login
+    if (isStudentRoute) {
+      console.log(`🚫 BLOCKED: Unauthenticated user → /connexion`)
       url.pathname = '/connexion'
       return NextResponse.redirect(url)
     }
-  }
-
-  // Prevent cross-section access - redirect authenticated users trying to access wrong login pages
-  if (isAuth && role && role !== 'undefined' && role !== 'STUDENT' && role !== 'USER') {
-    // Admin trying to access other login pages
-    if (role === 'ADMIN' && (url.pathname === '/connexion' || url.pathname === '/manager')) {
-      console.log('🔄 Admin redirected from wrong login page to admin dashboard')
-      url.pathname = '/admin'
-      return NextResponse.redirect(url)
-    }
-
-    // Manager trying to access other login pages
-    if ((role === 'SENIOR_MANAGER' || role === 'JUNIOR_MANAGER') && (url.pathname === '/connexion' || url.pathname === '/admin/login')) {
-      console.log('🔄 Manager redirected from wrong login page to manager dashboard')
-      url.pathname = '/manager/dashboard'
-      return NextResponse.redirect(url)
-    }
-
-    // Student trying to access other login pages
-    if ((role === 'USER' || role === 'STUDENT') && (url.pathname === '/admin/login' || url.pathname === '/manager')) {
-      console.log('🔄 Student redirected from wrong login page to student dashboard')
-      url.pathname = '/home'
-      return NextResponse.redirect(url)
-    }
-  }
-
-  // Only handle root path redirects - don't interfere with other routes
-  if (url.pathname === "/") {
-    const hasAccount = req.cookies.get('hasAccount')?.value === '1'
     
-    if (isAuth && role) {
-      // Authenticated users: redirect to their dashboard
-      switch (role) {
-        case 'USER':
-        case 'STUDENT':
-          url.pathname = '/home'
-          return NextResponse.redirect(url)
-        case 'ADMIN':
-          url.pathname = '/admin'
-          return NextResponse.redirect(url)
-        case 'SENIOR_MANAGER':
-        case 'JUNIOR_MANAGER':
-          url.pathname = '/manager/dashboard'
-          return NextResponse.redirect(url)
-        default:
-          url.pathname = '/welcome'
-          return NextResponse.redirect(url)
-      }
-    }
-
-    // Unauthenticated users: redirect based on account status and previous role
-    if (hasAccount) {
-      // User has an account → redirect to appropriate login page based on role
-      if (role === 'ADMIN') {
-        url.pathname = "/admin/login"
-      } else if (role === 'SENIOR_MANAGER' || role === 'JUNIOR_MANAGER') {
-        url.pathname = "/manager"
-      } else {
-        // Students and regular users go to /connexion
-        url.pathname = "/connexion"
-      }
-      return NextResponse.redirect(url)
-    } else {
-      // New user without account → redirect to welcome page
-      url.pathname = "/welcome"
-      return NextResponse.redirect(url)
-    }
+    // Default redirect to welcome for other routes
+    console.log(`🚫 BLOCKED: Unauthenticated user → /welcome`)
+    url.pathname = '/welcome'
+    return NextResponse.redirect(url)
   }
 
-  // Allow all other routes to pass through without interference
+  // 🔐 AUTHENTICATED USERS - ROLE-BASED ACCESS
+
+  // ADMIN SECTION - Only ADMIN can access
+  if (isAdminRoute) {
+    if (role !== ROLES.ADMIN) {
+      console.log(`🚫 BLOCKED: Non-admin (${role}) trying to access admin`)
+      // Redirect based on their role
+      if (role === ROLES.SENIOR_MANAGER || role === ROLES.JUNIOR_MANAGER) {
+        url.pathname = '/manager'
+      } else if (role === ROLES.STUDENT) {
+        url.pathname = '/home'
+      } else {
+        url.pathname = '/connexion' // Unknown role
+      }
+      return NextResponse.redirect(url)
+    }
+    console.log(`✅ ALLOWED: Admin accessing admin section`)
+    return NextResponse.next()
+  }
+
+  // MANAGER SECTION - Only MANAGERS and ADMIN can access
+  if (isManagerRoute) {
+    const isManager = role === ROLES.SENIOR_MANAGER || role === ROLES.JUNIOR_MANAGER || role === ROLES.ADMIN
+    if (!isManager) {
+      console.log(`🚫 BLOCKED: Non-manager (${role}) trying to access manager`)
+      if (role === ROLES.STUDENT) {
+        url.pathname = '/home'
+      } else {
+        url.pathname = '/connexion'
+      }
+      return NextResponse.redirect(url)
+    }
+    console.log(`✅ ALLOWED: Manager/Admin (${role}) accessing manager section`)
+    return NextResponse.next()
+  }
+
+  // STUDENT SECTION - Students and ADMIN can access
+  if (isStudentRoute) {
+    const isStudent = role === ROLES.STUDENT
+    const isAdmin = role === ROLES.ADMIN
+    
+    // Block managers from student section
+    if (role === ROLES.SENIOR_MANAGER || role === ROLES.JUNIOR_MANAGER) {
+      console.log(`🚫 BLOCKED: Manager (${role}) trying to access student section`)
+      url.pathname = '/manager'
+      return NextResponse.redirect(url)
+    }
+    
+    // Special handling for /connexion (student login page)
+    if (url.pathname === '/connexion') {
+      // Always allow access to student login page regardless of existing session
+      // Let the login page handle authentication logic
+      console.log(`✅ ALLOWED: Access to student login page (existing role: ${role})`)
+      return NextResponse.next()
+    }
+    
+    // Block students from other student routes if already logged in
+    if (isStudent) {
+      console.log(`✅ ALLOWED: Student (${role}) accessing student section`)
+      return NextResponse.next()
+    }
+    
+    // Allow admins to access student section
+    if (isAdmin) {
+      console.log(`✅ ALLOWED: Admin (${role}) accessing student section`)
+      return NextResponse.next()
+    }
+    
+    console.log(`✅ ALLOWED: ${isStudent ? 'Student' : 'Admin'} (${role}) accessing student section`)
+    return NextResponse.next()
+  }
+
+  // Allow access to all other routes
+  console.log(`✅ ALLOWED: Public route access`)
   return NextResponse.next()
 }
 

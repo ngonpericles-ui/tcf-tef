@@ -87,17 +87,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Helper: Update cookies to sync with session state
   const updateAuthCookies = (userData: User | null) => {
     if (typeof document === 'undefined') return
-    
+
     if (userData) {
-      document.cookie = `auth=1; path=/; max-age=${60 * 60 * 24 * 7}`; // 7 days
-      document.cookie = `role=${userData.role}; path=/; max-age=${60 * 60 * 24 * 7}`;
+      const maxAge = 60 * 60 * 24 * 7; // 7 days
+      // Set cookies with proper attributes for server-side middleware to read them
+      document.cookie = `auth=1; path=/; max-age=${maxAge}; SameSite=Lax`;
+      document.cookie = `role=${userData.role}; path=/; max-age=${maxAge}; SameSite=Lax`;
+      document.cookie = `user_id=${userData.id}; path=/; max-age=${maxAge}; SameSite=Lax`;
       if (['USER', 'STUDENT'].includes(userData.role)) {
-        document.cookie = `hasAccount=1; path=/; max-age=${60 * 60 * 24 * 7}`;
+        document.cookie = `hasAccount=1; path=/; max-age=${maxAge}; SameSite=Lax`;
       }
+      console.log('🍪 Auth cookies updated:', { role: userData.role, userId: userData.id });
     } else {
       // Clear cookies
-      document.cookie = 'auth=; Max-Age=0; path=/'
-      document.cookie = 'role=; Max-Age=0; path=/'
+      document.cookie = 'auth=; Max-Age=0; path=/; SameSite=Lax'
+      document.cookie = 'role=; Max-Age=0; path=/; SameSite=Lax'
+      document.cookie = 'user_id=; Max-Age=0; path=/; SameSite=Lax'
+      document.cookie = 'hasAccount=; Max-Age=0; path=/; SameSite=Lax'
+      console.log('🍪 Auth cookies cleared');
     }
   }
 
@@ -264,12 +271,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true)
       setError(null)
 
+      console.log('🔐 Login attempt:', { email })
+
       // Use token-aware helper so Authorization header is set globally
       const response = await apiClient.login(email, password)
-      
+
+      console.log('📡 Login response:', { success: response.success, hasData: !!response.data })
+
       if (response.success && response.data) {
         const { user: userData, tokens } = response.data as any
-        
+
+        console.log('👤 User data received:', {
+          id: userData.id,
+          email: userData.email,
+          role: userData.role
+        })
+
         // Create session data
         const sessionData = {
           user: userData,
@@ -281,41 +298,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Set user immediately for faster redirect
         setUser(userData)
-        
+
         // Update cookies to sync with session
+        console.log('🍪 Setting auth cookies for role:', userData.role)
         updateAuthCookies(userData)
-        
+
         // Save session in background (non-blocking)
         SessionManager.saveSession(sessionData).catch(error => {
           console.error('Failed to save session:', error)
         })
-        
+
         // Don't redirect here - let the login page handle it
         // This prevents race conditions with multiple redirects
-        
+
         return { success: true, user: userData }
       } else {
         const errorMessage = response.error?.message || 'Login failed'
+        console.error('❌ Login failed:', errorMessage)
         setError(errorMessage)
         return { success: false, error: errorMessage }
       }
     } catch (error: any) {
-      console.error('Login error:', error)
-      
+      console.error('❌ Login error:', error)
+
       // Handle specific timeout errors
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         const timeoutError = 'Connexion trop lente. Vérifiez votre connexion ou réessayez.'
         setError(timeoutError)
         return { success: false, error: timeoutError }
       }
-      
+
       // Handle network errors
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         const networkError = 'Impossible de se connecter au serveur. Vérifiez que le backend est démarré.'
         setError(networkError)
         return { success: false, error: networkError }
       }
-      
+
       const errorMessage = error.response?.data?.error?.message || error.message || 'Login failed'
       setError(errorMessage)
       return { success: false, error: errorMessage }
@@ -350,6 +369,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Update cookies to sync with session
         updateAuthCookies(userData)
+        
+        // Set tokens in API client for immediate use
+        const { apiClient } = await import('@/lib/api-client')
+        apiClient.setTokens(tokens)
         
         // Save session in background (non-blocking)
         SessionManager.saveSession(sessionData).catch(error => {
@@ -386,13 +409,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(true)
       setError(null)
 
-      // Get current user role before clearing session
+      // Get current user role BEFORE clearing session
       const currentUser = user
       const userRole = currentUser?.role || 'STUDENT'
 
       // Get current session
       const session = SessionManager.getCurrentSession()
-      
+
       if (session?.refreshToken) {
         // Call appropriate logout endpoint
         if (logoutFromAllDevices) {
@@ -407,17 +430,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       // Clear session and all local state
       await SessionManager.clearSession()
+
+      // Store the user role BEFORE clearing user state
+      const userRoleBeforeClear = user?.role || 'STUDENT'
+
       setUser(null)
       setError(null)
       updateAuthCookies(null)
       setLoading(false)
-      
+
       if (typeof document !== 'undefined') {
-        // Redirect based on user role
-        const userRole = user?.role || 'STUDENT'
-        if (userRole === 'ADMIN') {
+        // Redirect based on user role (use the stored role, not the cleared user)
+        if (userRoleBeforeClear === 'ADMIN') {
           window.location.href = '/admin/login'
-        } else if (userRole === 'SENIOR_MANAGER' || userRole === 'JUNIOR_MANAGER') {
+        } else if (userRoleBeforeClear === 'SENIOR_MANAGER' || userRoleBeforeClear === 'JUNIOR_MANAGER') {
           window.location.href = '/manager'
         } else {
           // Students and regular users go to /connexion

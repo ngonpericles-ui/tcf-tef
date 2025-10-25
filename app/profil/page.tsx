@@ -133,7 +133,8 @@ export default function ProfilePage() {
   const fetchSubscriptionHistory = async () => {
     try {
       const response = await apiClient.get('/subscriptions/history')
-      setSubscriptionHistory(Array.isArray(response.data) ? response.data : [])
+      const data = (response as any).data
+      setSubscriptionHistory(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching subscription history:', error)
       // Fallback to localStorage

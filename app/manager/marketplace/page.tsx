@@ -55,6 +55,7 @@ interface TutorProfile {
   isActive: boolean
   joinedDate: string
   lastActive: string
+  profileImage?: string
 }
 
 interface StudentRequest {
@@ -232,6 +233,32 @@ export default function MarketplaceProfilePage() {
     }
   }
 
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', 'profile')
+
+      const response = await apiClient.post('/manager/marketplace/upload-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      if (response.success && response.data?.imageUrl) {
+        setProfile(prev => ({ ...prev, profileImage: response.data.imageUrl }))
+        setShowSuccessMessage(true)
+        setTimeout(() => setShowSuccessMessage(false), 5000)
+      } else {
+        setError(t("Erreur lors du téléchargement de l'image", "Error uploading image"))
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error)
+      setError(t("Erreur lors du téléchargement de l'image", "Error uploading image"))
+    }
+  }
+
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
       case 'high': return 'bg-red-100 text-red-800 border-red-200'
@@ -397,6 +424,40 @@ export default function MarketplaceProfilePage() {
             {/* Profile Information */}
             {isProfileActive && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Profile Picture Upload */}
+                <Card className="bg-white dark:bg-gray-800 shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Camera className="w-5 h-5" />
+                      <span>{t("Photo de profil", "Profile Picture")}</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-col items-center space-y-4">
+                      <Avatar className="w-24 h-24">
+                        <AvatarImage src={profile.profileImage} alt={profile.name} />
+                        <AvatarFallback>{profile.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="w-full">
+                        <label className="flex items-center justify-center w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition-colors">
+                          <div className="flex flex-col items-center space-y-1">
+                            <Camera className="w-5 h-5 text-gray-400" />
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {t("Télécharger une photo", "Upload photo")}
+                            </span>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleProfileImageUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 {/* Basic Information */}
                 <Card className="lg:col-span-2 bg-white dark:bg-gray-800 shadow-sm">
                   <CardHeader>

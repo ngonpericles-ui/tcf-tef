@@ -5,9 +5,10 @@ import PageShell from "@/components/page-shell"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Users, Star, Lock, Play, Award, Target, BookOpen, Brain, TrendingUp, SpellCheck, Headphones, FileText, PenSquare, Mic, Puzzle } from "lucide-react"
+import { Clock, Users, Star, Lock, Play, Award, Target, BookOpen, Brain, TrendingUp, SpellCheck, Headphones, FileText, PenSquare, Mic, Puzzle, Bookmark } from "lucide-react"
 import { useLang } from "@/components/language-provider"
 import { apiClient } from "@/lib/api-client"
+import { getTestImage, getImageAltText } from "@/lib/imageUtils"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -59,6 +60,8 @@ const TestsPage = React.memo(function TestsPage() {
   const [tests, setTests] = useState<Test[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [completedTests, setCompletedTests] = useState(0)
+  const [totalTimeSpent, setTotalTimeSpent] = useState(0)
   const heroImages = useMemo(() => [
     "/images/tests/hero1.jpg",
     "/images/tests/hero2.jpg",
@@ -78,9 +81,9 @@ const TestsPage = React.memo(function TestsPage() {
     const fetchTests = async () => {
       try {
         setLoading(true)
-        const response = await apiClient.get('/content-management/tests')
-        if ((response.data as any).success) {
-          const transformedTests = (response.data as any).data.content.map((test: any) => ({
+        const response = await apiClient.get('/tests')
+        if ((response as any).success) {
+          const transformedTests = (response as any).data.map((test: any) => ({
             id: test.id,
             title: test.title,
             titleEn: test.titleEn || test.title,
@@ -122,6 +125,33 @@ const TestsPage = React.memo(function TestsPage() {
     }
 
     fetchTests()
+  }, [])
+
+  // Fetch user test attempts and calculate statistics
+  useEffect(() => {
+    const fetchUserStats = async () => {
+      try {
+        // Fetch user's test attempts
+        const attemptsResponse = await apiClient.get('/tests/attempts')
+        if ((attemptsResponse as any).success) {
+          const attempts = (attemptsResponse as any).data?.attempts || []
+          setCompletedTests(attempts.length)
+          
+          // Calculate total time spent on tests
+          const totalTime = attempts.reduce((acc: number, attempt: any) => {
+            return acc + (attempt.timeSpent || 0)
+          }, 0)
+          setTotalTimeSpent(totalTime)
+        }
+      } catch (error) {
+        console.error('Error fetching user stats:', error)
+        // Set default values if API fails
+        setCompletedTests(0)
+        setTotalTimeSpent(0)
+      }
+    }
+
+    fetchUserStats()
   }, [])
 
   const t = useCallback((fr: string, en: string) => (lang === "fr" ? fr : en), [lang])
@@ -408,8 +438,7 @@ const TestsPage = React.memo(function TestsPage() {
               { key: "grammar", labelFr: "Grammaire", labelEn: "Grammar", Icon: SpellCheck, color: "#8E44AD", colorClass: "purple" },
               { key: "listening", labelFr: "Compréhension orale", labelEn: "Listening", Icon: Headphones, color: "#007BFF", colorClass: "blue" },
               { key: "reading", labelFr: "Compréhension écrite", labelEn: "Reading", Icon: FileText, color: "#16A085", colorClass: "emerald" },
-              { key: "vocabulary", labelFr: "Vocabulaire", labelEn: "Vocabulary", Icon: BookOpen, color: "#2ECC71", colorClass: "green" },
-              { key: "writing", labelFr: "Expression écrite", labelEn: "Writing", Icon: PenSquare, color: "#F39C12", colorClass: "orange" },
+              { key: "vocabulary", labelFr: "Vocabulaire", labelEn: "Vocabulary", Icon: PenSquare, color: "#2ECC71", colorClass: "green" },
               { key: "oral", labelFr: "Expression orale", labelEn: "Oral Expression", Icon: Mic, color: "#9B59B6", colorClass: "purple" },
               { key: "simulation", labelFr: "Simulation TCF/TEF", labelEn: "TCF/TEF Simulation", Icon: Puzzle, color: "#E74C3C", colorClass: "red" },
             ].map(({ key, labelFr, labelEn, Icon, color, colorClass }) => (
@@ -475,13 +504,13 @@ const TestsPage = React.memo(function TestsPage() {
             </div>
             <div className="rounded-xl border p-6 text-center bg-gradient-to-br from-[#F39C12]/10 to-[#F39C12]/5 shadow-sm hover:shadow-md transition-shadow">
               <div className="text-3xl font-bold text-[#F39C12] mb-2">
-                {filteredTests.length}
+                {completedTests}
               </div>
-              <div className="text-sm font-medium text-muted-foreground">{t("Tests disponibles", "Available tests")}</div>
+              <div className="text-sm font-medium text-muted-foreground">{t("Tests complétés", "Tests completed")}</div>
             </div>
             <div className="rounded-xl border p-6 text-center bg-gradient-to-br from-[#8E44AD]/10 to-[#8E44AD]/5 shadow-sm hover:shadow-md transition-shadow">
               <div className="text-3xl font-bold text-[#8E44AD] mb-2">
-                {Math.round(filteredTests.reduce((acc, test) => acc + test.duration, 0) / 60)}h
+                {Math.round(totalTimeSpent / 60)}h
               </div>
               <div className="text-sm font-medium text-muted-foreground">{t("Temps total", "Total time")}</div>
             </div>
@@ -517,12 +546,47 @@ export default TestsPage
 function TestGrid({ tests, userTier }: { tests: Test[]; userTier: string }) {
   const { lang } = useLang()
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
 
   const tierHierarchy = {
     "FREE": 0,
     "ESSENTIAL": 1,
     "PREMIUM": 2,
     "PRO": 3
+  }
+
+  const handleToggleFavorite = async (e: React.MouseEvent, testId: string) => {
+    e.stopPropagation()
+    try {
+      const isFavorited = favorites.has(testId)
+      if (isFavorited) {
+        // Remove from favorites
+        const response = await apiClient.get(`/favorites/check?contentId=${testId}&contentType=TEST`)
+        if ((response as any).success && (response as any).data?.isFavorited) {
+          const favResponse = await apiClient.get(`/favorites?contentType=TEST`)
+          const fav = (favResponse as any).data?.favorites?.find((f: any) => f.contentId === testId)
+          if (fav) {
+            await apiClient.delete(`/favorites/${fav.id}`)
+          }
+        }
+      } else {
+        // Add to favorites
+        await apiClient.post(`/favorites`, {
+          contentId: testId,
+          contentType: 'TEST'
+        })
+      }
+      // Toggle local state
+      const newFavorites = new Set(favorites)
+      if (newFavorites.has(testId)) {
+        newFavorites.delete(testId)
+      } else {
+        newFavorites.add(testId)
+      }
+      setFavorites(newFavorites)
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+    }
   }
 
   const canAccess = (testRequiredTier: string) => {
@@ -575,8 +639,8 @@ function TestGrid({ tests, userTier }: { tests: Test[]; userTier: string }) {
           >
             <div className="relative aspect-video overflow-hidden">
               <Image
-                src={test.image || "/placeholder.svg"}
-                alt={lang === "fr" ? test.title : (test.titleEn || test.title)}
+                src={getTestImage(test)}
+                alt={getImageAltText('test', lang === "fr" ? test.title : (test.titleEn || test.title), test.category, test.level)}
                 fill
                 className="object-cover group-hover:scale-105 transition-transform duration-200"
               />
@@ -609,6 +673,16 @@ function TestGrid({ tests, userTier }: { tests: Test[]; userTier: string }) {
                     {t("Officiel", "Official")}
                   </Badge>
                 )}
+                <button
+                  onClick={(e) => handleToggleFavorite(e, test.id)}
+                  className={`p-2 rounded-full shadow-sm transition-all ${
+                    favorites.has(test.id)
+                      ? 'bg-yellow-400 text-white'
+                      : 'bg-white/90 dark:bg-gray-800/90 text-gray-900 dark:text-white hover:bg-yellow-400 hover:text-white'
+                  }`}
+                >
+                  <Bookmark className={`h-4 w-4 ${favorites.has(test.id) ? 'fill-current' : ''}`} />
+                </button>
               </div>
             </div>
 
@@ -660,24 +734,26 @@ function TestGrid({ tests, userTier }: { tests: Test[]; userTier: string }) {
                 </div>
               )}
 
-              <Button className="w-full gap-2" disabled={!hasAccess} variant={hasAccess ? "default" : "outline"}>
-                {hasAccess ? (
-                  <>
-                    <Play className="h-4 w-4" />
-                    {t("Démarrer le test", "Start test")}
-                  </>
-                ) : (
-                  <>
-                    <Lock className="h-4 w-4" />
-                    {t("Passer en", "Upgrade to")}{" "}
-                    {test.requiredTier === "essential"
-                      ? "Essential"
-                      : test.requiredTier === "premium"
-                        ? "Premium"
-                        : "Pro"}
-                  </>
-                )}
-              </Button>
+              <Link href={hasAccess ? `/tests/take/${test.id}` : "#"}>
+                <Button className="w-full gap-2" disabled={!hasAccess} variant={hasAccess ? "default" : "outline"}>
+                  {hasAccess ? (
+                    <>
+                      <Play className="h-4 w-4" />
+                      {t("Démarrer le test", "Start test")}
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-4 w-4" />
+                      {t("Passer en", "Upgrade to")}{" "}
+                      {test.requiredTier === "essential"
+                        ? "Essential"
+                        : test.requiredTier === "premium"
+                          ? "Premium"
+                          : "Pro"}
+                    </>
+                  )}
+                </Button>
+              </Link>
             </div>
           </div>
         )

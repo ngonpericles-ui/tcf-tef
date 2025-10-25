@@ -42,9 +42,14 @@ export default function StudentManagement() {
       try {
         setLoading(true)
 
-        // Use manager students endpoint if available, otherwise use admin users endpoint
-        const endpoint = isManager ? '/manager/students' : '/admin/users'
-        const params = isManager ? {} : { role: 'STUDENT' }
+        // Use appropriate endpoint based on role
+        let endpoint = '/admin/users'
+        let params: any = { role: 'STUDENT' }
+
+        if (isManager && !isAdmin) {
+          endpoint = '/manager/students'
+          params = {}
+        }
 
         const response = await apiClient.get(endpoint, { params })
 

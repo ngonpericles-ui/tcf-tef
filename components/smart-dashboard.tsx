@@ -91,7 +91,12 @@ export default function SmartDashboard() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      fetchDashboardData()
+      // Defer dashboard data fetch to avoid blocking initial page load
+      const timer = setTimeout(() => {
+        fetchDashboardData()
+      }, 500) // 500ms delay
+      
+      return () => clearTimeout(timer)
     }
   }, [isAuthenticated, user])
 

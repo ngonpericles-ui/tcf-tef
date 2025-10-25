@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react"
 import PageShell from "@/components/page-shell"
 import { Progress } from "@/components/ui/progress"
-import { Lock, Play, Star, Users, Clock, BookOpen, Headphones, PenSquare, Puzzle, SpellCheck, Mic, FileText, Search } from "lucide-react"
+import { Lock, Play, Star, Users, Clock, BookOpen, Headphones, PenSquare, Puzzle, SpellCheck, Mic, FileText, Search, Bookmark, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,8 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/components/language-provider"
 import { type CourseType, type SubscriptionTier, type Course } from "@/components/course-data"
 import { apiClient } from "@/lib/api-client"
+import { getCourseImage, getImageAltText } from "@/lib/imageUtils"
+import { toast } from "sonner"
 import Image from "next/image"
-import ProfessionalMediaPlayer from "@/components/professional-media-player"
+// import ProfessionalMediaPlayer from "@/components/professional-media-player"
 
 const courseTypeIcons = {
   grammar: SpellCheck,
@@ -35,6 +37,20 @@ const courseTypeColors = {
   simulation: "#E74C3C",   // Red
 }
 
+// Map backend category to frontend course type
+const mapCategoryToType = (category: string): CourseType => {
+  const mapping: { [key: string]: CourseType } = {
+    'GRAMMAR': 'grammar',
+    'LISTENING': 'listening',
+    'READING': 'reading',
+    'VOCABULARY': 'vocabulary',
+    'WRITING': 'writing',
+    'ORAL': 'oral',
+    'TCF_TEF': 'simulation'
+  }
+  return mapping[category] || 'grammar'
+}
+
 // Removed mock data - using only real backend data
 
 // Beautiful real images for each course type
@@ -53,53 +69,107 @@ const getCourseImageByCourseType = (type: CourseType) => {
 
 export default function CoursesPage() {
   const { lang } = useLang()
-  const [selectedType, setSelectedType] = useState<CourseType | "all">("grammar")
+  const [selectedType, setSelectedType] = useState<CourseType | "all">("all")
   const [userTier] = useState<SubscriptionTier>("free") // Mock user subscription
   const [selectedLevel, setSelectedLevel] = useState<string>("all")
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
+  const [loadingCourse, setLoadingCourse] = useState<string | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCourses, setTotalCourses] = useState(0)
+  const itemsPerPage = 12
+  
   const t = useCallback((fr: string, en: string) => (lang === "fr" ? fr : en), [lang])
 
+  // Handle course selection with loading state
+  const handleCourseSelect = async (course: Course) => {
+    setLoadingCourse(course.id)
+    try {
+      // Simulate loading time for better UX
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Redirect to media player page
+      window.location.href = `/cours/${course.id}`
+    } finally {
+      setLoadingCourse(null)
+    }
+  }
+
   // Fetch courses from backend
+
   useEffect(() => {
     const fetchCourses = async () => {
       try {
         setLoading(true)
-        const response = await apiClient.get('/content-management/courses')
-        console.log('API Response:', response.data)
-        if ((response.data as any).success) {
+        const response = await apiClient.get(`/courses?page=${currentPage}&limit=${itemsPerPage}`)
+
+        if ((response as any).success && (response as any).data && Array.isArray((response as any).data)) {
+          const coursesData = (response as any).data
+          const pagination = (response as any).pagination
+          
+          // Update pagination state
+          if (pagination) {
+            setTotalPages(pagination.totalPages || 1)
+            setTotalCourses(pagination.total || 0)
+          }
+
           // Transform backend data to match frontend Course interface
-          const transformedCourses = (response.data as any).data.content.map((course: any) => ({
-            id: course.id,
-            title: course.title,
-            titleEn: course.titleEn || course.title,
-            description: course.description,
-            descriptionEn: course.descriptionEn || course.description,
-            level: course.level,
-            requiredTier: course.requiredTier.toLowerCase(),
-            type: mapCategoryToType(course.category),
-            duration: `${course.duration} min`,
-            lessons: course.lessons || 1,
-            progress: 0,
-            image: getCourseImageByCourseType(mapCategoryToType(course.category)),
-            authorName: course.createdBy?.firstName + ' ' + course.createdBy?.lastName || 'Instructeur',
-            tags: course.tags || [],
-            createdBy: course.createdBy?.role === 'ADMIN' ? 'admin' : 'manager',
-            createdAt: course.createdAt,
-            rating: 4.5,
-            enrolledCount: '150+',
-            difficulty: course.level === 'A1' ? 1 : course.level === 'A2' ? 2 : course.level === 'B1' ? 3 : course.level === 'B2' ? 4 : 5
-          }))
+          const transformedCourses = coursesData.map((course: any) => {
+            const mappedType = mapCategoryToType(course.category)
+            // Backend returns subscriptionTier in uppercase (FREE, ESSENTIAL, etc)
+            const tierValue = (course.subscriptionTier || 'FREE').toLowerCase() as SubscriptionTier
+            return {
+              id: course.id,
+              title: course.title,
+              titleEn: course.titleEn || course.title,
+              description: course.description,
+              descriptionEn: course.descriptionEn || course.description,
+              level: course.level,
+              requiredTier: tierValue,
+              type: mappedType,
+              duration: (() => {
+                // Smart duration logic: check if it's video content or PDF
+                const hasVideoContent = course.lessons_data && course.lessons_data.some((lesson: any) => lesson.videoUrl)
+                const isPDFContent = course.contentType === 'NOTE' || (!hasVideoContent && course.lessons_data && course.lessons_data.some((lesson: any) => lesson.content && !lesson.videoUrl))
+                
+                if (hasVideoContent) {
+                  // Video content: show actual duration
+                  return `${course.duration} min`
+                } else if (isPDFContent) {
+                  // PDF content: show "PDF" instead of duration
+                  return 'PDF'
+                } else {
+                  // Default: show duration
+                  return `${course.duration} min`
+                }
+              })(),
+              lessons: course.lessons || 1,
+              progress: 0,
+              image: getCourseImageByCourseType(mappedType),
+              authorName: course.createdBy?.firstName + ' ' + course.createdBy?.lastName || 'Instructeur',
+              tags: course.tags || [],
+              createdBy: course.createdBy?.role === 'ADMIN' ? 'admin' : 'manager',
+              createdAt: course.createdAt,
+              rating: course.rating || 0,
+              enrolledCount: course.enrolledCount || 0, // Use actual number, not string
+              difficulty: course.level === 'A1' ? 1 : course.level === 'A2' ? 2 : course.level === 'B1' ? 3 : course.level === 'B2' ? 4 : 5,
+              lessonsData: course.lessons_data || []
+            }
+          })
           setCourses(transformedCourses)
         } else {
-          // No courses available from backend
+          console.error('❌ API response not successful or no content:', response)
           setCourses([])
         }
-      } catch (error) {
-        console.error('Error fetching courses:', error)
-        // Set empty array if backend fails
+      } catch (error: any) {
+        console.error('❌ Error fetching courses:', error.message)
+        console.error('Error details:', error.response?.data || error)
+        console.error('Full error object:', error)
+        console.error('Error stack:', error.stack)
         setCourses([])
       } finally {
         setLoading(false)
@@ -107,21 +177,7 @@ export default function CoursesPage() {
     }
 
     fetchCourses()
-  }, [])
-
-  // Map backend category to frontend course type
-  const mapCategoryToType = (category: string): CourseType => {
-    const mapping: { [key: string]: CourseType } = {
-      'GRAMMAR': 'grammar',
-      'LISTENING': 'listening',
-      'READING': 'reading',
-      'VOCABULARY': 'vocabulary',
-      'WRITING': 'writing',
-      'ORAL': 'oral',
-      'TCF_TEF': 'simulation'
-    }
-    return mapping[category] || 'grammar'
-  }
+  }, [currentPage])
 
   // Helper function to get active card styles based on color class
   const getActiveCardStyles = useCallback((colorClass: string) => {
@@ -348,18 +404,18 @@ export default function CoursesPage() {
             </TabsList>
 
             <TabsContent value="all" className="mt-6">
-              <CourseGrid courses={filteredCourses} userTier={userTier} onCourseSelect={setSelectedCourse} />
+              <CourseGrid courses={filteredCourses} userTier={userTier} onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse} />
             </TabsContent>
 
             <TabsContent value="free" className="mt-6">
-              <CourseGrid courses={filteredCourses.filter((c) => c.requiredTier === "free")} userTier={userTier} onCourseSelect={setSelectedCourse} />
+              <CourseGrid courses={filteredCourses.filter((c) => c.requiredTier === "free")} userTier={userTier} onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse} />
             </TabsContent>
 
             <TabsContent value="beginner" className="mt-6">
               <CourseGrid
                 courses={filteredCourses.filter((c) => c.level === "A1" || c.level === "A2")}
                 userTier={userTier}
-                onCourseSelect={setSelectedCourse}
+                onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
               />
             </TabsContent>
 
@@ -367,20 +423,30 @@ export default function CoursesPage() {
               <CourseGrid
                 courses={filteredCourses.filter((c) => c.level === "B1" || c.level === "B2")}
                 userTier={userTier}
-                onCourseSelect={setSelectedCourse}
+                onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
               />
             </TabsContent>
 
             <TabsContent value="advanced" className="mt-6">
-              <CourseGrid
-                courses={filteredCourses.filter((c) => c.level === "C1" || c.level === "C2")}
-                userTier={userTier}
-                onCourseSelect={setSelectedCourse}
-              />
-            </TabsContent>
-          </Tabs>
-        </section>
-        )}
+            <CourseGrid
+              courses={filteredCourses.filter((c) => c.level === "C1" || c.level === "C2")}
+              userTier={userTier}
+              onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
+            />
+          </TabsContent>
+        </Tabs>
+        
+        {/* Pagination Controls */}
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          totalCourses={totalCourses}
+          itemsPerPage={itemsPerPage}
+          t={t}
+        />
+      </section>
+      )}
 
         {/* Media Player for Selected Course */}
         {selectedCourse && (
@@ -394,16 +460,66 @@ export default function CoursesPage() {
                   {t("Fermer", "Close")}
                 </Button>
               </div>
-              <ProfessionalMediaPlayer
-                src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                title={lang === "fr" ? selectedCourse.title : selectedCourse.titleEn}
-                description={lang === "fr" ? selectedCourse.description : selectedCourse.descriptionEn}
-                level={selectedCourse.level}
-                duration={selectedCourse.duration}
-                onProgress={(progress) => {
-                  console.log('Course progress:', progress);
-                }}
-              />
+              {selectedCourse.lessonsData && selectedCourse.lessonsData.length > 0 ? (
+                <>
+                  {(() => {
+                    // Find the first lesson with a video URL
+                    const videoLesson = selectedCourse.lessonsData.find(lesson => lesson.videoUrl)
+                    const pdfLesson = selectedCourse.lessonsData.find(lesson => lesson.content && lesson.content.endsWith('.pdf'))
+                    const textLesson = selectedCourse.lessonsData.find(lesson => lesson.content && !lesson.content.endsWith('.pdf'))
+                    
+                    if (videoLesson && videoLesson.videoUrl) {
+                      return (
+                        <div className="bg-gray-100 p-8 rounded-lg text-center">
+                          <p className="text-gray-600">Video player temporarily disabled</p>
+                          <p className="text-sm text-gray-500 mt-2">Video URL: {videoLesson.videoUrl}</p>
+                        </div>
+                      )
+                    } else if (pdfLesson) {
+                      return (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium mb-2">{t("Matériel de cours", "Course Material")}</p>
+                          <iframe
+                            src={pdfLesson.content}
+                            className="w-full h-96 rounded-lg border"
+                            title={t("Matériel PDF", "PDF Material")}
+                          />
+                          <a
+                            href={pdfLesson.content}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 inline-block text-primary hover:underline text-sm"
+                          >
+                            {t("Télécharger le PDF", "Download PDF")} ↗
+                          </a>
+                        </div>
+                      )
+                    } else if (textLesson) {
+                      return (
+                        <div className="bg-muted rounded-lg p-6 mt-4">
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                            {textLesson.content}
+                          </p>
+                        </div>
+                      )
+                    } else {
+                      return (
+                        <div className="bg-muted rounded-lg p-8 text-center">
+                          <p className="text-muted-foreground">
+                            {t("Aucun contenu disponible pour ce cours", "No content available for this course")}
+                          </p>
+                        </div>
+                      )
+                    }
+                  })()}
+                </>
+              ) : (
+                <div className="bg-muted rounded-lg p-8 text-center">
+                  <p className="text-muted-foreground">
+                    {t("Aucun contenu disponible pour ce cours", "No content available for this course")}
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -413,9 +529,95 @@ export default function CoursesPage() {
   )
 }
 
-function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; userTier: SubscriptionTier; onCourseSelect?: (course: Course) => void }) {
+function CourseGrid({ courses, userTier, onCourseSelect, loadingCourse }: { courses: any[]; userTier: SubscriptionTier; onCourseSelect?: (course: Course) => void; loadingCourse?: string | null }) {
   const { lang } = useLang()
   const t = useCallback((fr: string, en: string) => (lang === "fr" ? fr : en), [lang])
+  const [enrolling, setEnrolling] = useState<string | null>(null)
+  const [favorites, setFavorites] = useState<Set<string>>(new Set())
+
+  // Load existing favorites on component mount
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        const response = await apiClient.get('/favorites?contentType=COURSE')
+        if ((response as any).success && (response as any).data?.favorites) {
+          const favoriteIds = new Set<string>((response as any).data.favorites.map((fav: any) => fav.contentId))
+          setFavorites(favoriteIds)
+        }
+      } catch (error) {
+        console.error('Error loading favorites:', error)
+      }
+    }
+    loadFavorites()
+  }, [])
+
+  const handleEnrollAndSelect = async (course: Course) => {
+    try {
+      setEnrolling(course.id)
+      // Call enrollment endpoint
+      const response = await apiClient.post(`/courses/${course.id}/enroll`)
+      if ((response as any).success) {
+        console.log('✅ Enrolled in course:', course.title)
+      }
+    } catch (error: any) {
+      // If already enrolled, that's fine - just select the course
+      if (error.response?.status === 409) {
+        console.log('Already enrolled in this course')
+      } else {
+        console.error('Error enrolling in course:', error)
+      }
+    } finally {
+      setEnrolling(null)
+      // Always select the course to show the media player
+      onCourseSelect?.(course)
+    }
+  }
+
+  const handleToggleFavorite = async (e: React.MouseEvent, courseId: string) => {
+    e.stopPropagation()
+    try {
+      const isFavorited = favorites.has(courseId)
+      if (isFavorited) {
+        // Remove from favorites
+        const response = await apiClient.get(`/favorites/check?contentId=${courseId}&contentType=COURSE`)
+        if ((response as any).success && (response as any).data?.isFavorited) {
+          // Get the favorite ID and delete it
+          const favResponse = await apiClient.get(`/favorites?contentType=COURSE`)
+          const fav = (favResponse as any).data?.favorites?.find((f: any) => f.contentId === courseId)
+          if (fav) {
+            await apiClient.delete(`/favorites/${fav.id}`)
+          }
+        }
+      } else {
+        // Add to favorites
+        await apiClient.post(`/favorites`, {
+          contentId: courseId,
+          contentType: 'COURSE',
+          folder: 'Mes Cours',
+          tags: ['course'],
+          notes: ''
+        })
+      }
+      // Toggle local state
+      const newFavorites = new Set(favorites)
+      if (isFavorited) {
+        newFavorites.delete(courseId)
+      } else {
+        newFavorites.add(courseId)
+      }
+      setFavorites(newFavorites)
+      
+      // Show success message
+      if (isFavorited) {
+        toast.success(t("Retiré des favoris", "Removed from favorites"))
+      } else {
+        toast.success(t("Ajouté aux favoris", "Added to favorites"))
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+      toast.error(t("Erreur lors de la mise à jour des favoris", "Error updating favorites"))
+    }
+  }
 
   const tierHierarchy: Record<SubscriptionTier, SubscriptionTier[]> = useMemo(() => ({
     free: ["free"],
@@ -471,8 +673,8 @@ function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; use
           >
             <div className="relative aspect-video overflow-hidden">
               <Image
-                src={course.image || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&h=450&fit=crop&q=80"}
-                alt={lang === "fr" ? course.title : course.titleEn}
+                src={getCourseImage(course)}
+                alt={getImageAltText('course', lang === "fr" ? course.title : course.titleEn, course.category, course.level)}
                 fill
                 className="object-cover group-hover:scale-105 transition-transform duration-200"
               />
@@ -498,12 +700,21 @@ function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; use
                   <Badge variant="outline" className={getTierBadgeColor(course.requiredTier)}>{t("Gratuit", "Free")}</Badge>
                 )}
               </div>
-              <div className="absolute top-3 right-3">
+              <div className="absolute top-3 right-3 flex flex-col gap-2">
                 <div className="flex items-center gap-1 bg-white/90 dark:bg-gray-800/90 rounded-full px-2 py-1 text-xs font-medium shadow-sm">
                   <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                   <span className="text-gray-900 dark:text-white">{course.rating}</span>
                 </div>
-
+                <button
+                  onClick={(e) => handleToggleFavorite(e, course.id)}
+                  className={`p-2 rounded-full shadow-sm transition-all ${
+                    favorites.has(course.id)
+                      ? 'bg-yellow-400 text-white'
+                      : 'bg-white/90 dark:bg-gray-800/90 text-gray-900 dark:text-white hover:bg-yellow-400 hover:text-white'
+                  }`}
+                >
+                  <Bookmark className={`h-4 w-4 ${favorites.has(course.id) ? 'fill-current' : ''}`} />
+                </button>
               </div>
             </div>
 
@@ -511,7 +722,7 @@ function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; use
               <div className="flex items-center gap-2 mb-2">
                 <div className="text-xs flex items-center gap-1 text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  {course.duration} min
+                  {course.duration}
                 </div>
                 <div className="text-xs flex items-center gap-1 text-muted-foreground">
                   <Users className="h-3 w-3" />
@@ -532,11 +743,15 @@ function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; use
                   {t("Par", "By")} {course.authorName}
                 </div>
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: course.difficulty }).map((_, i) => (
-                    <div key={i} className="w-2 h-2 rounded-full bg-blue-500" />
-                  ))}
-                  {Array.from({ length: 5 - course.difficulty }).map((_, i) => (
-                    <div key={i} className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-500" />
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`w-2 h-2 rounded-full ${
+                        i < Math.floor(course.rating) 
+                          ? 'bg-yellow-400' 
+                          : 'bg-gray-200 dark:bg-gray-500'
+                      }`} 
+                    />
                   ))}
                 </div>
               </div>
@@ -553,11 +768,21 @@ function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; use
 
               <Button
                 className="w-full gap-2"
-                disabled={!hasAccess}
+                disabled={!hasAccess || enrolling === course.id || loadingCourse === course.id}
                 variant={hasAccess ? "default" : "outline"}
-                onClick={() => hasAccess && onCourseSelect?.(course)}
+                onClick={() => hasAccess && handleEnrollAndSelect(course)}
               >
-                {hasAccess ? (
+                {loadingCourse === course.id ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    {t("Chargement...", "Loading...")}
+                  </>
+                ) : enrolling === course.id ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    {t("Inscription...", "Enrolling...")}
+                  </>
+                ) : hasAccess ? (
                   <>
                     <Play className="h-4 w-4" />
                     {course.progress > 0 ? t("Continuer", "Continue") : t("Commencer", "Start")}
@@ -578,6 +803,112 @@ function CourseGrid({ courses, userTier, onCourseSelect }: { courses: any[]; use
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// Pagination Component
+const PaginationControls = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange, 
+  totalCourses,
+  itemsPerPage,
+  t 
+}: {
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+  totalCourses: number
+  itemsPerPage: number
+  t: (fr: string, en: string) => string
+}) => {
+  const getVisiblePages = () => {
+    const delta = 2
+    const range = []
+    const rangeWithDots = []
+
+    for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
+      range.push(i)
+    }
+
+    if (currentPage - delta > 2) {
+      rangeWithDots.push(1, '...')
+    } else {
+      rangeWithDots.push(1)
+    }
+
+    rangeWithDots.push(...range)
+
+    if (currentPage + delta < totalPages - 1) {
+      rangeWithDots.push('...', totalPages)
+    } else if (totalPages > 1) {
+      rangeWithDots.push(totalPages)
+    }
+
+    return rangeWithDots
+  }
+
+  if (totalPages <= 1) return null
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+      {/* Results info */}
+      <div className="text-sm text-muted-foreground">
+        {t(
+          `Affichage de ${Math.min((currentPage - 1) * itemsPerPage + 1, totalCourses)} à ${Math.min(currentPage * itemsPerPage, totalCourses)} sur ${totalCourses} cours`,
+          `Showing ${Math.min((currentPage - 1) * itemsPerPage + 1, totalCourses)} to ${Math.min(currentPage * itemsPerPage, totalCourses)} of ${totalCourses} courses`
+        )}
+      </div>
+
+      {/* Pagination controls */}
+      <div className="flex items-center gap-2">
+        {/* Previous button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="flex items-center gap-1"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          {t("Précédent", "Previous")}
+        </Button>
+
+        {/* Page numbers */}
+        <div className="flex items-center gap-1">
+          {getVisiblePages().map((page, index) => (
+            <Button
+              key={index}
+              variant={page === currentPage ? "default" : "outline"}
+              size="sm"
+              onClick={() => typeof page === 'number' && onPageChange(page)}
+              disabled={page === '...'}
+              className={`w-8 h-8 p-0 ${
+                page === currentPage 
+                  ? 'bg-primary text-primary-foreground' 
+                  : page === '...' 
+                    ? 'cursor-default' 
+                    : 'hover:bg-muted'
+              }`}
+            >
+              {page}
+            </Button>
+          ))}
+        </div>
+
+        {/* Next button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="flex items-center gap-1"
+        >
+          {t("Suivant", "Next")}
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   )
 }

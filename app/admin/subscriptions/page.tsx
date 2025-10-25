@@ -53,6 +53,7 @@ export default function SubscriptionBilling() {
   const [filterStatus, setFilterStatus] = useState("all")
   const [isCreatePlanOpen, setIsCreatePlanOpen] = useState(false)
   const [isEditPlanOpen, setIsEditPlanOpen] = useState(false)
+  const [isViewPlanOpen, setIsViewPlanOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -81,11 +82,12 @@ export default function SubscriptionBilling() {
         // Load subscription plans
         const plansResponse = await apiClient.get('/admin/subscription-plans')
         if (plansResponse.success && plansResponse.data) {
-          setPlans(Array.isArray(plansResponse.data) ? plansResponse.data : [])
+          const plansData = (plansResponse.data as any).plans || plansResponse.data
+          setPlans(Array.isArray(plansData) ? plansData : [])
         }
 
         // Load active subscriptions
-        const subscriptionsResponse = await apiClient.get('/admin/subscriptions')
+        const subscriptionsResponse = await apiClient.get('/subscriptions')
         if (subscriptionsResponse.success && subscriptionsResponse.data) {
           setSubscriptions(Array.isArray(subscriptionsResponse.data) ? subscriptionsResponse.data : [])
         }
@@ -93,14 +95,20 @@ export default function SubscriptionBilling() {
         // Load subscription analytics
         const analyticsResponse = await apiClient.get('/admin/subscription-analytics')
         if (analyticsResponse.success && analyticsResponse.data) {
-          setStats(analyticsResponse.data)
+          setStats({
+            totalRevenue: (analyticsResponse.data as any)?.totalRevenue || 0,
+            activeSubscriptions: (analyticsResponse.data as any)?.activeSubscriptions || 0,
+            monthlyGrowth: (analyticsResponse.data as any)?.monthlyGrowth || 0,
+            churnRate: (analyticsResponse.data as any)?.churnRate || 0
+          })
         }
 
-        // Load promotional banners
-        const bannersResponse = await apiClient.get('/admin/subscription-banners')
-        if (bannersResponse.success && bannersResponse.data) {
-          setBanners(Array.isArray(bannersResponse.data) ? bannersResponse.data : [])
-        }
+        // Load promotional banners - this endpoint may not exist yet, so we'll skip it for now
+        // const bannersResponse = await apiClient.get('/admin/subscription-banners')
+        // if (bannersResponse.success && bannersResponse.data) {
+        //   setBanners(Array.isArray(bannersResponse.data) ? bannersResponse.data : [])
+        // }
+        setBanners([])
 
       } catch (error) {
         console.error('Error loading subscription data:', error)
@@ -197,6 +205,11 @@ export default function SubscriptionBilling() {
   const handleEditPlan = (plan: any) => {
     setSelectedPlan(plan)
     setIsEditPlanOpen(true)
+  }
+
+  const handleViewPlanDetails = (plan: any) => {
+    setSelectedPlan(plan)
+    setIsViewPlanOpen(true)
   }
 
   return (
@@ -497,6 +510,183 @@ export default function SubscriptionBilling() {
           </DialogContent>
         </Dialog>
 
+        {/* View Plan Details Dialog */}
+        <Dialog open={isViewPlanOpen} onOpenChange={setIsViewPlanOpen}>
+          <DialogContent className="bg-card border-gray-200 dark:border-gray-700 text-foreground max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>
+                {t("Détails du plan", "Plan Details")}: {selectedPlan?.name}
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                {t("Informations complètes sur le plan d'abonnement", "Complete information about the subscription plan")}
+              </DialogDescription>
+            </DialogHeader>
+            {selectedPlan && (
+              <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Basic Information */}
+                  <Card className="bg-muted border-gray-200 dark:border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-foreground">{t("Informations de base", "Basic Information")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Nom", "Name")}</Label>
+                        <p className="text-foreground font-medium">{selectedPlan.name}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Nom (EN)", "Name (EN)")}</Label>
+                        <p className="text-foreground">{selectedPlan.nameEn || t("Non défini", "Not defined")}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Niveau", "Tier")}</Label>
+                        <Badge variant="outline" className={getPlanColor(selectedPlan.tier)}>
+                          {selectedPlan.tier}
+                        </Badge>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Prix", "Price")}</Label>
+                        <p className="text-foreground font-bold text-lg">
+                          {selectedPlan.price === 0 ? t("Gratuit", "Free") : `${selectedPlan.price.toLocaleString()} ${selectedPlan.currency}`}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Cycle de facturation", "Billing Cycle")}</Label>
+                        <p className="text-foreground">{selectedPlan.billingCycle}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Features and Limitations */}
+                  <Card className="bg-muted border-gray-200 dark:border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-foreground">{t("Fonctionnalités", "Features")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Fonctionnalités", "Features")}</Label>
+                        <ul className="list-disc list-inside space-y-1 mt-2">
+                          {selectedPlan.features?.map((feature: string, index: number) => (
+                            <li key={index} className="text-foreground text-sm">{feature}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      {selectedPlan.featuresEn && selectedPlan.featuresEn.length > 0 && (
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">{t("Fonctionnalités (EN)", "Features (EN)")}</Label>
+                          <ul className="list-disc list-inside space-y-1 mt-2">
+                            {selectedPlan.featuresEn.map((feature: string, index: number) => (
+                              <li key={index} className="text-foreground text-sm">{feature}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Limits and Statistics */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card className="bg-muted border-gray-200 dark:border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-foreground">{t("Limites", "Limits")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">{t("Simulations max", "Max Simulations")}</Label>
+                          <p className="text-foreground font-medium">
+                            {selectedPlan.maxSimulations === -1 ? t("Illimité", "Unlimited") : selectedPlan.maxSimulations}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">{t("Sessions live max", "Max Live Sessions")}</Label>
+                          <p className="text-foreground font-medium">
+                            {selectedPlan.maxLiveSessions === -1 ? t("Illimité", "Unlimited") : selectedPlan.maxLiveSessions}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">{t("Cours max", "Max Courses")}</Label>
+                          <p className="text-foreground font-medium">
+                            {selectedPlan.maxCourses === -1 ? t("Illimité", "Unlimited") : selectedPlan.maxCourses}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">{t("Tests max", "Max Tests")}</Label>
+                          <p className="text-foreground font-medium">
+                            {selectedPlan.maxTests === -1 ? t("Illimité", "Unlimited") : selectedPlan.maxTests}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-muted border-gray-200 dark:border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-foreground">{t("Statistiques", "Statistics")}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Abonnés actifs", "Active Subscribers")}</Label>
+                        <p className="text-foreground font-bold text-2xl">{(selectedPlan.subscribers || 0).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Revenus mensuels", "Monthly Revenue")}</Label>
+                        <p className="text-foreground font-bold text-lg">
+                          {selectedPlan.revenue === 0 ? "0" : `${(selectedPlan.revenue / 1000000).toFixed(1)}M`} {selectedPlan.currency}
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Statut", "Status")}</Label>
+                        <Badge variant={selectedPlan.isActive ? "default" : "secondary"}>
+                          {selectedPlan.isActive ? t("Actif", "Active") : t("Inactif", "Inactive")}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Populaire", "Popular")}</Label>
+                        <Badge variant={selectedPlan.isPopular ? "default" : "outline"}>
+                          {selectedPlan.isPopular ? t("Oui", "Yes") : t("Non", "No")}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Description */}
+                <Card className="bg-muted border-gray-200 dark:border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">{t("Description", "Description")}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-foreground">{selectedPlan.description}</p>
+                    {selectedPlan.descriptionEn && (
+                      <div className="mt-4">
+                        <Label className="text-sm font-medium text-muted-foreground">{t("Description (EN)", "Description (EN)")}</Label>
+                        <p className="text-foreground mt-2">{selectedPlan.descriptionEn}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button variant="outline" onClick={() => setIsViewPlanOpen(false)} className="border-gray-200 dark:border-gray-700">
+                    {t("Fermer", "Close")}
+                  </Button>
+                  <Button 
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => {
+                      setIsViewPlanOpen(false)
+                      handleEditPlan(selectedPlan)
+                    }}
+                  >
+                    {t("Modifier", "Edit")}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Create Banner Dialog */}
         <Dialog open={isCreateBannerOpen} onOpenChange={setIsCreateBannerOpen}>
           <DialogTrigger asChild>
@@ -635,7 +825,7 @@ export default function SubscriptionBilling() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {subscriptionAnalytics.totalSubscribers.toLocaleString()}
+              {(subscriptionAnalytics.totalSubscribers || 0).toLocaleString()}
             </div>
             <p className="text-xs text-blue-500 flex items-center mt-1">
               <TrendingUp className="w-3 h-3 mr-1" />
@@ -653,7 +843,7 @@ export default function SubscriptionBilling() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              {subscriptionAnalytics.averageRevenuePerUser.toLocaleString()} CFA
+              {(subscriptionAnalytics.averageRevenuePerUser || 0).toLocaleString()} CFA
             </div>
             <p className="text-xs text-purple-500 flex items-center mt-1">
               <TrendingUp className="w-3 h-3 mr-1" />
@@ -738,7 +928,7 @@ export default function SubscriptionBilling() {
                           </Badge>
                           <div>
                             <p className="font-medium text-foreground">
-                              {plan.subscribers.toLocaleString()} {t("abonnés", "subscribers")}
+                              {(plan.subscribers || 0).toLocaleString()} {t("abonnés", "subscribers")}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {plan.price === 0 ? t("Gratuit", "Free") : `${plan.price.toLocaleString()} CFA/mois`}
@@ -800,7 +990,7 @@ export default function SubscriptionBilling() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-foreground">{transaction.amount.toLocaleString()} CFA</p>
+                          <p className="font-bold text-foreground">{(transaction.amount || 0).toLocaleString()} CFA</p>
                           <Badge variant="outline" className={getStatusColor(transaction.status)}>
                             {transaction.status === "completed"
                               ? t("Complété", "Completed")
@@ -857,7 +1047,10 @@ export default function SubscriptionBilling() {
                               <Edit className="w-4 h-4 mr-2" />
                               {t("Modifier", "Edit")}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-foreground hover:bg-muted">
+                            <DropdownMenuItem 
+                              className="text-foreground hover:bg-muted"
+                              onClick={() => handleViewPlanDetails(plan)}
+                            >
                               <Eye className="w-4 h-4 mr-2" />
                               {t("Voir détails", "View Details")}
                             </DropdownMenuItem>
@@ -874,7 +1067,7 @@ export default function SubscriptionBilling() {
                     <CardContent>
                       <div className="space-y-4">
                         <div>
-                          <div className="text-2xl font-bold text-foreground">{plan.subscribers.toLocaleString()}</div>
+                          <div className="text-2xl font-bold text-foreground">{(plan.subscribers || 0).toLocaleString()}</div>
                           <div className="text-sm text-muted-foreground">
                             {t("Abonnés actifs", "Active subscribers")}
                           </div>
@@ -893,7 +1086,7 @@ export default function SubscriptionBilling() {
                             {t("Niveaux éligibles", "Eligible Levels")}:
                           </div>
                           <div className="flex flex-wrap gap-1">
-                            {plan.eligibleLevels?.map((level) => (
+                            {plan.eligibleLevels?.map((level: string) => (
                               <Badge key={level} variant="outline" className="text-xs bg-muted text-foreground">
                                 {level}
                               </Badge>
@@ -904,7 +1097,7 @@ export default function SubscriptionBilling() {
                         <div className="space-y-2">
                           <div className="text-sm font-medium text-foreground">{t("Fonctionnalités", "Features")}:</div>
                           <ul className="text-xs text-muted-foreground space-y-1">
-                            {plan.features.map((feature, index) => (
+                            {plan.features.map((feature: string, index: number) => (
                               <li key={index} className="flex items-center">
                                 <CheckCircle className="w-3 h-3 mr-2 text-green-500" />
                                 {feature}
@@ -1079,7 +1272,7 @@ export default function SubscriptionBilling() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-semibold text-foreground">
-                          {transaction.amount.toLocaleString()} CFA
+                          {(transaction.amount || 0).toLocaleString()} CFA
                         </TableCell>
                         <TableCell className="text-foreground">{transaction.method}</TableCell>
                         <TableCell>

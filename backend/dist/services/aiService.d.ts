@@ -1,0 +1,40 @@
+export declare class AIService {
+    static generateGreeting(firstName: string, lastName: string): Promise<string>;
+    t: any;
+    static generateMotivation(firstName: string): Promise<string>;
+    static generateWeatherMessage(country: string): Promise<string>;
+    static generateStudyRecommendations(userId: string): Promise<any[]>;
+    static generateDailyTip(): Promise<string>;
+    static generateResponse(params: {
+        message: string;
+        systemPrompt: string;
+        context: {
+            userLevel: string;
+            language: string;
+            relevantQuestions: any[];
+            conversationHistory: any[];
+        };
+    }): Promise<{
+        content: string;
+        confidence?: number;
+    }>;
+    static generateContent(prompt: string): Promise<string>;
+    static generateNotes(content: string, lessonTitle: string, courseTitle: string): Promise<{
+        notes: string[];
+    }>;
+    static generateQuestions(content: string, lessonTitle: string, courseTitle: string, questionCount?: number, questionTypes?: string[], category?: string, difficulty?: string): Promise<{
+        questions: any[];
+    }>;
+    static generateChatResponse(message: string, context: {
+        lessonTitle: string;
+        courseTitle: string;
+        content: string;
+    }): Promise<{
+        response: string;
+    }>;
+    static generateTranscription(videoUrl: string, lessonTitle: string, courseTitle: string): Promise<{
+        transcription: string;
+    }>;
+    static extractSujetsFromText(text: string): Promise<string[]>;
+}
+//# sourceMappingURL=aiService.d.ts.map

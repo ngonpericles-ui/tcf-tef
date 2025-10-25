@@ -8,7 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useLanguage } from "@/components/language-provider"
-import { ArrowLeft, ImageIcon, Video, Smile, MapPin, Users, Globe, Lock, X } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
+import apiClient from "@/lib/api-client"
+import { ArrowLeft, ImageIcon, Video, Smile, MapPin, Users, Globe, Lock, X, CheckCircle, AlertCircle } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface CreatePostPageProps {
@@ -18,14 +20,18 @@ interface CreatePostPageProps {
 export default function CreatePostPage({ role: propRole }: CreatePostPageProps = {}) {
   const { t } = useLanguage()
   const router = useRouter()
+  const { user } = useAuth()
   const [postContent, setPostContent] = useState("")
+  const [postTitle, setPostTitle] = useState("")
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [selectedVideo, setSelectedVideo] = useState<File | null>(null)
-  const [privacy, setPrivacy] = useState("public")
+  const [privacy, setPrivacy] = useState("PUBLIC")
   const [isPosting, setIsPosting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
-  
+
   // Determine current role
   const currentRole = propRole || "senior"
 
@@ -53,12 +59,50 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
     if (!postContent.trim() && selectedImages.length === 0 && !selectedVideo) return
 
     setIsPosting(true)
+    setErrorMessage("")
+    setSuccessMessage("")
 
-    // Simulate posting delay
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    try {
+      // Create post data
+      const postData = {
+        title: postTitle || "Untitled Post",
+        content: postContent,
+        excerpt: postContent.substring(0, 200),
+        visibility: privacy as "PUBLIC" | "SUBSCRIBERS_ONLY" | "PRIVATE",
+        status: "PUBLISHED", // Posts are published immediately
+        category: "General",
+        tags: [],
+        level: "B1",
+        targetTier: "FREE"
+      }
 
-    // Redirect to manager feed to see the new post
-    router.push("/manager/feed")
+      // Call backend API to create post
+      const response = await apiClient.post("/posts", postData)
+
+      if (response.success) {
+        setSuccessMessage(t("Post créé avec succès!", "Post created successfully!"))
+
+        // Clear form
+        setPostContent("")
+        setPostTitle("")
+        setSelectedImages([])
+        setSelectedVideo(null)
+        setPrivacy("PUBLIC")
+
+        // Redirect after 2 seconds
+        setTimeout(() => {
+          const redirectPath = currentRole === "admin" ? "/admin/feed" : "/manager/feed"
+          router.push(redirectPath)
+        }, 2000)
+      } else {
+        setErrorMessage(response.error?.message || t("Erreur lors de la création du post", "Error creating post"))
+      }
+    } catch (error: any) {
+      console.error("Error creating post:", error)
+      setErrorMessage(error.response?.data?.error?.message || error.message || t("Erreur lors de la création du post", "Error creating post"))
+    } finally {
+      setIsPosting(false)
+    }
   }
 
   return (
@@ -82,6 +126,26 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
         </div>
       </div>
 
+      {/* Success Message */}
+      {successMessage && (
+        <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+          <CardContent className="p-4 flex items-center space-x-3">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <span className="text-green-700 dark:text-green-300">{successMessage}</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error Message */}
+      {errorMessage && (
+        <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+          <CardContent className="p-4 flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <span className="text-red-700 dark:text-red-300">{errorMessage}</span>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Create Post Card */}
       <Card className="bg-card border-gray-200 dark:border-gray-700">
         <CardHeader>
@@ -91,7 +155,7 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
             </div>
             <div>
               <CardTitle className="text-foreground text-lg">
-                {currentRole === "admin" ? t("Admin", "Admin") : 
+                {currentRole === "admin" ? t("Admin", "Admin") :
                  currentRole === "senior" ? t("Manager", "Manager") :
                  currentRole === "content" ? t("Content Manager", "Content Manager") :
                  t("Junior Manager", "Junior Manager")}
@@ -102,19 +166,19 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-gray-200 dark:border-gray-700">
-                    <SelectItem value="public" className="text-foreground">
+                    <SelectItem value="PUBLIC" className="text-foreground">
                       <div className="flex items-center space-x-2">
                         <Globe className="w-4 h-4" />
                         <span>{t("Public", "Public")}</span>
                       </div>
                     </SelectItem>
-                    <SelectItem value="students" className="text-foreground">
+                    <SelectItem value="SUBSCRIBERS_ONLY" className="text-foreground">
                       <div className="flex items-center space-x-2">
                         <Users className="w-4 h-4" />
                         <span>{t("Étudiants", "Students")}</span>
                       </div>
                     </SelectItem>
-                    <SelectItem value="private" className="text-foreground">
+                    <SelectItem value="PRIVATE" className="text-foreground">
                       <div className="flex items-center space-x-2">
                         <Lock className="w-4 h-4" />
                         <span>{t("Privé", "Private")}</span>
@@ -127,6 +191,15 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Title Input */}
+          <input
+            type="text"
+            placeholder={t("Titre du post (optionnel)", "Post title (optional)")}
+            value={postTitle}
+            onChange={(e) => setPostTitle(e.target.value)}
+            className="w-full px-4 py-2 bg-transparent border-b border-gray-200 dark:border-gray-700 text-foreground text-lg placeholder:text-muted-foreground focus:outline-none focus:border-blue-500"
+          />
+
           {/* Text Content */}
           <Textarea
             placeholder={t("Que voulez-vous partager ?", "What would you like to share?")}

@@ -252,11 +252,25 @@ export class RoleBasedSessionManager {
       
       // Redirect to appropriate login page based on role
       if (typeof window !== 'undefined') {
-        if (role === 'ADMIN') {
+        // Check if we're currently on an admin page to determine the correct redirect
+        const currentPath = window.location.pathname
+        const isOnAdminPage = currentPath.startsWith('/admin')
+        
+        console.log('🔍 Logout Debug:', {
+          role,
+          currentPath,
+          isOnAdminPage,
+          redirectTo: role === 'ADMIN' || isOnAdminPage ? '/admin/login' : '/connexion'
+        })
+        
+        if (role === 'ADMIN' || isOnAdminPage) {
+          console.log('✅ Redirecting admin to /admin/login')
           window.location.href = '/admin/login'
         } else if (role === 'SENIOR_MANAGER' || role === 'JUNIOR_MANAGER') {
+          console.log('✅ Redirecting manager to /manager')
           window.location.href = '/manager'
         } else {
+          console.log('✅ Redirecting student to /connexion')
           // Students and regular users go to /connexion
           window.location.href = '/connexion'
         }

@@ -19,55 +19,41 @@ import { toast } from "sonner"
 
 const testLevels = [
   {
-    id: "gratuit",
-    title: { fr: "Gratuit", en: "Free" },
-    description: { fr: "Tests de base A1-A2", en: "Basic A1-A2 tests" },
-    icon: <Target className="w-6 h-6" />,
-    level: "A1-A2",
-    popular: false,
-    features: [
-      { fr: "Tests A1-A2 uniquement", en: "A1-A2 tests only" },
-      { fr: "Résultats immédiats", en: "Immediate results" },
-      { fr: "Support communautaire", en: "Community support" }
-    ],
-    redirectUrl: "/test-niveau/simulations?tier=gratuit&level=A1-A2"
-  },
-  {
     id: "essentiel",
     title: { fr: "Essentiel", en: "Essential" },
-    description: { fr: "Tests A1-B1 avec analyse", en: "A1-B1 tests with analysis" },
+    description: { fr: "Tests B1 avec analyse", en: "B1 tests with analysis" },
     icon: <CheckCircle className="w-6 h-6" />,
-    level: "A1-B1",
+    level: "B1",
     popular: false,
     features: [
-      { fr: "Tests A1-B1", en: "A1-B1 tests" },
+      { fr: "Tests B1 uniquement", en: "B1 tests only" },
       { fr: "5 tests blancs/mois", en: "5 mock tests/month" },
       { fr: "Analyse détaillée", en: "Detailed analysis" },
       { fr: "Support email", en: "Email support" }
     ],
-    redirectUrl: "/test-niveau/simulations?tier=essentiel&level=A1-B1"
+    redirectUrl: "/test-niveau/simulations?tier=essentiel&level=B1"
   },
   {
     id: "premium",
     title: { fr: "Premium", en: "Premium" },
-    description: { fr: "Tests complets A1-C2", en: "Complete A1-C2 tests" },
+    description: { fr: "Tests complets B1-C2", en: "Complete B1-C2 tests" },
     icon: <Star className="w-6 h-6" />,
-    level: "A1-C2",
+    level: "B1-C2",
     popular: true,
     features: [
-      { fr: "Tests illimités A1-C2", en: "Unlimited A1-C2 tests" },
+      { fr: "Tests illimités B1-C2", en: "Unlimited B1-C2 tests" },
       { fr: "Coach IA", en: "AI Coach" },
       { fr: "Certificats officiels", en: "Official certificates" },
       { fr: "Support prioritaire", en: "Priority support" }
     ],
-    redirectUrl: "/test-niveau/simulations?tier=premium&level=A1-C2"
+    redirectUrl: "/test-niveau/simulations?tier=premium&level=B1-C2"
   },
   {
     id: "pro",
     title: { fr: "Pro+", en: "Pro+" },
     description: { fr: "Accompagnement personnalisé", en: "Personalized coaching" },
     icon: <Globe className="w-6 h-6" />,
-    level: "A1-C2",
+    level: "B1-C2",
     popular: false,
     features: [
       { fr: "Parcours personnalisés", en: "Personalized paths" },
@@ -75,7 +61,7 @@ const testLevels = [
       { fr: "Garantie de réussite", en: "Success guarantee" },
       { fr: "Support téléphonique", en: "Phone support" }
     ],
-    redirectUrl: "/test-niveau/simulations?tier=pro&level=A1-C2",
+    redirectUrl: "/test-niveau/simulations?tier=pro&level=B1-C2",
     hasVoiceSimulation: true,
     hasImmigrationSimulation: true
   }
@@ -92,6 +78,13 @@ interface LevelAssessment {
   estimatedTimeToNextLevel: string
 }
 
+interface FreeAttemptsInfo {
+  freeAttemptsUsed: number
+  remainingFreeAttempts: number
+  isBlocked: boolean
+  userTier: string
+}
+
 export default function TestNiveauPage() {
   const { t } = useLanguage()
   const router = useRouter()
@@ -101,10 +94,12 @@ export default function TestNiveauPage() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [currentLevel, setCurrentLevel] = useState<LevelAssessment | null>(null)
   const [levelLoading, setLevelLoading] = useState(true)
+  const [freeAttemptsInfo, setFreeAttemptsInfo] = useState<FreeAttemptsInfo | null>(null)
 
   useEffect(() => {
     fetchUserSubscription()
     fetchCurrentLevel()
+    fetchFreeAttemptsInfo()
   }, [])
 
   const fetchUserSubscription = async () => {
@@ -123,7 +118,7 @@ export default function TestNiveauPage() {
   const fetchCurrentLevel = async () => {
     try {
       setLevelLoading(true)
-      const response = await apiClient.get('/simulations/level-history')
+      const response = await apiClient.get('/simulations/level-history') as any
       if (response.success && response.data && response.data.currentAssessment) {
         // Use the complete assessment data from the new backend API structure
         const assessmentData = response.data.currentAssessment
@@ -141,6 +136,17 @@ export default function TestNiveauPage() {
     }
   }
 
+  const fetchFreeAttemptsInfo = async () => {
+    try {
+      const response = await apiClient.get('/simulations/free-attempts/count') as any
+      if (response.success && response.data) {
+        setFreeAttemptsInfo(response.data as FreeAttemptsInfo)
+      }
+    } catch (error) {
+      console.error('Error fetching free attempts info:', error)
+    }
+  }
+
   const handleTestSelection = (testId: string) => {
     setSelectedTest(testId)
   }
@@ -152,6 +158,17 @@ export default function TestNiveauPage() {
     if (!test) return
 
     setLoading(true)
+
+    // Check if user is blocked due to free attempts limit
+    if (freeAttemptsInfo?.isBlocked) {
+      toast.error(t(
+        "Vous avez utilisé vos 5 simulations gratuites. Veuillez vous abonner pour continuer.",
+        "You have used your 5 free simulations. Please subscribe to continue."
+      ))
+      setLoading(false)
+      router.push('/abonnement')
+      return
+    }
 
     // Check subscription access
     const hasAccess = checkSubscriptionAccess(test.id, userSubscription)
@@ -178,7 +195,6 @@ export default function TestNiveauPage() {
     }
 
     const testTierMap = {
-      "gratuit": 0,
       "essentiel": 1,
       "premium": 2,
       "pro": 3
@@ -238,6 +254,35 @@ export default function TestNiveauPage() {
           </div>
         </div>
       </div>
+
+      {/* Free Attempts Counter Section */}
+      {freeAttemptsInfo && (
+        <div className={`py-6 px-4 ${freeAttemptsInfo.isBlocked ? 'bg-red-50 dark:bg-red-900/20 border-b-2 border-red-300' : 'bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-300'}`}>
+          <div className="container mx-auto max-w-7xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className={`font-semibold ${freeAttemptsInfo.isBlocked ? 'text-red-700 dark:text-red-300' : 'text-blue-700 dark:text-blue-300'}`}>
+                  {freeAttemptsInfo.isBlocked
+                    ? t("Simulations gratuites épuisées", "Free simulations exhausted")
+                    : t("Simulations gratuites disponibles", "Free simulations available")
+                  }
+                </h3>
+                <p className={`text-sm ${freeAttemptsInfo.isBlocked ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                  {freeAttemptsInfo.isBlocked
+                    ? t("Vous avez utilisé vos 5 simulations gratuites. Abonnez-vous pour accéder à plus.", "You have used your 5 free simulations. Subscribe to access more.")
+                    : t(`${freeAttemptsInfo.remainingFreeAttempts} simulations gratuites restantes sur 5`, `${freeAttemptsInfo.remainingFreeAttempts} free simulations remaining out of 5`)
+                  }
+                </p>
+              </div>
+              {freeAttemptsInfo.isBlocked && (
+                <Button onClick={() => router.push('/abonnement')} className="bg-red-600 hover:bg-red-700">
+                  {t("S'abonner maintenant", "Subscribe now")}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Current Level Assessment Section */}
       {!levelLoading && (
@@ -440,27 +485,11 @@ export default function TestNiveauPage() {
                       Avantages
                     </h4>
                     <div className="space-y-3">
-                      {selectedTest === 'gratuit' && (
-                        <>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Tests de base A1-A2 uniquement</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Résultats immédiats sans analyse</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Support communautaire uniquement</span>
-                          </div>
-                        </>
-                      )}
                       {selectedTest === 'essentiel' && (
                         <>
                           <div className="flex items-center space-x-3">
                             <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Tests A1-B1 avec analyse détaillée</span>
+                            <span className="text-gray-700 dark:text-gray-300">Tests B1 avec analyse détaillée</span>
                           </div>
                           <div className="flex items-center space-x-3">
                             <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
@@ -622,12 +651,11 @@ function TestCard({
   // Get subscription tier badge text
   const getTierBadge = (tier: string) => {
     const tierMap = {
-      "gratuit": { fr: "Gratuit", en: "Free", color: "bg-gray-100 text-gray-800" },
       "essentiel": { fr: "Essentiel", en: "Essential", color: "bg-blue-100 text-blue-800" },
       "premium": { fr: "Premium", en: "Premium", color: "bg-purple-100 text-purple-800" },
       "pro": { fr: "Pro+", en: "Pro+", color: "bg-green-100 text-green-800" }
     }
-    return tierMap[tier as keyof typeof tierMap] || tierMap.gratuit
+    return tierMap[tier as keyof typeof tierMap] || tierMap.essentiel
   }
 
   const tierBadge = getTierBadge(tier)

@@ -26,8 +26,12 @@ import {
   Save,
   Eye,
   Settings,
+  Sparkles,
+  Loader,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { apiClient } from "@/lib/api-client"
 
 interface Question {
   id: string
@@ -88,6 +92,10 @@ function TestBuilderPageContent() {
     showResults: true,
     allowRetake: true,
   })
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState("")
+  const [questionCount, setQuestionCount] = useState(5)
+  const [activeTab, setActiveTab] = useState("settings")
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -217,6 +225,74 @@ function TestBuilderPageContent() {
 
   const removeQuestion = (id: string) => {
     setQuestions(questions.filter((q) => q.id !== id))
+  }
+
+  const handleGenerateQuestionsWithAI = async () => {
+    try {
+      if (!testSettings.title.trim()) {
+        toast.error(t("Veuillez saisir un titre pour le test", "Please enter a test title"))
+        return
+      }
+
+      if (!testSettings.description.trim()) {
+        toast.error(t("Veuillez saisir une description pour le test", "Please enter a test description"))
+        return
+      }
+
+      if (!aiPrompt.trim()) {
+        toast.error(t("Veuillez saisir une description pour générer les questions", "Please enter a description to generate questions"))
+        return
+      }
+
+      setIsGeneratingQuestions(true)
+
+      // Call AI API to generate questions
+      const response = await apiClient.post('/ai/generate-questions', {
+        content: aiPrompt,
+        lessonTitle: testSettings.title,
+        courseTitle: testSettings.description,
+        level: testSettings.level,
+        category: testSettings.category,
+        questionCount: questionCount,
+        questionTypes: ["multiple-choice", "true-false", "short-answer"]
+      })
+
+      if (!response.success) {
+        throw new Error((response as any).message || 'Failed to generate questions')
+      }
+
+      // Parse generated questions and add them to the list
+      const generatedQuestions = (response.data as any)?.questions || []
+
+      if (generatedQuestions.length === 0) {
+        toast.error(t("Aucune question n'a pu être générée. Veuillez réessayer.", "No questions could be generated. Please try again."))
+        return
+      }
+
+      // Add generated questions to the questions list with bilingual support
+      const newQuestions = generatedQuestions.map((q: any, index: number) => ({
+        id: `ai-${Date.now()}-${index}`,
+        type: q.type || "multiple-choice",
+        questionFr: q.questionText || q.question || "",
+        questionEn: q.questionText || q.question || "", // Use same text for both languages
+        options: q.options ? q.options.map((opt: string) => ({ fr: opt, en: opt })) : (q.type === "multiple-choice" ? [{ fr: "", en: "" }, { fr: "", en: "" }, { fr: "", en: "" }, { fr: "", en: "" }] : []),
+        correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : 0,
+        explanationFr: q.explanation || "",
+        explanationEn: q.explanation || "",
+        points: q.points || 1,
+        level: testSettings.level,
+        category: testSettings.category,
+      }))
+
+      setQuestions([...questions, ...newQuestions])
+      setAiPrompt("")
+      toast.success(t(`✅ ${newQuestions.length} questions générées avec succès!`, `✅ ${newQuestions.length} questions generated successfully!`))
+    } catch (error: any) {
+      console.error("Error generating questions:", error)
+      toast.error(t(`Erreur lors de la génération: ${error.message || 'Erreur inconnue'}`, `Error generating: ${error.message || 'Unknown error'}`))
+    } finally {
+      setIsGeneratingQuestions(false)
+    }
   }
 
   const updateOption = (questionId: string, optionIndex: number, value: string, lang: "fr" | "en") => {
@@ -504,6 +580,57 @@ function TestBuilderPageContent() {
                     </Button>
                   )
                 })}
+              </CardContent>
+            </Card>
+
+            {/* AI Generation */}
+            <Card className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/30 dark:border-yellow-500/20">
+              <CardHeader>
+                <CardTitle className="flex items-center text-foreground">
+                  <Sparkles className="w-5 h-5 mr-2 text-yellow-500" />
+                  {t("Générer avec IA", "Generate with AI")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-sm">{t("Description du contenu", "Content Description")}</Label>
+                  <Textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder={t("Ex: Générez des questions sur les temps du passé...", "Ex: Generate questions about past tenses...")}
+                    className="bg-background border-input text-foreground min-h-[80px] text-sm"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground text-sm">{t("Nombre de questions", "Number of Questions")}</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={questionCount}
+                    onChange={(e) => setQuestionCount(Math.min(20, Math.max(1, parseInt(e.target.value) || 5)))}
+                    className="bg-background border-input text-foreground text-sm"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleGenerateQuestionsWithAI}
+                  disabled={isGeneratingQuestions || !aiPrompt.trim()}
+                  className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white text-sm"
+                >
+                  {isGeneratingQuestions ? (
+                    <>
+                      <Loader className="w-4 h-4 mr-2 animate-spin" />
+                      {t("Génération...", "Generating...")}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      {t("Générer", "Generate")}
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
 

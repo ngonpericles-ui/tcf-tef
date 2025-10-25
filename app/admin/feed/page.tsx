@@ -206,14 +206,14 @@ export default function AdminFeedPage({ role: propRole }: ManagerFeedPageProps =
         createdAt: post.createdAt,
         updatedAt: post.updatedAt,
         status: (post.status?.toLowerCase() || 'published') as any,
-        views: post.views || 0,
+        views: post.viewCount || 0,
         completions: post.completions || 0,
         rating: post.rating || 0,
-        likes: post.likesCount || 0,
-        likesCount: post.likesCount,
-        comments: post.commentsCount || 0,
-        commentsCount: post.commentsCount,
-        sharesCount: post.sharesCount || 0,
+        likes: post._count?.likes || 0,
+        likesCount: post._count?.likes || 0,
+        comments: post._count?.comments || 0,
+        commentsCount: post._count?.comments || 0,
+        sharesCount: post._count?.shares || 0,
         thumbnail: post.media,
         media: post.media,
         contentType: 'post' as const,
@@ -272,6 +272,13 @@ export default function AdminFeedPage({ role: propRole }: ManagerFeedPageProps =
 
   useEffect(() => {
     fetchFeedData()
+
+    // Set up auto-refresh every 10 seconds to show real-time updates
+    const interval = setInterval(() => {
+      fetchFeedData()
+    }, 10000)
+
+    return () => clearInterval(interval)
   }, [isAuthenticated, isManager, isAdmin])
 
   // Refresh feed data

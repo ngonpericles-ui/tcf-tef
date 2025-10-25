@@ -10,6 +10,7 @@ import { Clock, Users, Star, Lock, Download, Award, BookOpen, Brain, Search, Fil
 import { useLang } from "@/components/language-provider"
 import { type SubscriptionTier } from "@/components/test-data"
 import { apiClient } from "@/lib/api-client"
+import { getTestImage, getImageAltText } from "@/lib/imageUtils"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -37,7 +38,7 @@ export default function TestCorrectionsPage() {
     const fetchCorrections = async () => {
       try {
         setLoading(true)
-        const response = await apiClient.get('/content-management/tests?type=corrections')
+        const response = await apiClient.get('/content-management/management')
         if (response.success && response.data) {
           const content = (response.data as any).content
           setTests(Array.isArray(content) ? content : [])
@@ -150,14 +151,8 @@ export default function TestCorrectionsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("Tous les types", "All types")}</SelectItem>
-                  <SelectItem value="tcf">TCF</SelectItem>
-                  <SelectItem value="tef">TEF</SelectItem>
-                  <SelectItem value="delf">DELF</SelectItem>
-                  <SelectItem value="dalf">DALF</SelectItem>
-                  <SelectItem value="grammar">{t("Grammaire", "Grammar")}</SelectItem>
-                  <SelectItem value="vocabulary">{t("Vocabulaire", "Vocabulary")}</SelectItem>
-                  <SelectItem value="writing">{t("Expression écrite", "Written Expression")}</SelectItem>
-                  <SelectItem value="oral">{t("Expression orale", "Oral Expression")}</SelectItem>
+                  <SelectItem value="TCF">TCF</SelectItem>
+                  <SelectItem value="TEF">TEF</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -321,8 +316,8 @@ function CorrectionsGrid({ tests, userTier }: { tests: any[]; userTier: Subscrip
           >
             <div className="relative aspect-video overflow-hidden">
               <Image
-                src={test.image || "/placeholder.svg"}
-                alt={lang === "fr" ? test.title : test.titleEn}
+                src={getTestImage(test)}
+                alt={getImageAltText('test', lang === "fr" ? test.title : test.titleEn, test.category, test.level)}
                 fill
                 className="object-cover group-hover:scale-105 transition-transform duration-200"
               />

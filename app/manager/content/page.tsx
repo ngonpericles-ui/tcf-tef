@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Users,
   Clock,
+  AlertCircle,
   Star,
   Edit,
   Eye,
@@ -28,6 +29,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import apiClient from "@/lib/api-client"
 import { useAuth } from "@/contexts/AuthContext"
+import UnifiedCourseCard from "@/components/UnifiedCourseCard"
 
 export default function ManagerContentPage() {
   const { t } = useLanguage()
@@ -38,8 +40,10 @@ export default function ManagerContentPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
   const [content, setContent] = useState<any[]>([])
+  const [viewingContent, setViewingContent] = useState<any | null>(null)
+  const [databaseError, setDatabaseError] = useState(false)
 
-  const basePath = pathname.startsWith("/admin") ? "/admin" : "/manager"
+  const basePath = pathname?.startsWith("/admin") ? "/admin" : "/manager"
 
   // Separate content by type
   const courses = content.filter(item => item.contentType === 'NOTE' || item.contentType === 'VIDEO')
@@ -60,14 +64,23 @@ export default function ManagerContentPage() {
         const response = await apiClient.get('/content-management/management')
         if (response.success && response.data) {
           // Handle both array and object responses from real API
-          const contentData = response.data.content || response.data || []
+          const contentData = (response.data as any).content || response.data || []
           setContent(Array.isArray(contentData) ? contentData : [])
         } else {
           console.log('No content found or API error')
           setContent([])
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching content:', error)
+        
+        // Show user-friendly error message for database connection issues
+        if (error?.response?.status === 500) {
+          console.error('Database connection failed - showing error state')
+          setDatabaseError(true)
+        } else {
+          setDatabaseError(false)
+        }
+        
         setContent([])
       } finally {
         setLoading(false)
@@ -132,6 +145,23 @@ export default function ManagerContentPage() {
         </div>
       </div>
 
+      {/* Database Error Banner */}
+      {databaseError && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <div className="flex items-center">
+            <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
+            <div>
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                {t("Erreur de connexion à la base de données", "Database Connection Error")}
+              </h3>
+              <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+                {t("Les données ne peuvent pas être chargées. Veuillez réessayer ou contacter le support.", "Data cannot be loaded. Please try again or contact support.")}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Action Rapide Section */}
       <Card className="bg-card border-gray-200 dark:border-gray-700">
         <CardHeader>
@@ -173,7 +203,7 @@ export default function ManagerContentPage() {
             </Button>
 
             <Button
-              onClick={() => router.push(`${basePath}/content/upload?type=test`)}
+              onClick={() => router.push(`${basePath}/content/questionnaire`)}
               className="bg-green-600 hover:bg-green-700 text-white justify-start h-auto p-4"
             >
               <div className="flex flex-col items-start space-y-2">
@@ -305,6 +335,42 @@ export default function ManagerContentPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
               <p className="text-muted-foreground">{t("Chargement des cours...", "Loading courses...")}</p>
             </div>
+          ) : databaseError ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{t("Erreur de connexion", "Connection Error")}</h3>
+              <p className="text-muted-foreground mb-4">
+                {t("Impossible de se connecter à la base de données. Veuillez réessayer plus tard.", "Unable to connect to database. Please try again later.")}
+              </p>
+              <Button 
+                onClick={() => {
+                  setDatabaseError(false)
+                  setLoading(true)
+                  // Retry the fetch
+                  const fetchContent = async () => {
+                    try {
+                      const response = await apiClient.get('/content-management/management')
+                      if (response.success && response.data) {
+                        const contentData = (response.data as any).content || response.data || []
+                        setContent(Array.isArray(contentData) ? contentData : [])
+                      }
+                    } catch (error: any) {
+                      if (error?.response?.status === 500) {
+                        setDatabaseError(true)
+                      }
+                    } finally {
+                      setLoading(false)
+                    }
+                  }
+                  fetchContent()
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {t("Réessayer", "Retry")}
+              </Button>
+            </div>
           ) : courses.length === 0 ? (
             <div className="text-center py-12">
               <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
@@ -318,74 +384,42 @@ export default function ManagerContentPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {courses.map((course) => (
-              <Card key={course.id} className="bg-card border-gray-200 dark:border-gray-700">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-foreground text-lg">{course.title}</CardTitle>
-                      <CardDescription className="text-muted-foreground mt-1">{course.description}</CardDescription>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-foreground hover:text-foreground">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-card border-gray-200 dark:border-gray-700">
-                        <DropdownMenuItem className="text-foreground hover:bg-muted">
-                          <Edit className="w-4 h-4 mr-2" />
-                          {t("Modifier", "Edit")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-foreground hover:bg-muted">
-                          <Eye className="w-4 h-4 mr-2" />
-                          {t("Voir", "View")}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="flex space-x-2 mt-2">
-                    <Badge variant="outline" className={getLevelColor(course.level)}>
-                      {course.level}
-                    </Badge>
-                    <Badge variant="outline" className={getStatusColor(course.isPublished)}>
-                      {course.isPublished ? t("Publié", "Published") : t("Brouillon", "Draft")}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{t("Catégorie", "Category")}</span>
-                      <span className="text-foreground">{course.category}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{t("Type", "Type")}</span>
-                      <span className="text-foreground">{course.contentType}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{t("Durée", "Duration")}</span>
-                      <span className="text-foreground flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {course.duration}h
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">{t("Créé le", "Created")}</span>
-                      <span className="text-foreground flex items-center">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {new Date(course.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                <UnifiedCourseCard 
+                  key={course.id} 
+                  course={course} 
+                  onUpdate={() => {
+                    // Refresh content after update
+                    const fetchContent = async () => {
+                      try {
+                        const response = await apiClient.get('/content-management/management')
+                        if (response.success && response.data) {
+                          const contentData = (response.data as any).content || response.data || []
+                          setContent(Array.isArray(contentData) ? contentData : [])
+                        }
+                      } catch (error) {
+                        console.error('Error fetching content:', error)
+                      }
+                    }
+                    fetchContent()
+                  }}
+                />
               ))}
             </div>
           )}
         </TabsContent>
 
         <TabsContent value="simulations">
-          {simulations.length === 0 ? (
+          {databaseError ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{t("Erreur de connexion", "Connection Error")}</h3>
+              <p className="text-muted-foreground mb-4">
+                {t("Impossible de se connecter à la base de données. Veuillez réessayer plus tard.", "Unable to connect to database. Please try again later.")}
+              </p>
+            </div>
+          ) : simulations.length === 0 ? (
             <div className="text-center py-12">
               <Shield className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-foreground mb-2">{t("Aucune simulation", "No simulations")}</h3>
@@ -416,7 +450,10 @@ export default function ManagerContentPage() {
                           <Edit className="w-4 h-4 mr-2" />
                           {t("Configurer", "Configure")}
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-foreground hover:bg-muted">
+                        <DropdownMenuItem
+                          className="text-foreground hover:bg-muted cursor-pointer"
+                          onClick={() => setViewingContent(sim)}
+                        >
                           <Eye className="w-4 h-4 mr-2" />
                           {t("Voir", "View")}
                         </DropdownMenuItem>
@@ -461,12 +498,22 @@ export default function ManagerContentPage() {
         </TabsContent>
 
         <TabsContent value="tests">
-          {tests.length === 0 ? (
+          {databaseError ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{t("Erreur de connexion", "Connection Error")}</h3>
+              <p className="text-muted-foreground mb-4">
+                {t("Impossible de se connecter à la base de données. Veuillez réessayer plus tard.", "Unable to connect to database. Please try again later.")}
+              </p>
+            </div>
+          ) : tests.length === 0 ? (
             <div className="text-center py-12">
               <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-foreground mb-2">{t("Aucun test", "No tests")}</h3>
               <p className="text-muted-foreground mb-4">{t("Créez votre premier test d'évaluation", "Create your first assessment test")}</p>
-              <Button onClick={() => router.push(`${basePath}/content/upload?type=test`)} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button onClick={() => router.push(`${basePath}/content/questionnaire`)} className="bg-green-600 hover:bg-green-700 text-white">
                 <Plus className="w-4 h-4 mr-2" />
                 {t("Créer un test", "Create Test")}
               </Button>
@@ -492,9 +539,12 @@ export default function ManagerContentPage() {
                           <Edit className="w-4 h-4 mr-2" />
                           {t("Modifier", "Edit")}
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-foreground hover:bg-muted">
+                        <DropdownMenuItem
+                          className="text-foreground hover:bg-muted cursor-pointer"
+                          onClick={() => setViewingContent(test)}
+                        >
                           <Eye className="w-4 h-4 mr-2" />
-                          {t("Résultats", "Results")}
+                          {t("Voir", "View")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -593,6 +643,132 @@ export default function ManagerContentPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Content Viewer Modal */}
+      {viewingContent && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setViewingContent(null)}
+        >
+          <Card
+            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b">
+              <div>
+                <CardTitle className="text-foreground">{viewingContent.title}</CardTitle>
+                <CardDescription className="text-muted-foreground mt-1">{viewingContent.description}</CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewingContent(null)}
+                className="text-foreground"
+              >
+                ✕
+              </Button>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                {/* Video Content */}
+                {viewingContent.lessons_data && viewingContent.lessons_data.length > 0 && viewingContent.lessons_data[0].videoUrl && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-2">{t("Vidéo", "Video")}</h4>
+                    <iframe
+                      width="100%"
+                      height="400"
+                      src={viewingContent.lessons_data[0].videoUrl}
+                      title={viewingContent.title}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {/* PDF Content */}
+                {viewingContent.lessons_data && viewingContent.lessons_data.length > 0 && viewingContent.lessons_data[0].content && viewingContent.lessons_data[0].content.endsWith('.pdf') && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-2">{t("Matériel PDF", "PDF Material")}</h4>
+                    <iframe
+                      src={viewingContent.lessons_data[0].content}
+                      className="w-full h-96 rounded-lg border border-gray-200 dark:border-gray-700"
+                      title={t("Matériel PDF", "PDF Material")}
+                    />
+                    <a
+                      href={viewingContent.lessons_data[0].content}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block text-primary hover:underline text-sm"
+                    >
+                      {t("Télécharger le PDF", "Download PDF")} ↗
+                    </a>
+                  </div>
+                )}
+
+                {/* Text Content */}
+                {viewingContent.lessons_data && viewingContent.lessons_data.length > 0 && viewingContent.lessons_data[0].content && !viewingContent.lessons_data[0].content.endsWith('.pdf') && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-2">{t("Contenu", "Content")}</h4>
+                    <div className="bg-muted rounded-lg p-4 text-muted-foreground whitespace-pre-wrap">
+                      {viewingContent.lessons_data[0].content}
+                    </div>
+                  </div>
+                )}
+
+                {/* Test Questions */}
+                {viewingContent.contentType === 'TEST' && viewingContent.questions && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-2">{t("Questions", "Questions")} ({viewingContent.questions.length})</h4>
+                    <div className="space-y-3">
+                      {viewingContent.questions.slice(0, 5).map((q: any, idx: number) => (
+                        <div key={idx} className="bg-muted rounded-lg p-3">
+                          <p className="text-sm font-medium text-foreground">{idx + 1}. {q.question}</p>
+                          {q.options && (
+                            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                              {q.options.map((opt: string, optIdx: number) => (
+                                <li key={optIdx}>• {opt}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                      {viewingContent.questions.length > 5 && (
+                        <p className="text-sm text-muted-foreground">
+                          {t("et", "and")} {viewingContent.questions.length - 5} {t("autres questions", "more questions")}...
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Metadata */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("Catégorie", "Category")}</p>
+                    <p className="text-sm font-medium text-foreground">{viewingContent.category}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("Niveau", "Level")}</p>
+                    <p className="text-sm font-medium text-foreground">{viewingContent.level}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("Durée", "Duration")}</p>
+                    <p className="text-sm font-medium text-foreground">{viewingContent.duration} {viewingContent.contentType === 'TEST' ? 'min' : 'h'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("Statut", "Status")}</p>
+                    <Badge variant="outline" className={getStatusColor(viewingContent.isPublished)}>
+                      {viewingContent.isPublished ? t("Publié", "Published") : t("Brouillon", "Draft")}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

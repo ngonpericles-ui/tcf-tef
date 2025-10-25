@@ -104,13 +104,6 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
         setLoading(true)
         setError(null)
 
-        // Load current user role and permissions
-        const roleResponse = await apiClient.get('/manager/role')
-        if (roleResponse.success && roleResponse.data) {
-          const roleData = roleResponse.data as any
-          setCurrentManager(roleData)
-        }
-
         // Load all managers (admin and senior managers only)
         const managersResponse = await apiClient.get('/admin/managers')
         if (managersResponse.success && managersResponse.data) {
@@ -186,8 +179,8 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
       }
 
       const response = await apiClient.post('/admin/managers', managerData)
-      if (response.success && response.data) {
-        const newManager = response.data as any
+      if (response.success && response.data?.manager) {
+        const newManager = response.data.manager as any
         setCreatedManager(newManager)
         setShowCreatedDialog(true)
         setSuccess(t("Manager créé avec succès", "Manager created successfully"))
@@ -207,13 +200,15 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
         const managersResponse = await apiClient.get('/admin/managers')
         if (managersResponse.success && managersResponse.data) {
           const responseData = managersResponse.data as any
+          // Handle both array and object responses
           const managersData = Array.isArray(responseData) ? responseData :
+                              Array.isArray(responseData.data) ? responseData.data :
                               Array.isArray(responseData.managers) ? responseData.managers : []
           setManagers(managersData)
         }
 
       } else {
-        setError(t("Erreur lors de la création du manager", "Error creating manager"))
+        setError(response.error?.message || t("Erreur lors de la création du manager", "Error creating manager"))
       }
     } catch (error) {
       console.error('Error creating manager:', error)
@@ -270,45 +265,68 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
   // Auto mode: generate credentials and immediately create the manager
   const handleGenerateAndCreate = async () => {
     if (!managerForm.name || !managerForm.surname || !managerForm.role) return
-    const email = `${managerForm.name.toLowerCase()}.${managerForm.surname.toLowerCase()}@tcf-tef.com`
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
-    let password = ""
-    for (let i = 0; i < 12; i++) password += chars.charAt(Math.floor(Math.random() * chars.length))
-    const prefix = "07"
-    let rest = ""
-    for (let i = 0; i < 8; i++) rest += Math.floor(Math.random() * 10).toString()
-    const phone = `${prefix}${rest}`
 
-    const newManager: Manager = {
-      id: Date.now(),
-      name: `${managerForm.name} ${managerForm.surname}`,
-      email,
-      password,
-      phone,
-      status: "pending",
-      role: managerForm.role as "junior" | "content" | "senior",
-      joinDate: new Date().toISOString().split("T")[0],
-      lastActive: new Date().toISOString().split("T")[0],
-      coursesCreated: 0,
-      testsCreated: 0,
-      liveSessionsHosted: 0,
-      studentsManaged: 0,
-      averageRating: 0,
-      totalRevenue: 0,
-      followers: 0,
-      specialties: [],
-      avatar: "/placeholder.svg",
-      permissions: getDefaultPermissions(managerForm.role as "junior" | "content" | "senior"),
-      performance: { contentQuality: 0, studentSatisfaction: 0, engagement: 0, reliability: 0 },
+    try {
+      setIsCreating(true)
+      setError(null)
+      setSuccess(null)
+
+      const email = `${managerForm.name.toLowerCase()}.${managerForm.surname.toLowerCase()}@tcf-tef.com`
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
+      let password = ""
+      for (let i = 0; i < 12; i++) password += chars.charAt(Math.floor(Math.random() * chars.length))
+      const prefix = "07"
+      let rest = ""
+      for (let i = 0; i < 8; i++) rest += Math.floor(Math.random() * 10).toString()
+      const phone = `${prefix}${rest}`
+
+      const managerData = {
+        firstName: managerForm.name,
+        lastName: managerForm.surname,
+        email,
+        phone,
+        role: managerForm.role.toUpperCase(),
+        password,
+        specialties: managerForm.specialties
+      }
+
+      // Call backend API to create manager
+      const response = await apiClient.post('/admin/managers', managerData)
+      if (response.success && response.data?.manager) {
+        const newManager = response.data.manager as any
+        setCreatedManager(newManager)
+        setShowCreatedDialog(true)
+        setSuccess(t("Manager créé avec succès", "Manager created successfully"))
+
+        // Reset form
+        setManagerForm({
+          name: "",
+          surname: "",
+          email: "",
+          phone: "",
+          role: "",
+          password: "",
+          specialties: []
+        })
+
+        // Reload managers list
+        const managersResponse = await apiClient.get('/admin/managers')
+        if (managersResponse.success && managersResponse.data) {
+          const responseData = managersResponse.data as any
+          const managersData = Array.isArray(responseData) ? responseData :
+                              Array.isArray(responseData.data) ? responseData.data :
+                              Array.isArray(responseData.managers) ? responseData.managers : []
+          setManagers(managersData)
+        }
+      } else {
+        setError(response.error?.message || t("Erreur lors de la création du manager", "Error creating manager"))
+      }
+    } catch (error) {
+      console.error('Error creating manager:', error)
+      setError(t("Erreur lors de la création du manager", "Error creating manager"))
+    } finally {
+      setIsCreating(false)
     }
-
-    const existingManagers = JSON.parse(localStorage.getItem("managers") || "[]")
-    existingManagers.push(newManager)
-    localStorage.setItem("managers", JSON.stringify(existingManagers))
-
-    setManagerForm((prev) => ({ ...prev, email, phone, password }))
-    setCreatedManager(newManager)
-    setShowCreatedDialog(true)
   }
 
   const getDefaultPermissions = (role: "junior" | "content" | "senior") => {
@@ -490,6 +508,25 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
           </Button>
           </div>
         </div>
+
+        {/* Success/Error Messages */}
+        {success && (
+          <Card className="bg-green-500/10 border-green-500/20">
+            <CardContent className="p-4 flex items-center space-x-3">
+              <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+              <p className="text-green-700 dark:text-green-400">{success}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {error && (
+          <Card className="bg-red-500/10 border-red-500/20">
+            <CardContent className="p-4 flex items-center space-x-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-700 dark:text-red-400">{error}</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Creation Mode Selection */}
         <Card className="bg-card border-gray-200 dark:border-gray-700">
@@ -679,7 +716,16 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
 
             {creationMode === "manual" && (
               <div className="space-y-4">
-                {/* Phone number field shown earlier (base info) to avoid duplication in manual mode */}
+                <div className="space-y-2">
+                  <Label className="text-foreground">{t("Email", "Email")} *</Label>
+                  <Input
+                    value={managerForm.email}
+                    onChange={(e) => setManagerForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder={t("Entrez l'email", "Enter email")}
+                    type="email"
+                    className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
 
                 <div className="space-y-2">
                   <Label className="text-foreground">{t("Mot de passe", "Password")} *</Label>
@@ -743,7 +789,7 @@ export default function CreateManagerPage({ role: propRole }: CreateManagerPageP
               {creationMode === "manual" && (
               <Button
                 onClick={handleCreateManager}
-                disabled={isCreating || !managerForm.name || !managerForm.surname || !managerForm.role}
+                disabled={isCreating || !managerForm.name || !managerForm.surname || !managerForm.role || !managerForm.email || !managerForm.password}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {isCreating ? (

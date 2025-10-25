@@ -30,7 +30,18 @@ export default function ManagerLoginPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const { language, setLanguage, t } = useLanguage()
-  const { login } = useAuth()
+  const { login, isAuthenticated, isManager, isAdmin, loading } = useAuth()
+
+  // Route guard: If already authenticated as manager/admin, redirect to dashboard
+  useEffect(() => {
+    if (!loading && isAuthenticated && (isManager || isAdmin)) {
+      if (isAdmin) {
+        router.replace('/admin')
+      } else {
+        router.replace('/manager/dashboard')
+      }
+    }
+  }, [loading, isAuthenticated, isManager, isAdmin, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

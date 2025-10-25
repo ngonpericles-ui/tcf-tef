@@ -48,8 +48,8 @@ export default function FilteredSimulationsPage() {
   const searchParams = useSearchParams()
   
   // Get filter parameters from URL
-  const tier = searchParams.get('tier') || 'gratuit'
-  const level = searchParams.get('level') || 'A1-A2'
+  const tier = searchParams?.get('tier') || 'gratuit'
+  const level = searchParams?.get('level') || 'A1-A2'
   
   const [simulations, setSimulations] = useState<Simulation[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,10 +79,10 @@ export default function FilteredSimulationsPage() {
     try {
       setLoading(true)
       // Fetch from the same source as tcf-tef-simulation page
-      const response = await apiClient.get('/content-management/simulations')
+      const response = await apiClient.get('/content-management/management')
 
       if (response.success && response.data) {
-        let allSimulations = response.data.content || []
+        let allSimulations = (response.data as any).content || []
 
         // Filter by subscription tier access
         const filteredSimulations = filterSimulationsByTier(allSimulations, tier)

@@ -35,11 +35,11 @@ export default function AdminContentCreatePage() {
     
     {
       id: "test",
-      title: t("Test", "Test"),
-      description: t("Créer un test d'évaluation", "Create an assessment test"),
+      title: t("Quiz/Questionnaire", "Quiz/Questionnaire"),
+      description: t("Créer un quiz ou questionnaire interactif", "Create an interactive quiz or questionnaire"),
       icon: FileText,
       color: "green",
-      href: `${basePath}/content/upload?type=test`,
+      href: `${basePath}/content/questionnaire`,
       available: true,
       limitations: managerRole === "junior" ? t("Niveaux A1-B1 uniquement", "A1-B1 levels only") : undefined,
     },

@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/AuthContext"
 import { StudySessionProvider } from "@/contexts/StudySessionContext"
 import { useRouter } from "next/navigation"
 import PageShell from "@/components/page-shell"
-import { Skeleton } from "@/components/ui/skeleton"
 import PersonalizedGreeting from "@/components/personalized-greeting"
 import SmartDashboard from "@/components/smart-dashboard"
 import EnhancedHero from "@/components/enhanced-hero"
@@ -16,23 +15,23 @@ import { MessageSquare, Sparkles } from "lucide-react"
 
 // Dynamic imports for better performance
 const Snapshot = dynamic(() => import("@/components/snapshot"), {
-  loading: () => <Skeleton className="h-32 w-full" />,
+  loading: () => <div className="h-32 w-full bg-gray-200 animate-pulse rounded-md" />,
 })
 
 const CourseExplorer = dynamic(() => import("@/components/course-explorer"), {
-  loading: () => <Skeleton className="h-64 w-full" />,
+  loading: () => <div className="h-64 w-full bg-gray-200 animate-pulse rounded-md" />,
 })
 
 const TestsPanel = dynamic(() => import("@/components/tests-panel"), {
-  loading: () => <Skeleton className="h-48 w-full" />,
+  loading: () => <div className="h-48 w-full bg-gray-200 animate-pulse rounded-md" />,
 })
 
 const LiveSessions = dynamic(() => import("@/components/live-sessions"), {
-  loading: () => <Skeleton className="h-40 w-full" />,
+  loading: () => <div className="h-40 w-full bg-gray-200 animate-pulse rounded-md" />,
 })
 
 const Upsell = dynamic(() => import("@/components/upsell"), {
-  loading: () => <Skeleton className="h-32 w-full" />,
+  loading: () => <div className="h-32 w-full bg-gray-200 animate-pulse rounded-md" />,
 })
 
 // Background images for the rotating effect
@@ -89,13 +88,14 @@ export default function StudentHomePage() {
 
       if (!isStudent && user) {
         // Redirect to appropriate dashboard based on role
+        // Allow admins to access student pages
         switch (user.role) {
           case 'ADMIN':
-            router.replace('/admin')
+            // Allow admins to access student pages
             break
           case 'SENIOR_MANAGER':
           case 'JUNIOR_MANAGER':
-            router.replace('/manager/dashboard')
+            router.replace('/manager')
             break
           default:
             router.replace('/welcome')
@@ -114,7 +114,7 @@ export default function StudentHomePage() {
   }
 
   // Show nothing while redirecting
-  if (!isAuthenticated || !isStudent) {
+  if (!isAuthenticated || (!isStudent && user?.role !== 'ADMIN')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>

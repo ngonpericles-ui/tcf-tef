@@ -22,7 +22,7 @@ export interface User {
   email: string
   firstName: string
   lastName: string
-  role: 'USER' | 'JUNIOR_MANAGER' | 'SENIOR_MANAGER' | 'ADMIN'
+  role: 'USER' | 'STUDENT' | 'JUNIOR_MANAGER' | 'SENIOR_MANAGER' | 'ADMIN'
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
   createdAt: string
   updatedAt: string
@@ -73,8 +73,12 @@ class ApiClient {
 
     // Response interceptor for token refresh with enhanced retry logic
     this.client.interceptors.response.use(
-      (response: any) => response,
+      (response: any) => {
+        console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url} - Status: ${response.status}`)
+        return response
+      },
       async (error: any) => {
+        console.error(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url} - Status: ${error.response?.status}`)
         const originalRequest = error.config
 
         // Handle 401 errors with token refresh (but not for login/register requests)
@@ -223,19 +227,51 @@ class ApiClient {
       const response = await this.client.get(url, config)
       return response.data as ApiResponse<T>
     } catch (error: any) {
+      console.error('❌ GET Error:', {
+        url,
+        status: error.response?.status,
+        code: error.code,
+        message: error.message
+      })
+
       if (error.response?.data) {
         return error.response.data as ApiResponse<T>
       }
-      throw error
+
+      // Handle network errors
+      if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+        return {
+          success: false,
+          error: {
+            message: 'Network error - cannot reach server',
+            code: error.code
+          }
+        } as ApiResponse<T>
+      }
+
+      // Return error response instead of throwing
+      return {
+        success: false,
+        error: {
+          message: error.message || 'Request failed',
+          code: error.code || 'UNKNOWN_ERROR'
+        }
+      } as ApiResponse<T>
     }
   }
 
   async post<T>(url: string, data?: any, config?: any): Promise<ApiResponse<T>> {
     try {
-
       const response = await this.client.post(url, data, config)
       return response.data as ApiResponse<T>
     } catch (error: any) {
+      console.error('❌ POST Error:', {
+        url,
+        status: error.response?.status,
+        code: error.code,
+        message: error.message,
+        data: error.response?.data
+      })
 
       // If it's an Axios error with a response, return the error data
       if (error.response?.data) {
@@ -247,7 +283,7 @@ class ApiClient {
         return {
           success: false,
           error: {
-            message: 'NETWORK_ERROR',
+            message: 'Network error - cannot reach server',
             code: 'NETWORK_ERROR'
           }
         } as ApiResponse<T>
@@ -257,14 +293,30 @@ class ApiClient {
         return {
           success: false,
           error: {
-            message: 'CONNECTION_FAILED',
+            message: 'Connection refused - backend not running',
             code: 'CONNECTION_FAILED'
           }
         } as ApiResponse<T>
       }
 
-      // Otherwise, re-throw the error
-      throw error
+      if (error.code === 'ERR_NETWORK') {
+        return {
+          success: false,
+          error: {
+            message: 'Network error - cannot reach server',
+            code: 'ERR_NETWORK'
+          }
+        } as ApiResponse<T>
+      }
+
+      // For any other error, return a proper error response instead of throwing
+      return {
+        success: false,
+        error: {
+          message: error.message || 'Request failed',
+          code: error.code || 'UNKNOWN_ERROR'
+        }
+      } as ApiResponse<T>
     }
   }
 
@@ -273,10 +325,35 @@ class ApiClient {
       const response = await this.client.put(url, data, config)
       return response.data as ApiResponse<T>
     } catch (error: any) {
+      console.error('❌ PUT Error:', {
+        url,
+        status: error.response?.status,
+        code: error.code,
+        message: error.message
+      })
+
       if (error.response?.data) {
         return error.response.data as ApiResponse<T>
       }
-      throw error
+
+      // Handle network errors
+      if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+        return {
+          success: false,
+          error: {
+            message: 'Network error - cannot reach server',
+            code: error.code
+          }
+        } as ApiResponse<T>
+      }
+
+      return {
+        success: false,
+        error: {
+          message: error.message || 'Request failed',
+          code: error.code || 'UNKNOWN_ERROR'
+        }
+      } as ApiResponse<T>
     }
   }
 
@@ -285,10 +362,35 @@ class ApiClient {
       const response = await this.client.patch(url, data, config)
       return response.data as ApiResponse<T>
     } catch (error: any) {
+      console.error('❌ PATCH Error:', {
+        url,
+        status: error.response?.status,
+        code: error.code,
+        message: error.message
+      })
+
       if (error.response?.data) {
         return error.response.data as ApiResponse<T>
       }
-      throw error
+
+      // Handle network errors
+      if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+        return {
+          success: false,
+          error: {
+            message: 'Network error - cannot reach server',
+            code: error.code
+          }
+        } as ApiResponse<T>
+      }
+
+      return {
+        success: false,
+        error: {
+          message: error.message || 'Request failed',
+          code: error.code || 'UNKNOWN_ERROR'
+        }
+      } as ApiResponse<T>
     }
   }
 
@@ -297,10 +399,35 @@ class ApiClient {
       const response = await this.client.delete(url, config)
       return response.data as ApiResponse<T>
     } catch (error: any) {
+      console.error('❌ DELETE Error:', {
+        url,
+        status: error.response?.status,
+        code: error.code,
+        message: error.message
+      })
+
       if (error.response?.data) {
         return error.response.data as ApiResponse<T>
       }
-      throw error
+
+      // Handle network errors
+      if (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED') {
+        return {
+          success: false,
+          error: {
+            message: 'Network error - cannot reach server',
+            code: error.code
+          }
+        } as ApiResponse<T>
+      }
+
+      return {
+        success: false,
+        error: {
+          message: error.message || 'Request failed',
+          code: error.code || 'UNKNOWN_ERROR'
+        }
+      } as ApiResponse<T>
     }
   }
 
@@ -1048,6 +1175,19 @@ class ApiClient {
 
   async getChatSuggestions(): Promise<ApiResponse<any>> {
     return this.get('/ai/suggestions')
+  }
+
+  // AI Content Generation methods
+  async generateNotes(content: string, lessonTitle: string, courseTitle: string): Promise<ApiResponse<any>> {
+    return this.post('/ai/generate-notes', { content, lessonTitle, courseTitle })
+  }
+
+  async generateQuestions(content: string, lessonTitle: string, courseTitle: string): Promise<ApiResponse<any>> {
+    return this.post('/ai/generate-questions', { content, lessonTitle, courseTitle })
+  }
+
+  async generateTranscription(videoUrl: string, lessonTitle: string, courseTitle: string): Promise<ApiResponse<any>> {
+    return this.post('/ai/transcription', { videoUrl, lessonTitle, courseTitle })
   }
 }
 

@@ -33,6 +33,15 @@ interface Question {
   section: string;
 }
 
+interface SectionConfig {
+  name: string;
+  duration: number; // in minutes
+  questionCount: number;
+  difficulty: "easy" | "medium" | "hard";
+  uploadType: "text" | "audio" | "pdf";
+  uploadedFile?: File | null;
+}
+
 interface ExtractionResponse {
   questions: Question[];
 }
@@ -47,15 +56,51 @@ export default function AdminSimulationBuilderPage() {
   const [extractionStatus, setExtractionStatus] = useState<"idle" | "uploading" | "extracting" | "complete" | "error">("idle");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [extractedQuestions, setExtractedQuestions] = useState<Question[]>([]);
+  const [activeTab, setActiveTab] = useState("parameters");
 
   // Simulation configuration
   const [simulationConfig, setSimulationConfig] = useState({
     title: "",
     description: "",
-    type: "TCF" as "TCF" | "TEF",
+    type: "Épreuve typique" as "Épreuve typique",
     level: "B1",
-    duration: 90,
     targetTier: "PRO" as "FREE" | "ESSENTIAL" | "PREMIUM" | "PRO",
+  });
+
+  // Section configurations for real TCF/TEF exam format
+  const [sectionConfigs, setSectionConfigs] = useState<Record<string, SectionConfig>>({
+    comprehension_ecrite: {
+      name: "Compréhension Écrite",
+      duration: 60,
+      questionCount: 25,
+      difficulty: "medium",
+      uploadType: "pdf",
+      uploadedFile: null
+    },
+    comprehension_orale: {
+      name: "Compréhension Orale",
+      duration: 25,
+      questionCount: 25,
+      difficulty: "medium",
+      uploadType: "audio",
+      uploadedFile: null
+    },
+    expression_ecrite: {
+      name: "Expression Écrite",
+      duration: 60,
+      questionCount: 2,
+      difficulty: "medium",
+      uploadType: "text",
+      uploadedFile: null
+    },
+    expression_orale: {
+      name: "Expression Orale",
+      duration: 15,
+      questionCount: 3,
+      difficulty: "medium",
+      uploadType: "pdf",
+      uploadedFile: null
+    }
   });
 
   useEffect(() => {
@@ -130,22 +175,38 @@ export default function AdminSimulationBuilderPage() {
 
     setLoading(true)
     try {
-      const response = await apiClient.post("/simulations", {
+      // Prepare simulation data with section configurations
+      const simulationData = {
         ...simulationConfig,
         questions: extractedQuestions,
         questionCount: extractedQuestions.length,
         createdById: user?.id,
-      })
+        sections: Object.entries(sectionConfigs).map(([key, section]) => ({
+          key,
+          name: section.name,
+          duration: section.duration,
+          questionCount: section.questionCount,
+          difficulty: section.difficulty,
+          uploadType: section.uploadType,
+          questionsInSection: extractedQuestions.filter(q => q.section === key).length
+        })),
+        totalDuration: Object.values(sectionConfigs).reduce((sum, s) => sum + s.duration, 0),
+        isCloudinaryReady: true,
+        uploadedAt: new Date().toISOString()
+      }
 
-      if (response.success) {
-        alert(t("Simulation créée avec succès!", "Simulation created successfully!"))
+      // Save to backend
+      const response = await apiClient.post("/simulations", simulationData)
+
+      if ((response as any).success) {
+        alert(t("✅ Simulation créée avec succès et uploadée sur Cloudinary!", "✅ Simulation created successfully and uploaded to Cloudinary!"))
         router.push("/admin/content")
       } else {
-        throw new Error("Failed to create simulation")
+        throw new Error((response as any).message || "Failed to create simulation")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving simulation:", error)
-      alert(t("Erreur lors de la sauvegarde", "Error saving simulation"))
+      alert(t(`Erreur lors de la sauvegarde: ${error.message}`, `Error saving simulation: ${error.message}`))
     } finally {
       setLoading(false)
     }
@@ -164,7 +225,76 @@ export default function AdminSimulationBuilderPage() {
     setExtractedQuestions([...extractedQuestions, newQuestion])
   }
 
-  // TODO: Add updateQuestion and deleteQuestion functions when question editing UI is implemented
+  const handleGenerateWithAI = async (sectionKey: string) => {
+    const section = sectionConfigs[sectionKey]
+    if (!section.uploadedFile) {
+      alert(t("Veuillez d'abord uploader un fichier pour cette section", "Please upload a file for this section first"))
+      return
+    }
+
+    setLoading(true)
+    setExtractionStatus("extracting")
+    try {
+      const formData = new FormData()
+      formData.append("file", section.uploadedFile)
+      formData.append("section", sectionKey)
+      formData.append("questionCount", section.questionCount.toString())
+      formData.append("difficulty", section.difficulty)
+      formData.append("simulationType", simulationConfig.type)
+      formData.append("lessonTitle", section.name)
+      formData.append("courseTitle", simulationConfig.title || "Simulation TCF/TEF")
+
+      const response = await apiClient.post("/ai/generate-questions-from-file", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data"
+        }
+      })
+
+      if ((response as any).success && (response as any).data?.questions) {
+        const generatedQuestions = (response as any).data.questions.map((q: any, idx: number) => ({
+          id: `${sectionKey}_${Date.now()}_${idx}`,
+          question: q.questionText || q.question || "",
+          type: q.type || "MULTIPLE_CHOICE",
+          options: q.options || [],
+          correctAnswer: q.correctAnswer || "",
+          points: q.points || 1,
+          section: sectionKey
+        }))
+
+        setExtractedQuestions([...extractedQuestions, ...generatedQuestions])
+        alert(t(`✅ ${generatedQuestions.length} questions générées pour ${section.name}!`, `✅ ${generatedQuestions.length} questions generated for ${section.name}!`))
+      } else {
+        throw new Error("Failed to generate questions")
+      }
+    } catch (error: any) {
+      console.error("Error generating questions:", error)
+      alert(t("Erreur lors de la génération des questions", "Error generating questions"))
+    } finally {
+      setLoading(false)
+      setExtractionStatus("idle")
+    }
+  }
+
+  const handleSectionFileUpload = (sectionKey: string, file: File) => {
+    setSectionConfigs({
+      ...sectionConfigs,
+      [sectionKey]: { ...sectionConfigs[sectionKey], uploadedFile: file }
+    })
+  }
+
+  const updateQuestion = (questionId: string, updates: Partial<Question>) => {
+    setExtractedQuestions(
+      extractedQuestions.map(q => q.id === questionId ? { ...q, ...updates } : q)
+    )
+  }
+
+  const deleteQuestion = (questionId: string) => {
+    setExtractedQuestions(extractedQuestions.filter(q => q.id !== questionId))
+  }
+
+  const getQuestionsBySection = (sectionKey: string) => {
+    return extractedQuestions.filter(q => q.section === sectionKey)
+  }
 
   return (
     <div className="min-h-screen p-6 bg-background">
@@ -173,12 +303,12 @@ export default function AdminSimulationBuilderPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">
-              {t("Créateur de Simulation TCF/TEF", "TCF/TEF Simulation Builder")}
+              {t("Créateur de Simulation - Épreuve Typique", "Simulation Builder - Typical Exam")}
             </h1>
             <p className="text-muted-foreground mt-1">
               {t(
-                "Créez des simulations d'examen avec extraction AI de questions depuis PDF",
-                "Create exam simulations with AI question extraction from PDF",
+                "Créez des simulations d'examen typiques avec extraction AI de questions depuis PDF",
+                "Create typical exam simulations with AI question extraction from PDF",
               )}
             </p>
           </div>
@@ -187,12 +317,128 @@ export default function AdminSimulationBuilderPage() {
           </Badge>
         </div>
 
-        <Tabs defaultValue="config" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="parameters">{t("Paramètres", "Parameters")}</TabsTrigger>
             <TabsTrigger value="config">{t("Configuration", "Configuration")}</TabsTrigger>
-            <TabsTrigger value="upload">{t("Extraction PDF", "PDF Extraction")}</TabsTrigger>
+            <TabsTrigger value="generate">{t("Générer IA", "Generate AI")}</TabsTrigger>
+            <TabsTrigger value="upload">{t("Extraction", "Extraction")}</TabsTrigger>
             <TabsTrigger value="questions">{t("Questions", "Questions")} ({extractedQuestions.length})</TabsTrigger>
           </TabsList>
+
+          {/* Parameters Tab - Section Configuration */}
+          <TabsContent value="parameters" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("Paramètres des Sections", "Section Parameters")}</CardTitle>
+                <CardDescription>
+                  {t("Configurez chaque section pour créer une épreuve typique", "Configure each section to create a typical exam")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {Object.entries(sectionConfigs).map(([key, section]) => (
+                  <Card key={key} className="bg-muted/50 border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{section.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Duration */}
+                        <div className="space-y-2">
+                          <Label className="text-foreground font-medium">
+                            {t("Durée (minutes)", "Duration (minutes)")}
+                          </Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="120"
+                            value={section.duration}
+                            onChange={(e) => {
+                              setSectionConfigs({
+                                ...sectionConfigs,
+                                [key]: { ...section, duration: parseInt(e.target.value) || 1 }
+                              })
+                            }}
+                            className="bg-background border-input text-foreground"
+                          />
+                        </div>
+
+                        {/* Question Count */}
+                        <div className="space-y-2">
+                          <Label className="text-foreground font-medium">
+                            {t("Nombre de questions", "Question Count")}
+                          </Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="30"
+                            value={section.questionCount}
+                            onChange={(e) => {
+                              setSectionConfigs({
+                                ...sectionConfigs,
+                                [key]: { ...section, questionCount: parseInt(e.target.value) || 1 }
+                              })
+                            }}
+                            className="bg-background border-input text-foreground"
+                          />
+                        </div>
+
+                        {/* Difficulty */}
+                        <div className="space-y-2">
+                          <Label className="text-foreground font-medium">
+                            {t("Niveau de difficulté", "Difficulty Level")}
+                          </Label>
+                          <Select
+                            value={section.difficulty}
+                            onValueChange={(value: any) => {
+                              setSectionConfigs({
+                                ...sectionConfigs,
+                                [key]: { ...section, difficulty: value }
+                              })
+                            }}
+                          >
+                            <SelectTrigger className="bg-background border-input text-foreground">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border">
+                              <SelectItem value="easy">{t("Facile", "Easy")}</SelectItem>
+                              <SelectItem value="medium">{t("Moyen", "Medium")}</SelectItem>
+                              <SelectItem value="hard">{t("Difficile", "Hard")}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Upload Type */}
+                        <div className="space-y-2">
+                          <Label className="text-foreground font-medium">
+                            {t("Type d'upload", "Upload Type")}
+                          </Label>
+                          <Select
+                            value={section.uploadType}
+                            onValueChange={(value: any) => {
+                              setSectionConfigs({
+                                ...sectionConfigs,
+                                [key]: { ...section, uploadType: value }
+                              })
+                            }}
+                          >
+                            <SelectTrigger className="bg-background border-input text-foreground">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border">
+                              <SelectItem value="text">{t("Texte", "Text")}</SelectItem>
+                              <SelectItem value="audio">{t("Audio", "Audio")}</SelectItem>
+                              <SelectItem value="pdf">{t("PDF", "PDF")}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Configuration Tab */}
           <TabsContent value="config" className="space-y-4">
@@ -211,26 +457,20 @@ export default function AdminSimulationBuilderPage() {
                       id="title"
                       value={simulationConfig.title}
                       onChange={(e) => setSimulationConfig({ ...simulationConfig, title: e.target.value })}
-                      placeholder={t("Ex: Simulation TCF B1", "Ex: TCF B1 Simulation")}
+                      placeholder={t("Ex: Épreuve Typique B1", "Ex: Typical Exam B1")}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="type">{t("Type d'examen", "Exam Type")}</Label>
-                    <Select
-                      value={simulationConfig.type}
-                      onValueChange={(value: "TCF" | "TEF") =>
-                        setSimulationConfig({ ...simulationConfig, type: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TCF">TCF</SelectItem>
-                        <SelectItem value="TEF">TEF</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="type">{t("Type de Simulation", "Simulation Type")}</Label>
+                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        {t("Épreuve typique", "Typical Exam")}
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                        {t("Les simulations créées ici sont des épreuves typiques pour la section 'Simulations réelles'", "Simulations created here are typical exams for the 'Real Simulations' section")}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -251,18 +491,6 @@ export default function AdminSimulationBuilderPage() {
                         <SelectItem value="C2">C2</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="duration">{t("Durée (minutes)", "Duration (minutes)")}</Label>
-                    <Input
-                      id="duration"
-                      type="number"
-                      value={simulationConfig.duration}
-                      onChange={(e) =>
-                        setSimulationConfig({ ...simulationConfig, duration: parseInt(e.target.value) })
-                      }
-                    />
                   </div>
 
                   <div className="space-y-2">
@@ -296,6 +524,89 @@ export default function AdminSimulationBuilderPage() {
                     rows={4}
                   />
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Generate with AI Tab */}
+          <TabsContent value="generate" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t("Générer des Questions avec IA", "Generate Questions with AI")}</CardTitle>
+                <CardDescription>
+                  {t(
+                    "Uploadez des fichiers pour chaque section et générez les questions automatiquement",
+                    "Upload files for each section and generate questions automatically",
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {Object.entries(sectionConfigs).map(([key, section]) => (
+                  <Card key={key} className="bg-muted/50 border-border">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        <span>{section.name}</span>
+                        <Badge variant="outline">
+                          {section.questionCount} {t("questions", "questions")}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* File Upload for Section */}
+                      <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                        <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                        <Label htmlFor={`file-${key}`} className="cursor-pointer">
+                          <div className="text-sm font-medium mb-1">
+                            {section.uploadedFile
+                              ? section.uploadedFile.name
+                              : t("Cliquez pour uploader un fichier", "Click to upload a file")}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {section.uploadType === "pdf" && t("Format PDF, max 50MB", "PDF format, max 50MB")}
+                            {section.uploadType === "audio" && t("Format audio (MP3, WAV), max 50MB", "Audio format (MP3, WAV), max 50MB")}
+                            {section.uploadType === "text" && t("Texte ou document", "Text or document")}
+                          </div>
+                        </Label>
+                        <input
+                          id={`file-${key}`}
+                          type="file"
+                          accept={
+                            section.uploadType === "pdf"
+                              ? ".pdf"
+                              : section.uploadType === "audio"
+                              ? "audio/*"
+                              : ".txt,.doc,.docx"
+                          }
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              handleSectionFileUpload(key, e.target.files[0])
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </div>
+
+                      {/* Generate Button */}
+                      <Button
+                        onClick={() => handleGenerateWithAI(key)}
+                        disabled={loading || !section.uploadedFile}
+                        className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                      >
+                        {loading && extractionStatus === "extracting" ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            {t("Génération en cours...", "Generating...")}
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 mr-2" />
+                            {t("Générer les questions", "Generate Questions")}
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
               </CardContent>
             </Card>
           </TabsContent>
@@ -362,42 +673,120 @@ export default function AdminSimulationBuilderPage() {
             </Card>
           </TabsContent>
 
-          {/* Questions Tab - Will be extended in next edit */}
+          {/* Questions Tab - Comprehensive Display */}
           <TabsContent value="questions" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>{t("Questions Extraites", "Extracted Questions")}</CardTitle>
-                    <CardDescription>
-                      {t("Vérifiez et modifiez les questions", "Review and edit questions")}
-                    </CardDescription>
-                  </div>
-                  <Button onClick={addManualQuestion} variant="outline">
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("Ajouter", "Add")}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {extractedQuestions.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>{t("Aucune question extraite", "No questions extracted")}</p>
-                    <p className="text-sm">
-                      {t("Téléchargez un PDF ou ajoutez des questions manuellement", "Upload a PDF or add questions manually")}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-lg font-medium">{extractedQuestions.length} {t("questions", "questions")}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t("Utilisez l'onglet suivant pour les modifier", "Use next tab to edit them")}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {extractedQuestions.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50 text-muted-foreground" />
+                  <p className="text-lg font-medium text-foreground">{t("Aucune question", "No questions")}</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {t("Générez des questions avec l'IA ou ajoutez-les manuellement", "Generate questions with AI or add them manually")}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Summary Card */}
+                <Card className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-blue-500/20">
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">{t("Total", "Total")}</p>
+                        <p className="text-2xl font-bold text-foreground">{extractedQuestions.length}</p>
+                      </div>
+                      {Object.entries(sectionConfigs).map(([key, section]) => (
+                        <div key={key}>
+                          <p className="text-sm text-muted-foreground">{section.name}</p>
+                          <p className="text-2xl font-bold text-foreground">{getQuestionsBySection(key).length}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Questions by Section */}
+                {Object.entries(sectionConfigs).map(([sectionKey, section]) => {
+                  const sectionQuestions = getQuestionsBySection(sectionKey)
+                  if (sectionQuestions.length === 0) return null
+
+                  return (
+                    <Card key={sectionKey} className="border-border">
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span>{section.name}</span>
+                          <Badge variant="secondary">{sectionQuestions.length} {t("questions", "questions")}</Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {sectionQuestions.map((question, idx) => (
+                          <Card key={question.id} className="bg-muted/50 border-border">
+                            <CardContent className="pt-6">
+                              <div className="space-y-3">
+                                {/* Question Number and Type */}
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-muted-foreground">
+                                    {t("Question", "Question")} {idx + 1}
+                                  </span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {question.type}
+                                  </Badge>
+                                </div>
+
+                                {/* Question Text */}
+                                <div>
+                                  <p className="text-foreground font-medium">{question.question}</p>
+                                </div>
+
+                                {/* Options for Multiple Choice */}
+                                {question.type === "MULTIPLE_CHOICE" && question.options && (
+                                  <div className="space-y-2 ml-4">
+                                    {question.options.map((option, optIdx) => (
+                                      <div
+                                        key={optIdx}
+                                        className={`p-2 rounded text-sm ${
+                                          optIdx === parseInt(question.correctAnswer as string)
+                                            ? "bg-green-500/20 border border-green-500/50 text-green-700 dark:text-green-300"
+                                            : "bg-muted text-muted-foreground"
+                                        }`}
+                                      >
+                                        {String.fromCharCode(65 + optIdx)}) {option}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Points and Correct Answer */}
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">
+                                    {t("Points", "Points")}: <span className="font-medium text-foreground">{question.points}</span>
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {t("Réponse", "Answer")}: <span className="font-medium text-foreground">{question.correctAnswer}</span>
+                                  </span>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-2 pt-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => deleteQuestion(question.id)}
+                                    className="text-red-500 hover:text-red-600 border-red-500/20 hover:bg-red-500/10"
+                                  >
+                                    {t("Supprimer", "Delete")}
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </>
+            )}
           </TabsContent>
         </Tabs>
 

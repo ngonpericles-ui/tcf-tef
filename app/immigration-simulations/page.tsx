@@ -73,11 +73,41 @@ function ImmigrationPageContent() {
   const [simulations, setSimulations] = useState<ImmigrationSimulation[]>([]);
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [subscriptionTier, setSubscriptionTier] = useState<string>('FREE');
+  const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
 
   useEffect(() => {
-    fetchSimulations();
-    fetchMonthlyCount();
-  }, []);
+    // Only check access when userProfile is loaded
+    if (userProfile) {
+      checkSubscriptionAccess();
+      setHasCheckedAccess(true);
+    }
+  }, [userProfile]);
+
+  useEffect(() => {
+    // Only fetch data if access is granted
+    if (hasCheckedAccess && subscriptionTier === 'PRO') {
+      fetchSimulations();
+      fetchMonthlyCount();
+    }
+  }, [hasCheckedAccess, subscriptionTier]);
+
+  const checkSubscriptionAccess = async () => {
+    try {
+      // Check user subscription tier
+      const userTier = userProfile?.subscriptionTier || 'FREE';
+      setSubscriptionTier(userTier);
+
+      // Immigration simulations require Pro subscription only
+      if (userTier !== 'PRO') {
+        toast.error('Les simulations d\'immigration nécessitent un abonnement Pro');
+        router.push('/abonnement');
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    }
+  };
 
   const fetchSimulations = async () => {
     try {
@@ -235,6 +265,28 @@ function ImmigrationPageContent() {
                   </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Subscription Access Alert */}
+        {subscriptionTier !== 'PRO' && (
+          <div className="mb-8 p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+            <div className="flex items-start">
+              <Crown className="w-6 h-6 text-red-500 mt-0.5 mr-4" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-red-800 dark:text-red-400">Abonnement Pro requis</h3>
+                <p className="text-red-700 dark:text-red-300 mt-2">
+                  Les simulations d'immigration sont exclusivement réservées aux abonnés Pro. 
+                  <Button 
+                    size="sm" 
+                    className="ml-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                    onClick={() => router.push('/abonnement')}
+                  >
+                    Passer à Pro
+                  </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Status Alerts */}
                   {monthlyCount >= 2 && (
           <div className="mb-8 p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">

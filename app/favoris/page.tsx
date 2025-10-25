@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import PageShell from "@/components/page-shell"
 import Link from "next/link"
 import { Bookmark, ExternalLink, Trash2, Filter, Search, BookOpen, PenSquare, Video, Award } from "lucide-react"
@@ -8,85 +8,154 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useLang } from "@/components/language-provider"
+import { apiClient } from "@/lib/api-client"
 import Image from "next/image"
 
-type FavoriteType = "course" | "test" | "post" | "session"
+type FavoriteType = "COURSE" | "TEST" | "POST" | "LIVE_SESSION"
 
 type Favorite = {
   id: string
-  title: string
-  titleEn: string
-  type: FavoriteType
+  contentId: string
+  contentType: FavoriteType
+  title?: string
+  titleEn?: string
   level?: string
-  author: string
-  image: string
+  author?: string
+  image?: string
   addedDate: string
   lastAccessed?: string
   progress?: number
   tags: string[]
+  notes?: string
 }
 
-const mockFavorites: Favorite[] = []
-
 const typeIcons = {
-  course: BookOpen,
-  test: Award,
-  post: PenSquare,
-  session: Video,
+  COURSE: BookOpen,
+  TEST: Award,
+  POST: PenSquare,
+  LIVE_SESSION: Video,
 }
 
 const typeColors = {
-  course: "#2ECC71",
-  test: "#007BFF",
-  post: "#8E44AD",
-  session: "#F39C12",
+  COURSE: "#2ECC71",
+  TEST: "#007BFF",
+  POST: "#8E44AD",
+  LIVE_SESSION: "#F39C12",
 }
 
 export default function FavoritesPage() {
   const { lang } = useLang()
-  const [favorites, setFavorites] = useState(mockFavorites)
+  const [favorites, setFavorites] = useState<Favorite[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedType, setSelectedType] = useState<FavoriteType | "all">("all")
+  const [loading, setLoading] = useState(true)
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
+
+  const fetchFavorites = async () => {
+    try {
+      setLoading(true)
+      console.log('🔍 Fetching favorites...')
+
+      // Fetch all favorites with content type filter
+      const response = await apiClient.get('/favorites?contentType=COURSE')
+      console.log('🔍 Favorites API Response:', response)
+
+      if ((response as any).success) {
+        const favs = (response as any).data?.favorites || []
+        console.log('📚 Favorites data:', favs)
+        console.log('📚 Favorites count:', favs.length)
+
+        // Fetch content details for each favorite
+        const favoritesWithDetails = await Promise.all(
+          favs.map(async (fav: any) => {
+            try {
+              if (fav.contentType === 'COURSE') {
+                const courseResponse = await apiClient.get(`/courses/${fav.contentId}`)
+                if ((courseResponse as any).success && (courseResponse as any).data) {
+                  const course = (courseResponse as any).data.course || (courseResponse as any).data
+                  return {
+                    ...fav,
+                    title: course.title,
+                    titleEn: course.titleEn,
+                    level: course.level,
+                    author: course.createdBy?.firstName + ' ' + course.createdBy?.lastName || 'Unknown',
+                    image: course.image || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&h=450&fit=crop&q=80",
+                    tags: course.tags || []
+                  }
+                }
+              }
+              return fav
+            } catch (error) {
+              console.error(`❌ Error fetching content for favorite ${fav.id}:`, error)
+              return fav
+            }
+          })
+        )
+
+        setFavorites(favoritesWithDetails)
+
+        if (favs.length === 0) {
+          console.log('ℹ️ No favorites found for COURSE content type')
+        }
+      } else {
+        console.error('❌ Favorites API not successful:', response)
+        setFavorites([])
+      }
+    } catch (error) {
+      console.error('❌ Error fetching favorites:', error)
+      setFavorites([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchFavorites()
+  }, [])
 
   const filteredFavorites = favorites.filter((fav) => {
     const matchesSearch =
       searchQuery === "" ||
-      fav.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      fav.titleEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      fav.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      (fav.title?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+      (fav.titleEn?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+      (fav.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())) ?? false)
 
-    const matchesType = selectedType === "all" || fav.type === selectedType
+    const matchesType = selectedType === "all" || fav.contentType === selectedType
 
     return matchesSearch && matchesType
   })
 
-  const removeFavorite = (id: string) => {
-    setFavorites((prev) => prev.filter((fav) => fav.id !== id))
+  const removeFavorite = async (id: string) => {
+    try {
+      await apiClient.delete(`/favorites/${id}`)
+      setFavorites((prev) => prev.filter((fav) => fav.id !== id))
+    } catch (error) {
+      console.error('Error removing favorite:', error)
+    }
   }
 
   const getTypeLabel = (type: FavoriteType) => {
     switch (type) {
-      case "course":
+      case "COURSE":
         return t("Cours", "Course")
-      case "test":
+      case "TEST":
         return t("Test", "Test")
-      case "post":
+      case "POST":
         return t("Article", "Post")
-      case "session":
+      case "LIVE_SESSION":
         return t("Session", "Session")
     }
   }
 
   const getItemLink = (favorite: Favorite) => {
-    switch (favorite.type) {
-      case "course":
+    switch (favorite.contentType) {
+      case "COURSE":
         return "/cours"
-      case "test":
+      case "TEST":
         return "/tests"
-      case "post":
-        return `/posts/${favorite.id}`
-      case "session":
+      case "POST":
+        return `/posts/${favorite.contentId}`
+      case "LIVE_SESSION":
         return "/live"
       default:
         return "/"
@@ -105,15 +174,29 @@ export default function FavoritesPage() {
     <PageShell>
       <main className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8 py-10">
         <header className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-semibold font-[var(--font-poppins)] mb-2 text-foreground">
-            {t("Mes favoris", "My favorites")}
-          </h1>
-          <p className="text-muted-foreground">
-            {t(
-              "Retrouvez tous vos contenus sauvegardés : cours, tests, articles et sessions.",
-              "Find all your saved content: courses, tests, articles and sessions.",
-            )}
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold font-[var(--font-poppins)] mb-2 text-foreground">
+                {t("Mes favoris", "My favorites")}
+              </h1>
+              <p className="text-muted-foreground">
+                {t(
+                  "Retrouvez tous vos contenus sauvegardés : cours, tests, articles et sessions.",
+                  "Find all your saved content: courses, tests, articles and sessions.",
+                )}
+              </p>
+            </div>
+            <Button 
+              onClick={fetchFavorites} 
+              disabled={loading}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Bookmark className="h-4 w-4" />
+              {loading ? t("Chargement...", "Loading...") : t("Actualiser", "Refresh")}
+            </Button>
+          </div>
         </header>
 
         {/* Search and Filter */}
@@ -136,10 +219,10 @@ export default function FavoritesPage() {
                 className="h-9 rounded-md border bg-background px-3 text-sm"
               >
                 <option value="all">{t("Tous types", "All types")}</option>
-                <option value="course">{t("Cours", "Courses")}</option>
-                <option value="test">{t("Tests", "Tests")}</option>
-                <option value="post">{t("Articles", "Posts")}</option>
-                <option value="session">{t("Sessions", "Sessions")}</option>
+                <option value="COURSE">{t("Cours", "Courses")}</option>
+                <option value="TEST">{t("Tests", "Tests")}</option>
+                <option value="POST">{t("Articles", "Posts")}</option>
+                <option value="LIVE_SESSION">{t("Sessions", "Sessions")}</option>
               </select>
             </div>
           </div>
@@ -149,7 +232,7 @@ export default function FavoritesPage() {
         <section className="mb-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(typeColors).map(([type, color]) => {
-              const count = favorites.filter((f) => f.type === type).length
+              const count = favorites.filter((f) => f.contentType === type).length
               const Icon = typeIcons[type as FavoriteType]
 
               return (
@@ -172,7 +255,12 @@ export default function FavoritesPage() {
 
         {/* Favorites Grid */}
         <section>
-          {filteredFavorites.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary"></div>
+              <p className="mt-4 text-muted-foreground">{t("Chargement...", "Loading...")}</p>
+            </div>
+          ) : filteredFavorites.length === 0 ? (
             <div className="text-center py-12">
               <Bookmark className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2 text-foreground">
@@ -192,8 +280,8 @@ export default function FavoritesPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredFavorites.map((favorite) => {
-                const Icon = typeIcons[favorite.type]
-                const typeColor = typeColors[favorite.type]
+                const Icon = typeIcons[favorite.contentType]
+                const typeColor = typeColors[favorite.contentType]
 
                 return (
                   <div
@@ -203,14 +291,14 @@ export default function FavoritesPage() {
                     <div className="relative aspect-video overflow-hidden">
                       <Image
                         src={favorite.image || "/placeholder.svg"}
-                        alt={lang === "fr" ? favorite.title : favorite.titleEn}
+                        alt={lang === "fr" ? (favorite.title || '') : (favorite.titleEn || '')}
                         fill
                         className="object-cover group-hover:scale-105 transition-transform duration-200"
                       />
                       <div className="absolute top-3 left-3 flex items-center gap-2">
                         <Badge className="text-white border-0" style={{ backgroundColor: typeColor }}>
                           <Icon className="h-3 w-3 mr-1" />
-                          {getTypeLabel(favorite.type)}
+                          {getTypeLabel(favorite.contentType)}
                         </Badge>
                         {favorite.level && (
                           <Badge variant="outline" className="bg-white/90 text-black border-0">

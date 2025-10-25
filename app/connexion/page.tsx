@@ -26,7 +26,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
-  const [acceptTerms, setAcceptTerms] = useState(false)
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false)
+  const [acceptTerms, setAcceptTerms] = useState(true) // Always true, no terms required
   const router = useRouter()
 
   // Use AuthContext properly
@@ -42,7 +43,7 @@ export default function LoginPage() {
         return '/admin'
       case 'SENIOR_MANAGER':
       case 'JUNIOR_MANAGER':
-        return '/manager/dashboard'
+        return '/manager'
       default:
         return '/home'
     }
@@ -65,6 +66,9 @@ export default function LoginPage() {
     return () => clearTimeout(timer)
   }, [])
 
+  // Removed automatic redirect logic to prevent session sharing issues between browser tabs
+  // Let the Alert component handle admin display and login handlers manage student redirects
+
   // Removed automatic redirect to prevent race conditions
   // Let the login handlers manage redirects explicitly
 
@@ -75,51 +79,45 @@ export default function LoginPage() {
     setError("")
     setSuccess("")
 
-    if (!acceptTerms) {
-      setError(t("Veuillez accepter les conditions d'utilisation", "Please accept the terms and conditions"))
-      setIsLoading(false)
-      return
-    }
+    // Terms are always accepted now
 
     try {
+      // Clear any existing session before student login
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth')
+        localStorage.removeItem('role')
+        localStorage.removeItem('user_id')
+        localStorage.removeItem('user_subscription_tier')
+        // Clear cookies
+        document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'user_subscription_tier=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      }
       const result = await authLogin(email, password)
 
       if (result.success) {
         const userData = result.user
         if (userData && userData.role) {
-          // Validate that only students can login through this page
+          // This should not happen since we prevent admins/managers from accessing this page
+          // But keep as safety check
           if (!['USER', 'STUDENT'].includes(userData.role)) {
-            let redirectMessage = ""
-            let redirectPath = ""
-
-            if (userData.role === 'ADMIN') {
-              redirectMessage = t("Vous êtes administrateur. Veuillez utiliser la page de connexion admin.", "You are an administrator. Please use the admin login page.")
-              redirectPath = "/admin/login"
-            } else if (['SENIOR_MANAGER', 'JUNIOR_MANAGER'].includes(userData.role)) {
-              redirectMessage = t("Vous êtes manager. Veuillez utiliser la page de connexion manager.", "You are a manager. Please use the manager login page.")
-              redirectPath = "/manager"
-            }
-
-            setError(redirectMessage)
-            setIsLoading(false)
-
-            // Redirect to appropriate login page after a delay
-            setTimeout(() => {
-              router.push(redirectPath)
-            }, 2000)
+            console.log('⚠️ Student login page: Non-student role detected:', userData.role)
+            // Don't redirect, just show error message
+            setError(t("Cette page est réservée aux étudiants. Veuillez utiliser la page de connexion appropriée.", "This page is for students only. Please use the appropriate login page."))
             return
           }
 
           setSuccess(t("Connexion réussie! Redirection...", "Login successful! Redirecting..."))
-          console.log(`Student login successful for ${userData.email} with role ${userData.role}`)
+          setShowSuccessMessage(true) // Prevent immediate redirect
+          console.log(`✅ Student login successful for ${userData.email} with role ${userData.role}`)
 
-          // Update cookies immediately to prevent middleware conflicts
-          document.cookie = `auth=1; path=/`
-          document.cookie = `role=${userData.role}; path=/`
-          document.cookie = `hasAccount=1; path=/`
-
-          // Redirect to student dashboard
-          router.push('/home')
+          // Show success message for 2 seconds before redirecting
+          console.log('🔄 Redirecting to /home...')
+          setTimeout(() => {
+            setShowSuccessMessage(false) // Allow redirect
+            router.push('/home')
+          }, 2000) // 2 second delay to show success message
         } else {
           console.error('Login successful but no user data received')
           setError(t("Erreur de connexion - données utilisateur manquantes", "Login error - missing user data"))
@@ -155,13 +153,21 @@ export default function LoginPage() {
     setError("")
     setSuccess("")
 
-    if (!acceptTerms) {
-      setError(t("Veuillez accepter les conditions d'utilisation", "Please accept the terms and conditions"))
-      setIsLoading(false)
-      return
-    }
+    // Terms are always accepted now
 
     try {
+      // Clear any existing session before Google login
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth')
+        localStorage.removeItem('role')
+        localStorage.removeItem('user_id')
+        localStorage.removeItem('user_subscription_tier')
+        // Clear cookies
+        document.cookie = 'auth=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        document.cookie = 'user_subscription_tier=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+      }
       const result = await signInWithGoogle()
 
       if (result.success) {
@@ -172,10 +178,10 @@ export default function LoginPage() {
         // Get user data from result
         const userData = result.user
 
-        // Students always go to /home, regardless of what the role says
-        const redirectPath = userData && userData.role
-          ? getRedirectPathForRole(userData.role)
-          : '/home'
+        // Removed automatic redirect logic to prevent session sharing issues
+
+        // Students always go to /home
+        const redirectPath = '/home'
 
         console.log(`Google login successful for ${userData?.email}, redirecting to ${redirectPath}`)
 
@@ -222,6 +228,8 @@ export default function LoginPage() {
     }
   }
 
+  // Removed automatic redirect logic to prevent session sharing issues between browser tabs
+
   // Show loading while auth is being checked
   if (!clientMounted || authLoading) {
     return (
@@ -233,6 +241,8 @@ export default function LoginPage() {
       </main>
     )
   }
+
+  // Removed early return for admin/manager users - let the Alert component handle the display
 
   return (
     <main className="min-h-screen bg-white dark:bg-black relative overflow-hidden">
@@ -283,6 +293,7 @@ export default function LoginPage() {
                     </AlertDescription>
                   </Alert>
                 )}
+
 
                 {/* Success Alert */}
                 {success && (
@@ -365,26 +376,7 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  {/* Terms and Conditions Checkbox */}
-                  <div className="flex items-start space-x-2">
-                    <input
-                      type="checkbox"
-                      id="acceptTerms"
-                      checked={acceptTerms}
-                      onChange={(e) => setAcceptTerms(e.target.checked)}
-                      className="mt-1 h-4 w-4 text-[#007BFF] border-gray-300 rounded focus:ring-[#007BFF]"
-                    />
-                    <label htmlFor="acceptTerms" className="text-sm text-muted-foreground">
-                      {t("J'accepte les ", "I accept the ")}
-                      <Link href="/terms" className="text-[#007BFF] hover:text-[#0056b3] font-medium">
-                        {t("conditions d'utilisation", "terms of service")}
-                      </Link>
-                      {t(" et la ", " and the ")}
-                      <Link href="/privacy" className="text-[#007BFF] hover:text-[#0056b3] font-medium">
-                        {t("politique de confidentialité", "privacy policy")}
-                      </Link>
-                    </label>
-                  </div>
+                  {/* Terms and conditions removed as requested */}
 
                   <Button
                     type="submit"

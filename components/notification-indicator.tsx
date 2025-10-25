@@ -60,10 +60,17 @@ export default function NotificationIndicator({ type }: NotificationIndicatorPro
   useEffect(() => {
     // Only fetch if user is authenticated
     if (isAuthenticated && user) {
-      fetchUnreadCount()
+      // Defer API calls to avoid blocking initial page load
+      const timeoutId = setTimeout(() => {
+        fetchUnreadCount()
+      }, 1000) // Wait 1 second after page load
+      
       // Poll for new notifications every 30 seconds
       const interval = setInterval(fetchUnreadCount, 30000)
-      return () => clearInterval(interval)
+      return () => {
+        clearTimeout(timeoutId)
+        clearInterval(interval)
+      }
     } else {
       // Clear data if not authenticated
       setNotifications([])

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLanguage } from "@/components/language-provider"
 import { useAuth } from "@/contexts/AuthContext"
 import apiClient from "@/lib/api-client"
+import { toast } from "sonner"
 import {
   Video,
   Calendar,
@@ -94,6 +95,12 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
   const [loading, setLoading] = useState(true)
   const [selectedLevels, setSelectedLevels] = useState<string[]>([])
   const [selectedSubscriptions, setSelectedSubscriptions] = useState<string[]>([])
+  const [statistics, setStatistics] = useState({
+    scheduledSessions: 0,
+    completedSessions: 0,
+    totalParticipants: 0,
+    totalTimeThisWeek: 0
+  })
   const [newSession, setNewSession] = useState({
     title: "",
     description: "",
@@ -139,28 +146,159 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
     setCurrentManager(manager)
   }, [user])
 
-  // Fetch live sessions from backend
-  useEffect(() => {
-    const fetchLiveSessions = async () => {
-      if (!isAuthenticated || !isAdmin) return
+  // Load live sessions from backend
+  const loadSessions = async () => {
+    if (!isAuthenticated || !isAdmin) return
 
-      try {
-        setLoading(true)
-        const response = await apiClient.get('/live-sessions/created')
+    try {
+      setLoading(true)
+      const response = await apiClient.get('/live-sessions/created')
 
-        if (response.success && response.data) {
-          const sessions = Array.isArray(response.data) ? response.data :
-                          Array.isArray((response.data as any).data) ? (response.data as any).data : []
-          setLiveSessions(sessions)
-        }
-      } catch (error) {
-        console.error('Error fetching live sessions:', error)
-      } finally {
-        setLoading(false)
+      if (response.success && response.data) {
+        const sessions = Array.isArray(response.data) ? response.data :
+                        Array.isArray((response.data as any).data) ? (response.data as any).data : []
+        
+        // Ensure each session has the required properties
+        const processedSessions = sessions.map((session: any) => ({
+          ...session,
+          levels: session.levels || [],
+          currentParticipants: session.currentParticipants || 0,
+          maxParticipants: session.maxParticipants || 20,
+          status: session.status || 'scheduled'
+        }))
+        
+        setLiveSessions(processedSessions)
+        console.log('Loaded sessions:', processedSessions)
+      } else {
+        setLiveSessions([])
       }
+    } catch (error) {
+      console.error('Error fetching live sessions:', error)
+      setLiveSessions([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Load live session statistics
+  const loadStatistics = async () => {
+    if (!isAuthenticated || !isAdmin) return
+
+    try {
+      const response = await apiClient.get('/live-sessions/statistics')
+
+      if (response.success && response.data) {
+        const data = response.data as any
+        setStatistics({
+          scheduledSessions: data.scheduledSessions || 0,
+          completedSessions: data.completedSessions || 0,
+          totalParticipants: data.totalParticipants || 0,
+          totalTimeThisWeek: data.totalTimeThisWeek || 0
+        })
+        console.log('Loaded statistics:', response.data)
+      }
+    } catch (error) {
+      console.error('Error fetching statistics:', error)
+    }
+  }
+
+  // Handle delete session
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!confirm(t("Êtes-vous sûr de vouloir supprimer cette session?", "Are you sure you want to delete this session?"))) {
+      return
     }
 
-    fetchLiveSessions()
+    try {
+      const response = await apiClient.delete(`/live-sessions/${sessionId}`)
+      if (response.success) {
+        setLiveSessions(prev => prev.filter(s => s.id !== sessionId))
+        loadStatistics()
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error)
+    }
+  }
+
+  // Handle edit session
+  const handleEditSession = (session: any) => {
+    setNewSession({
+      title: session.title,
+      description: session.description,
+      category: session.category,
+      levels: session.levels || [],
+      subscriptions: session.subscriptions || [],
+      date: session.date,
+      time: session.time,
+      duration: session.duration,
+      maxParticipants: session.maxParticipants,
+    })
+    // Store the session ID for update
+    ;(window as any).editingSessionId = session.id
+    setIsCreateSessionOpen(true)
+  }
+
+  // Calculate session status based on date/time
+  const getSessionStatus = (session: any) => {
+    if (session.status === 'completed' || session.status === 'cancelled') {
+      return session.status
+    }
+
+    try {
+      const sessionDateTime = new Date(`${session.date}T${session.time}`)
+      const now = new Date()
+      const endTime = new Date(sessionDateTime.getTime() + (session.duration || 60) * 60000)
+
+      if (now < sessionDateTime) {
+        return 'scheduled'
+      } else if (now >= sessionDateTime && now < endTime) {
+        return 'live'
+      } else {
+        return 'expired'
+      }
+    } catch (error) {
+      return session.status || 'scheduled'
+    }
+  }
+
+  // Handle join session
+  const handleJoinSession = (session: any) => {
+    // Store session info in sessionStorage for the Agora interface
+    sessionStorage.setItem('currentSession', JSON.stringify({
+      id: session.id,
+      title: session.title,
+      description: session.description,
+      instructor: session.instructor,
+      maxParticipants: session.maxParticipants,
+      currentParticipants: session.currentParticipants,
+      duration: session.duration
+    }))
+
+    // Redirect to Agora interface
+    window.location.href = `/live/${session.id}`
+  }
+
+  // Handle start session
+  const handleStartSession = async (session: any) => {
+    try {
+      const response = await apiClient.put(`/live-sessions/${session.id}`, {
+        status: 'live'
+      })
+
+      if (response.success) {
+        // Reload sessions
+        loadSessions()
+        // Join the session
+        handleJoinSession(session)
+      }
+    } catch (error) {
+      console.error('Error starting session:', error)
+    }
+  }
+
+  // Fetch live sessions from backend
+  useEffect(() => {
+    loadSessions()
+    loadStatistics()
   }, [isAuthenticated, isAdmin])
 
   // Fetch Pro+ students for one-on-one sessions
@@ -285,6 +423,8 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
         return "bg-blue-500/10 text-blue-400 border-blue-500/20"
       case "completed":
         return "bg-green-500/10 text-green-400 border-green-500/20"
+      case "expired":
+        return "bg-orange-500/10 text-orange-400 border-orange-500/20"
       case "cancelled":
         return "bg-gray-500/10 text-gray-400 border-gray-500/20"
       default:
@@ -322,6 +462,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
         return ["Gratuit", "Essentiel"]
       case "content":
       case "senior":
+      case "admin":
         return ["Gratuit", "Essentiel", "Premium", "Pro+"]
       default:
         return ["Gratuit", "Essentiel"]
@@ -338,20 +479,83 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
     )
   }
 
-  const handleCreateSession = () => {
-    console.log("Creating session:", newSession)
-    setIsCreateSessionOpen(false)
-    setNewSession({
-      title: "",
-      description: "",
-      category: "grammaire",
-      levels: [],
-      subscriptions: [],
-      date: "",
-      time: "",
-      duration: 60,
-      maxParticipants: 20,
-    })
+  const handleCreateSession = async () => {
+    try {
+      if (!newSession.title || !newSession.description || !newSession.date || !newSession.time) {
+        alert(t("Veuillez remplir tous les champs obligatoires", "Please fill in all required fields"))
+        return
+      }
+
+      // Combine date and time
+      const sessionDateTime = new Date(`${newSession.date}T${newSession.time}`)
+
+      // Map subscription tiers to backend format
+      const mapSubscriptionTier = (tier: string) => {
+        switch (tier) {
+          case "Gratuit": return "FREE"
+          case "Essentiel": return "ESSENTIAL"
+          case "Premium": return "PREMIUM"
+          case "Pro+": return "PRO"
+          default: return "ESSENTIAL"
+        }
+      }
+
+      // Map category to backend format
+      const mapCategory = (category: string) => {
+        switch (category) {
+          case "grammaire": return "GRAMMAR"
+          case "vocabulaire": return "VOCABULARY"
+          case "comprehension_ecrite": return "READING"
+          case "comprehension_orale": return "LISTENING"
+          case "expression_ecrite": return "WRITING"
+          case "expression_orale": return "ORAL"
+          case "methodologie_tcf": return "TCF_TEF"
+          default: return "GRAMMAR"
+        }
+      }
+
+      const sessionData = {
+        title: newSession.title,
+        description: newSession.description,
+        instructor: user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.email || "Instructor",
+        date: sessionDateTime.toISOString(),
+        duration: newSession.duration,
+        maxParticipants: newSession.maxParticipants,
+        requiredTier: mapSubscriptionTier(newSession.subscriptions.length > 0 ? newSession.subscriptions[0] : "Essentiel"),
+        category: mapCategory(newSession.category),
+        tags: [newSession.category, ...newSession.levels], // Add required tags field
+        levels: newSession.levels.length > 0 ? newSession.levels : ["A1"]
+      }
+
+      console.log("Creating session:", sessionData)
+
+      const response = await apiClient.post('/live-sessions', sessionData)
+
+             if (response.success) {
+               console.log("Session created successfully:", response.data)
+               toast.success(t("Session créée avec succès!", "Session created successfully!"))
+               setIsCreateSessionOpen(false)
+               setNewSession({
+                 title: "",
+                 description: "",
+                 category: "grammaire",
+                 levels: [],
+                 subscriptions: [],
+                 date: "",
+                 time: "",
+                 duration: 60,
+                 maxParticipants: 20,
+               })
+               // Reload sessions and statistics
+               loadSessions()
+               loadStatistics()
+      } else {
+        toast.error(t("Erreur lors de la création de la session", "Error creating session") + ": " + (response.error?.message || "Unknown error"))
+      }
+    } catch (error) {
+      console.error("Error creating session:", error)
+      toast.error(t("Erreur lors de la création de la session", "Error creating session"))
+    }
   }
 
   const filteredSessions = (liveSessions || []).filter((session) => {
@@ -359,7 +563,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
     const matchesSearch = (session.title || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = filterCategory === "all" || session.category === filterCategory
     const matchesLevel = filterLevel === "all" || (session.level && session.level === filterLevel)
-    const matchesStatus = filterStatus === "all" || session.status?.toLowerCase() === filterStatus
+    const matchesStatus = filterStatus === "all" || (session.status && session.status.toLowerCase() === filterStatus)
 
     return matchesSearch && matchesCategory && matchesLevel && matchesStatus
   })
@@ -643,7 +847,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                   <Calendar className="w-6 h-6 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">0</p>
+                  <p className="text-2xl font-bold text-foreground">{statistics.scheduledSessions}</p>
                   <p className="text-sm text-muted-foreground">{t("Sessions programmées", "Scheduled Sessions")}</p>
                 </div>
               </div>
@@ -657,7 +861,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                   <Users className="w-6 h-6 text-green-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">0</p>
+                  <p className="text-2xl font-bold text-foreground">{statistics.totalParticipants}</p>
                   <p className="text-sm text-muted-foreground">
                     {t("Participants inscrits", "Registered Participants")}
                   </p>
@@ -673,7 +877,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                   <Clock className="w-6 h-6 text-purple-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">0h</p>
+                  <p className="text-2xl font-bold text-foreground">{statistics.totalTimeThisWeek}h</p>
                   <p className="text-sm text-muted-foreground">
                     {t("Temps total cette semaine", "Total Time This Week")}
                   </p>
@@ -689,7 +893,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                   <Video className="w-6 h-6 text-orange-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-foreground">0</p>
+                  <p className="text-2xl font-bold text-foreground">{statistics.completedSessions}</p>
                   <p className="text-sm text-muted-foreground">{t("Sessions terminées", "Completed Sessions")}</p>
                 </div>
               </div>
@@ -835,15 +1039,21 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                           <CardTitle className="text-foreground text-lg">{session.title}</CardTitle>
                           <CardDescription className="text-muted-foreground mt-1">{session.description}</CardDescription>
                         </div>
-                        <Badge variant="outline" className={getStatusColor(session.status)}>
-                          {session.status === "scheduled"
-                            ? t("Programmé", "Scheduled")
-                            : session.status === "live"
-                              ? t("En direct", "Live")
-                              : session.status === "completed"
-                                ? t("Terminé", "Completed")
-                                : t("Annulé", "Cancelled")}
-                        </Badge>
+                        {(() => {
+                          const status = getSessionStatus(session)
+                          const statusLabels: Record<string, string> = {
+                            scheduled: t("Programmée", "Scheduled"),
+                            live: t("En cours", "Live"),
+                            expired: t("Expirée", "Expired"),
+                            completed: t("Terminé", "Completed"),
+                            cancelled: t("Annulé", "Cancelled")
+                          }
+                          return (
+                            <Badge variant="outline" className={getStatusColor(status)}>
+                              {statusLabels[status] || statusLabels.scheduled}
+                            </Badge>
+                          )
+                        })()}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -853,7 +1063,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                             <CategoryIcon className="w-3 h-3 mr-1" />
                             {categoryInfo.label}
                           </Badge>
-                          {session.levels.map((level: string) => (
+                          {(session.levels || []).map((level: string) => (
                             <Badge key={level} variant="outline" className="text-xs">
                               {level} - {getLevelDescription(level)}
                             </Badge>
@@ -887,17 +1097,48 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                           {t("Instructeur:", "Instructor:")} {session.instructor}
                         </div>
                         <div className="flex items-center space-x-2">
-                          {session.status === "scheduled" && (
-                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-                              <Play className="w-3 h-3 mr-1" />
-                              {t("Démarrer", "Start")}
-                            </Button>
-                          )}
-                          <Button size="sm" variant="outline" className="border-gray-200 dark:border-gray-700 bg-transparent">
+                          {(() => {
+                            const status = getSessionStatus(session)
+                            return (
+                              <>
+                                {status === "live" && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleJoinSession(session)}
+                                  >
+                                    <Video className="w-3 h-3 mr-1" />
+                                    {t("Rejoindre", "Join")}
+                                  </Button>
+                                )}
+                                {status === "scheduled" && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => handleStartSession(session)}
+                                  >
+                                    <Play className="w-3 h-3 mr-1" />
+                                    {t("Démarrer", "Start")}
+                                  </Button>
+                                )}
+                              </>
+                            )
+                          })()}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-gray-200 dark:border-gray-700 bg-transparent"
+                            onClick={() => handleEditSession(session)}
+                          >
                             <Edit className="w-3 h-3 mr-1" />
                             {t("Modifier", "Edit")}
                           </Button>
-                          <Button size="sm" variant="outline" className="border-red-700 text-red-400 bg-transparent">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-700 text-red-400 bg-transparent"
+                            onClick={() => handleDeleteSession(session.id)}
+                          >
                             <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
@@ -1093,10 +1334,71 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                         {t("Annuler", "Cancel")}
                       </Button>
                       <Button
-                        onClick={() => {
-                          // Handle one-on-one session creation
-                          console.log("Creating one-on-one session:", newOneOnOneSession)
-                          setIsCreateOneOnOneOpen(false)
+                        onClick={async () => {
+                          try {
+                            if (!newOneOnOneSession.title || !newOneOnOneSession.description || !newOneOnOneSession.date || !newOneOnOneSession.time || !newOneOnOneSession.studentId) {
+                              alert(t("Veuillez remplir tous les champs obligatoires", "Please fill in all required fields"))
+                              return
+                            }
+
+                            // Combine date and time
+                            const sessionDateTime = new Date(`${newOneOnOneSession.date}T${newOneOnOneSession.time}`)
+
+                            // Map category to backend format
+                            const mapCategory = (category: string) => {
+                              switch (category) {
+                                case "grammaire": return "GRAMMAR"
+                                case "vocabulaire": return "VOCABULARY"
+                                case "comprehension_ecrite": return "READING"
+                                case "comprehension_orale": return "LISTENING"
+                                case "expression_ecrite": return "WRITING"
+                                case "expression_orale": return "ORAL"
+                                case "methodologie_tcf": return "TCF_TEF"
+                                default: return "GRAMMAR"
+                              }
+                            }
+
+                            const sessionData = {
+                              title: newOneOnOneSession.title,
+                              description: newOneOnOneSession.description,
+                              instructor: user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.email || "Instructor",
+                              date: sessionDateTime.toISOString(),
+                              duration: newOneOnOneSession.duration,
+                              maxParticipants: 1, // One-on-one session
+                              requiredTier: "PRO",
+                              category: mapCategory(newOneOnOneSession.category),
+                              tags: [newOneOnOneSession.category, newOneOnOneSession.level || "A1"], // Add required tags field
+                              levels: [newOneOnOneSession.level || "A1"]
+                            }
+
+                            console.log("Creating one-on-one session:", sessionData)
+
+                            const response = await apiClient.post('/live-sessions', sessionData)
+
+                            if (response.success) {
+                              console.log("One-on-one session created successfully:", response.data)
+                              toast.success(t("Session individuelle créée avec succès!", "One-on-one session created successfully!"))
+                              setIsCreateOneOnOneOpen(false)
+                              setNewOneOnOneSession({
+                                title: "",
+                                description: "",
+                                category: "grammaire",
+                                level: "",
+                                date: "",
+                                time: "",
+                                duration: 30,
+                                studentId: "",
+                              })
+                              // Reload sessions and statistics
+                              loadSessions()
+                              loadStatistics()
+                            } else {
+                              toast.error(t("Erreur lors de la création de la session", "Error creating session") + ": " + (response.error?.message || "Unknown error"))
+                            }
+                          } catch (error) {
+                            console.error("Error creating one-on-one session:", error)
+                            toast.error(t("Erreur lors de la création de la session", "Error creating session"))
+                          }
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white"
                       >

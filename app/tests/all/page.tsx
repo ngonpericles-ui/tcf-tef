@@ -10,6 +10,7 @@ import { Clock, Users, Star, Lock, Play, Award, BookOpen, Brain, Search, Filter,
 import { useLang } from "@/components/language-provider"
 import { type SubscriptionTier } from "@/components/test-data"
 import { apiClient } from "@/lib/api-client"
+import { getTestImage, getImageAltText } from "@/lib/imageUtils"
 import Image from "next/image"
 import Link from "next/link"
 
@@ -57,9 +58,9 @@ export default function AllTestsPage() {
     const fetchTests = async () => {
       try {
         setLoading(true)
-        const response = await apiClient.get('/content-management/tests')
-        if (response.success && response.data?.content) {
-          const transformedTests = (response.data.content as any[]).map((test: any) => ({
+        const response = await apiClient.get('/tests')
+        if ((response as any).success && (response as any).data) {
+          const transformedTests = ((response as any).data as any[]).map((test: any) => ({
             id: test.id,
             title: test.title,
             titleEn: test.titleEn || test.title,
@@ -363,8 +364,8 @@ function TestGrid({ tests, userTier }: { tests: any[]; userTier: SubscriptionTie
           >
             <div className="relative aspect-video overflow-hidden">
               <Image
-                src={test.image || "/placeholder.svg"}
-                alt={lang === "fr" ? test.title : test.titleEn}
+                src={getTestImage(test)}
+                alt={getImageAltText('test', lang === "fr" ? test.title : test.titleEn, test.category, test.level)}
                 fill
                 className="object-cover group-hover:scale-105 transition-transform duration-200"
               />

@@ -188,7 +188,7 @@ export class SharedDataService {
    */
   static async getUserProfile(): Promise<ApiResponse<UserProfile>> {
     try {
-      return await apiClient.get('/user/profile')
+      return await apiClient.get('/auth/profile')
     } catch (error) {
       console.error('Failed to fetch user profile:', error)
       throw error
@@ -200,7 +200,7 @@ export class SharedDataService {
    */
   static async updateUserPreferences(preferences: Partial<UserPreferences>): Promise<ApiResponse<UserPreferences>> {
     try {
-      return await apiClient.put('/user/preferences', preferences)
+      return await apiClient.put('/users/profile', preferences)
     } catch (error) {
       console.error('Failed to update user preferences:', error)
       throw error
@@ -212,7 +212,25 @@ export class SharedDataService {
    */
   static async getCrossSectionData(): Promise<ApiResponse<CrossSectionData>> {
     try {
-      return await apiClient.get('/user/cross-section-data')
+      // For now, return empty data since this endpoint doesn't exist
+      return {
+        success: true,
+        data: {
+          recentCourses: [],
+          upcomingLiveSessions: [],
+          pendingTests: [],
+          notifications: [],
+          quickStats: {
+            todayStudyTime: 0,
+            weeklyProgress: 0,
+            currentStreak: 0,
+            nextMilestone: '',
+            completionRate: 0,
+            averageScore: 0
+          },
+          recommendations: []
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch cross-section data:', error)
       throw error
@@ -231,7 +249,7 @@ export class SharedDataService {
         limit: limit.toString(),
         unreadOnly: unreadOnly.toString()
       })
-      return await apiClient.get(`/user/notifications?${params.toString()}`)
+      return await apiClient.get(`/notifications?${params.toString()}`)
     } catch (error) {
       console.error('Failed to fetch notifications:', error)
       throw error
@@ -243,7 +261,7 @@ export class SharedDataService {
    */
   static async markNotificationAsRead(notificationId: string): Promise<ApiResponse<void>> {
     try {
-      return await apiClient.put(`/user/notifications/${notificationId}/read`)
+      return await apiClient.put(`/notifications/${notificationId}/read`)
     } catch (error) {
       console.error('Failed to mark notification as read:', error)
       throw error
@@ -255,7 +273,7 @@ export class SharedDataService {
    */
   static async markAllNotificationsAsRead(): Promise<ApiResponse<void>> {
     try {
-      return await apiClient.put('/user/notifications/read-all')
+      return await apiClient.put('/notifications/read-all')
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error)
       throw error

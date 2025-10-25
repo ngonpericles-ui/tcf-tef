@@ -95,13 +95,62 @@ export default function AdminProfilePage() {
     }
   }
 
-  // Admin stats data
-  const adminStats = {
-      totalUsers: 12847,
-      activeManagers: 23,
-      contentCreated: 156,
-      monthlyGrowth: 18.5,
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setLoading(true)
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await apiClient.post('/users/upload-profile-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      if ((response.data as any)?.success && (response.data as any)?.data?.imageUrl) {
+        setProfileData(prev => ({ ...prev, avatar: (response.data as any).data.imageUrl }))
+        toast.success(t("Photo de profil mise à jour", "Profile picture updated"))
+        fetchAdminData()
+      } else {
+        toast.error(t("Erreur lors du téléchargement", "Error uploading image"))
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      toast.error(t("Erreur lors du téléchargement", "Error uploading image"))
+    } finally {
+      setLoading(false)
+    }
   }
+
+  // Admin stats data - will be fetched from backend
+  const [adminStats, setAdminStats] = useState({
+      totalUsers: 0,
+      activeManagers: 0,
+      contentCreated: 0,
+      monthlyGrowth: 0,
+  })
+
+  // Fetch admin statistics
+  useEffect(() => {
+    const fetchAdminStats = async () => {
+      try {
+        const response = await apiClient.get('/admin/statistics')
+        if ((response.data as any)?.success) {
+          const stats = (response.data as any).data
+          setAdminStats({
+            totalUsers: stats.totalUsers || 0,
+            activeManagers: stats.activeManagers || 0,
+            contentCreated: stats.contentCreated || 0,
+            monthlyGrowth: stats.monthlyGrowth || 0,
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching admin stats:', error)
+      }
+    }
+    fetchAdminStats()
+  }, [])
 
   return (
     <div className={cn("min-h-screen p-6", theme === "dark" ? "bg-gray-950" : "bg-gray-50")}>
@@ -228,12 +277,16 @@ export default function AdminProfilePage() {
                       alt="Admin Avatar"
                       className="w-24 h-24 rounded-full object-cover border-4 border-blue-500"
                     />
-                    <Button
-                      size="sm"
-                      className="absolute -bottom-2 -right-2 rounded-full w-8 h-8 p-0 bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </Button>
+                    <label className="absolute -bottom-2 -right-2 rounded-full w-8 h-8 p-0 bg-blue-600 hover:bg-blue-700 cursor-pointer flex items-center justify-center">
+                      <Camera className="w-4 h-4 text-white" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleProfileImageUpload}
+                        className="hidden"
+                        disabled={loading}
+                      />
+                    </label>
                   </div>
                   <div>
                     <h3 className={cn("text-xl font-semibold", theme === "dark" ? "text-white" : "text-gray-900")}>

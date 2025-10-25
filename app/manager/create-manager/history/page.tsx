@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label"
 
 interface ManagerLite {
-  id: number
+  id: string | number
   name: string
   email: string
   password?: string
@@ -23,7 +23,11 @@ interface ManagerLite {
   joinDate: string
 }
 
-export default function ManagerHistoryPage() {
+interface ManagerHistoryPageProps {
+  isAdminSection?: boolean
+}
+
+export default function ManagerHistoryPage({ isAdminSection = false }: ManagerHistoryPageProps) {
   const { t } = useLanguage()
   const { user, isAuthenticated } = useAuth()
   const router = useRouter()

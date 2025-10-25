@@ -81,19 +81,19 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
         }
       })
 
-      const postsData = Array.isArray((response.data as any)?.data) ? (response.data as any).data : 
+      const postsData = Array.isArray((response.data as any)?.data) ? (response.data as any).data :
                        Array.isArray(response.data) ? response.data : []
-      
+
       // Ensure all posts have required properties with defaults
       const normalizedPosts = postsData.map((post: any) => ({
         ...post,
         images: post.images || [],
-        likes: post.likes || 0,
-        comments: post.comments || 0,
-        shares: post.shares || 0,
+        likes: post._count?.likes || post.likes || 0,
+        comments: post._count?.comments || post.comments || 0,
+        shares: post._count?.shares || post.shares || 0,
         views: post.views || 0,
-        privacy: post.privacy || 'public',
-        status: post.status || 'published'
+        privacy: post.visibility || post.privacy || 'PUBLIC',
+        status: post.status || 'PUBLISHED'
       }))
       
       setPosts(normalizedPosts)
@@ -108,6 +108,13 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
 
   useEffect(() => {
     fetchPosts()
+
+    // Set up auto-refresh every 10 seconds to show real-time updates
+    const interval = setInterval(() => {
+      fetchPosts()
+    }, 10000)
+
+    return () => clearInterval(interval)
   }, [isAuthenticated, isManager, isAdmin])
 
   // Refresh posts

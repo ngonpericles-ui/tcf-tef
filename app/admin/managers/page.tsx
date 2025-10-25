@@ -1,7 +1,15 @@
 "use client"
 
-import ManagerCreateManagerPage from "@/app/manager/create-manager/page"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
 export default function AdminManagersPage() {
-  return <ManagerCreateManagerPage role="admin" />
+  const router = useRouter()
+
+  useEffect(() => {
+    // Redirect to the create-manager page
+    router.push("/admin/create-manager")
+  }, [router])
+
+  return null
 }

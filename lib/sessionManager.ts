@@ -499,6 +499,12 @@ export class SessionManager {
     if (typeof window !== 'undefined') {
       const currentPath = window.location.pathname
       
+      // Don't redirect admin users if they're on the student login page
+      if (currentPath === '/connexion' && userRole === 'ADMIN') {
+        // Allow admin users to stay on student login page
+        return
+      }
+      
       if (currentPath.startsWith('/admin') || userRole === 'ADMIN') {
         window.location.href = '/admin/login'
       } else if (currentPath.startsWith('/manager') || userRole === 'SENIOR_MANAGER' || userRole === 'JUNIOR_MANAGER') {
