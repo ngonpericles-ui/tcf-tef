@@ -69,6 +69,8 @@ export default function SubscriptionBilling() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null)
   const [activeTab, setActiveTab] = useState("overview")
   const [banners, setBanners] = useState<any[]>([])
+  const [editPlanFormData, setEditPlanFormData] = useState<any>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Load subscription data from backend
   useEffect(() => {
@@ -141,7 +143,7 @@ export default function SubscriptionBilling() {
     }
   }
 
-  // Update subscription plan
+  // Update subscription plan (legacy - keeping for backward compatibility)
   const handleUpdatePlan = async (planId: string, planData: any) => {
     try {
       setError(null)
@@ -204,7 +206,96 @@ export default function SubscriptionBilling() {
 
   const handleEditPlan = (plan: any) => {
     setSelectedPlan(plan)
+    setEditPlanFormData({
+      name: plan.name,
+      price: plan.price,
+      description: plan.description || '',
+      eligibleLevels: plan.eligibleLevels || [],
+      maxSimulations: plan.maxSimulations,
+      maxTests: plan.maxTests,
+      maxLiveSessions: plan.maxLiveSessions
+    })
     setIsEditPlanOpen(true)
+  }
+
+  const handleSaveEditPlan = async () => {
+    if (!selectedPlan || !editPlanFormData) return
+
+    try {
+      setIsSaving(true)
+      setError(null)
+      setSuccess(null)
+
+      // Collect form data - ONLY maxSimulations
+      const formData: any = {
+        name: editPlanFormData.name,
+        price: parseFloat(editPlanFormData.price),
+        description: editPlanFormData.description,
+        tier: selectedPlan.tier
+      }
+
+      // ONLY handle maxSimulations - convert null/empty to number or null
+      if (editPlanFormData.maxSimulations !== undefined) {
+        // If it's null or empty string, send null (means use default)
+        // Otherwise send the number
+        if (editPlanFormData.maxSimulations === null || editPlanFormData.maxSimulations === '') {
+          formData.maxSimulations = null;
+        } else {
+          const numValue = typeof editPlanFormData.maxSimulations === 'string' 
+            ? parseInt(editPlanFormData.maxSimulations) 
+            : editPlanFormData.maxSimulations;
+          formData.maxSimulations = isNaN(numValue) ? null : numValue;
+        }
+      }
+      
+      console.log('📤 Sending update request:', { 
+        id: selectedPlan.id, 
+        planName: selectedPlan.name,
+        tier: selectedPlan.tier,
+        plan: selectedPlan, 
+        formData 
+      });
+
+      // Verify plan ID is valid (can be string like "pro" or CUID)
+      if (!selectedPlan.id || (typeof selectedPlan.id !== 'string' && typeof selectedPlan.id !== 'number')) {
+        setError(t("ID du plan invalide", "Invalid plan ID"))
+        setIsSaving(false)
+        return
+      }
+
+      // Send update
+      const response = await apiClient.put(`/admin/subscription-plans/${selectedPlan.id}`, formData)
+      if (response.success) {
+        const updatedData = response.data as any
+        setPlans(prev => prev.map(p => p.id === selectedPlan.id ? { ...p, ...updatedData } : p))
+        setSuccess(t("Plan mis à jour avec succès", "Plan updated successfully"))
+        setIsEditPlanOpen(false)
+        setEditPlanFormData(null)
+        setSelectedPlan(null)
+        
+        // Reload plans to show updated data
+        const plansResponse = await apiClient.get('/admin/subscription-plans')
+        if (plansResponse.success && plansResponse.data) {
+          const plansData = (plansResponse.data as any).plans || plansResponse.data
+          setPlans(Array.isArray(plansData) ? plansData : [])
+        }
+      } else {
+        setError(t("Erreur lors de la mise à jour du plan", "Error updating plan"))
+      }
+    } catch (error: any) {
+      console.error('❌ Error updating plan:', error)
+      console.error('❌ Error details:', {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status
+      })
+      const errorMessage = error?.response?.data?.error?.message 
+        || error?.message 
+        || t("Erreur lors de la mise à jour du plan", "Error updating plan")
+      setError(errorMessage)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleViewPlanDetails = (plan: any) => {
@@ -430,18 +521,23 @@ export default function SubscriptionBilling() {
                 {t("Modifiez les paramètres du plan d'abonnement", "Modify subscription plan settings")}
               </DialogDescription>
             </DialogHeader>
-            {selectedPlan && (
+            {selectedPlan && editPlanFormData && (
               <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-foreground">{t("Nom du plan", "Plan Name")}</Label>
-                    <Input defaultValue={selectedPlan.name} className="bg-input border-gray-200 dark:border-gray-700 text-foreground" />
+                    <Input 
+                      value={editPlanFormData.name} 
+                      onChange={(e) => setEditPlanFormData({ ...editPlanFormData, name: e.target.value })}
+                      className="bg-input border-gray-200 dark:border-gray-700 text-foreground" 
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-foreground">{t("Prix (CFA)", "Price (CFA)")}</Label>
                     <Input
                       type="number"
-                      defaultValue={selectedPlan.price}
+                      value={editPlanFormData.price}
+                      onChange={(e) => setEditPlanFormData({ ...editPlanFormData, price: e.target.value })}
                       className="bg-input border-gray-200 dark:border-gray-700 text-foreground"
                     />
                   </div>
@@ -450,7 +546,8 @@ export default function SubscriptionBilling() {
                 <div className="space-y-2">
                   <Label className="text-foreground">{t("Description", "Description")}</Label>
                   <Textarea
-                    defaultValue={selectedPlan.description}
+                    value={editPlanFormData.description}
+                    onChange={(e) => setEditPlanFormData({ ...editPlanFormData, description: e.target.value })}
                     className="bg-input border-gray-200 dark:border-gray-700 text-foreground"
                   />
                 </div>
@@ -478,19 +575,62 @@ export default function SubscriptionBilling() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-foreground">{t("Tests max", "Max Tests")}</Label>
+                    <Label className="text-foreground">{t("Simulations max", "Max Simulations")}</Label>
                     <Input
                       type="number"
-                      defaultValue={selectedPlan.maxTests === -1 ? "" : selectedPlan.maxTests}
-                      placeholder={t("Illimité si vide", "Unlimited if empty")}
+                      value={editPlanFormData.maxSimulations !== undefined && editPlanFormData.maxSimulations !== null 
+                        ? String(editPlanFormData.maxSimulations === -1 ? "" : editPlanFormData.maxSimulations)
+                        : (selectedPlan.maxSimulations === -1 || selectedPlan.maxSimulations === null 
+                          ? "" 
+                          : String(selectedPlan.maxSimulations))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditPlanFormData({ 
+                          ...editPlanFormData, 
+                          maxSimulations: val === "" ? null : (isNaN(parseInt(val)) ? null : parseInt(val))
+                        });
+                      }}
+                      placeholder={t("Ex: 25 (ou -1 pour illimité)", "Ex: 25 (or -1 for unlimited)")}
                       className="bg-input border-gray-200 dark:border-gray-700 text-foreground"
                     />
+                    <p className="text-xs text-muted-foreground">{t("Nombre total de simulations (tests, vocales, immigration)", "Total number of simulations (tests, voice, immigration)")}</p>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-foreground">{t("Sessions live", "Live Sessions")}</Label>
                     <Input
                       type="number"
-                      defaultValue={selectedPlan.maxLiveSessions === -1 ? "" : selectedPlan.maxLiveSessions}
+                      value={editPlanFormData.maxLiveSessions !== undefined && editPlanFormData.maxLiveSessions !== null
+                        ? String(editPlanFormData.maxLiveSessions === -1 ? "" : editPlanFormData.maxLiveSessions)
+                        : (selectedPlan.maxLiveSessions === -1 || selectedPlan.maxLiveSessions === null 
+                          ? "" 
+                          : String(selectedPlan.maxLiveSessions))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditPlanFormData({ 
+                          ...editPlanFormData, 
+                          maxLiveSessions: val === "" ? null : (isNaN(parseInt(val)) ? null : parseInt(val))
+                        });
+                      }}
+                      placeholder={t("Illimité si vide", "Unlimited if empty")}
+                      className="bg-input border-gray-200 dark:border-gray-700 text-foreground"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-foreground">{t("Tests max", "Max Tests")}</Label>
+                    <Input
+                      type="number"
+                      value={editPlanFormData.maxTests !== undefined && editPlanFormData.maxTests !== null
+                        ? String(editPlanFormData.maxTests === -1 ? "" : editPlanFormData.maxTests)
+                        : (selectedPlan.maxTests === -1 || selectedPlan.maxTests === null 
+                          ? "" 
+                          : String(selectedPlan.maxTests))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditPlanFormData({ 
+                          ...editPlanFormData, 
+                          maxTests: val === "" ? null : (isNaN(parseInt(val)) ? null : parseInt(val))
+                        });
+                      }}
                       placeholder={t("Illimité si vide", "Unlimited if empty")}
                       className="bg-input border-gray-200 dark:border-gray-700 text-foreground"
                     />
@@ -498,11 +638,31 @@ export default function SubscriptionBilling() {
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
-                  <Button variant="outline" onClick={() => setIsEditPlanOpen(false)} className="border-gray-200 dark:border-gray-700">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsEditPlanOpen(false)
+                      setEditPlanFormData(null)
+                      setSelectedPlan(null)
+                    }} 
+                    disabled={isSaving}
+                    className="border-gray-200 dark:border-gray-700"
+                  >
                     {t("Annuler", "Cancel")}
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                    {t("Sauvegarder", "Save Changes")}
+                  <Button 
+                    onClick={handleSaveEditPlan}
+                    disabled={isSaving}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        {t("Enregistrement...", "Saving...")}
+                      </>
+                    ) : (
+                      t("Sauvegarder", "Save Changes")
+                    )}
                   </Button>
                 </div>
               </div>

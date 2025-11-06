@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TestService = void 0;
-const connection_1 = require("../database/connection");
-const errorHandler_1 = require("../middleware/errorHandler");
+const connection_1 = require("@/database/connection");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 const aiService_1 = require("./aiService");
 class TestService {
     static async createTest(testData, createdById, creatorRole) {
@@ -265,8 +265,11 @@ class TestService {
                     },
                     attempts: userId ? {
                         where: { userId },
-                        orderBy: { createdAt: 'desc' }
-                    } : undefined
+                        orderBy: { createdAt: 'desc' },
+                        take: 10
+                    } : {
+                        take: 0
+                    }
                 },
                 orderBy: { [sortBy]: sortOrder },
                 skip: (page - 1) * limit,
@@ -427,10 +430,24 @@ class TestService {
             for (const question of attempt.test.questions) {
                 const userAnswer = answers.find(a => a.questionId === question.id);
                 totalPoints += question.points;
+                console.log('🔍 Processing question:', {
+                    questionId: question.id,
+                    questionText: question.questionText,
+                    correctAnswer: question.correctAnswer,
+                    questionType: question.type,
+                    userAnswer: userAnswer?.answer,
+                    hasUserAnswer: !!userAnswer
+                });
                 if (userAnswer) {
                     const isCorrect = this.checkAnswer(question.correctAnswer, userAnswer.answer, question.type);
                     const pointsEarned = isCorrect ? question.points : 0;
                     totalScore += pointsEarned;
+                    console.log('🔍 Answer evaluation result:', {
+                        questionId: question.id,
+                        isCorrect,
+                        pointsEarned,
+                        totalScore
+                    });
                     questionAnswers.push({
                         attemptId,
                         questionId: question.id,
@@ -441,6 +458,7 @@ class TestService {
                     });
                 }
                 else {
+                    console.log('🔍 No answer provided for question:', question.id);
                     questionAnswers.push({
                         attemptId,
                         questionId: question.id,
@@ -590,11 +608,22 @@ Réponds en français, de manière bienveillante et motivante.
         }
     }
     static checkAnswer(correctAnswer, userAnswer, questionType) {
+        console.log('🔍 Checking answer:', { correctAnswer, userAnswer, questionType, correctAnswerType: typeof correctAnswer, userAnswerType: typeof userAnswer });
         switch (questionType) {
             case 'multiple-choice':
-                return correctAnswer === userAnswer;
+                const correctNum = typeof correctAnswer === 'string' ? parseInt(correctAnswer) : correctAnswer;
+                const userNum = typeof userAnswer === 'string' ? parseInt(userAnswer) : userAnswer;
+                const correctStr = String(correctAnswer);
+                const userStr = String(userAnswer);
+                console.log('🔍 Multiple choice comparison:', { correctNum, userNum, correctStr, userStr });
+                return correctNum === userNum || correctStr === userStr;
             case 'true-false':
-                return correctAnswer === userAnswer;
+                const correctBool = typeof correctAnswer === 'string' ? correctAnswer.toLowerCase() === 'true' : correctAnswer;
+                const userBool = typeof userAnswer === 'string' ? userAnswer.toLowerCase() === 'true' : userAnswer;
+                const correctBoolStr = String(correctAnswer).toLowerCase();
+                const userBoolStr = String(userAnswer).toLowerCase();
+                console.log('🔍 True-false comparison:', { correctBool, userBool, correctBoolStr, userBoolStr });
+                return correctBool === userBool || correctBoolStr === userBoolStr;
             case 'fill-blank':
                 if (typeof correctAnswer === 'string' && typeof userAnswer === 'string') {
                     return correctAnswer.toLowerCase().trim() === userAnswer.toLowerCase().trim();
@@ -603,6 +632,7 @@ Réponds en français, de manière bienveillante et motivante.
             case 'essay':
                 return false;
             default:
+                console.log('🔍 Unknown question type:', questionType);
                 return false;
         }
     }

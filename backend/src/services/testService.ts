@@ -82,7 +82,15 @@ export class TestService {
       }
 
       // Create test with questions in a transaction
+      // Increase transaction timeout to 30 seconds for large test creation
       const result = await prisma.$transaction(async (tx) => {
+        // Extract fileUrl from testData if present (for reading comprehension)
+        const testDataWithFileUrl = testData as any;
+        const fileUrl = testDataWithFileUrl.fileUrl;
+        const tags = fileUrl 
+          ? [...testData.tags, `fileUrl:${fileUrl}`] // Store fileUrl in tags temporarily
+          : testData.tags;
+        
         // Create test
         const test = await tx.test.create({
           data: {
@@ -96,7 +104,7 @@ export class TestService {
             questionCount: testData.questionCount,
             difficulty: testData.difficulty,
             passingScore: testData.passingScore,
-            tags: testData.tags,
+            tags: tags,
             aiPowered: testData.aiPowered || false,
             hasAIFeedback: testData.hasAIFeedback || false,
             isOfficial: testData.isOfficial || false,
@@ -109,19 +117,72 @@ export class TestService {
 
         // Create questions
         if (questionsData && questionsData.length > 0) {
-          await tx.testQuestion.createMany({
-            data: questionsData.map((question, index) => ({
+          logger.info('Creating questions', { 
+            testId: test.id, 
+            questionCount: questionsData.length,
+            firstQuestion: questionsData[0]
+          });
+          
+          const questionsToCreate = questionsData.map((question, index) => {
+            // Ensure options is JSON (array or null)
+            let optionsJson: any = null;
+            if (question.options) {
+              if (Array.isArray(question.options)) {
+                optionsJson = question.options; // Array is valid JSON
+              } else if (typeof question.options === 'object') {
+                optionsJson = question.options; // Object is valid JSON
+              } else {
+                logger.warn('Invalid options format', { questionIndex: index, options: question.options });
+                optionsJson = null;
+              }
+            }
+            
+            // Ensure correctAnswer is JSON (can be number, string, boolean, or object)
+            let correctAnswerJson: any;
+            if (question.correctAnswer !== undefined && question.correctAnswer !== null) {
+              // Already valid JSON type (number, string, boolean, object)
+              correctAnswerJson = question.correctAnswer;
+            } else {
+              logger.warn('Missing correctAnswer', { questionIndex: index });
+              // Default based on type
+              correctAnswerJson = question.type === 'multiple-choice' ? 0 : question.type === 'true-false' ? true : '';
+            }
+            
+            // Validate category and level are valid enum values
+            const category = question.category || testData.category;
+            const level = question.level || testData.level;
+            
+            logger.info('Question data prepared', {
+              index,
+              questionText: question.questionText?.substring(0, 50),
+              type: question.type,
+              optionsIsArray: Array.isArray(optionsJson),
+              correctAnswerType: typeof correctAnswerJson,
+              category,
+              level
+            });
+            
+            return {
               testId: test.id,
               questionText: question.questionText,
               type: question.type,
-              options: question.options,
-              correctAnswer: question.correctAnswer,
-              points: question.points,
-              explanation: question.explanation,
-              order: question.order,
-              level: question.level,
-              category: testData.category // Use the test's category for all questions
-            }))
+              options: optionsJson, // JSON field - can be array, object, or null
+              correctAnswer: correctAnswerJson, // JSON field - required
+              points: question.points || 1,
+              explanation: question.explanation || null,
+              order: question.order || index + 1,
+              level: level, // CourseLevel enum
+              category: category // CourseCategory enum
+            };
+          });
+          
+          await tx.testQuestion.createMany({
+            data: questionsToCreate
+          });
+          
+          logger.info('Questions created successfully', { 
+            testId: test.id, 
+            questionCount: questionsToCreate.length 
           });
         }
 
@@ -206,6 +267,8 @@ export class TestService {
             attempts: true
           }
         });
+      }, {
+        timeout: 30000, // 30 seconds timeout for large test creation
       });
 
       if (!result) {
@@ -220,8 +283,37 @@ export class TestService {
       });
 
       return result;
-    } catch (error) {
-      logger.error('Failed to create test with questions', { testData, questionsData, createdById, error });
+    } catch (error: any) {
+      // Log detailed error information
+      logger.error('Failed to create test with questions', { 
+        testData: {
+          title: testData.title,
+          category: testData.category,
+          level: testData.level,
+          type: testData.type
+        },
+        questionsDataCount: questionsData?.length,
+        firstQuestion: questionsData?.[0],
+        createdById,
+        error: {
+          message: error.message,
+          code: error.code,
+          meta: error.meta,
+          stack: error.stack
+        }
+      });
+      
+      // Provide more specific error messages
+      if (error.code === 'P2002') {
+        throw new ValidationError('A test with this title already exists');
+      } else if (error.code === 'P2003') {
+        throw new ValidationError('Invalid reference: The test or related data is invalid');
+      } else if (error.message?.includes('Invalid enum value')) {
+        throw new ValidationError(`Invalid enum value: ${error.message}. Please check category and level values.`);
+      } else if (error.message?.includes('required')) {
+        throw new ValidationError(`Missing required field: ${error.message}`);
+      }
+      
       throw error;
     }
   }
@@ -283,9 +375,75 @@ export class TestService {
         }
       }
 
+      // Transform questions to extract media URLs from options JSON
+      const transformedQuestions = test.questions.map((q: any) => {
+        const question: any = {
+          id: q.id,
+          text: q.questionText,
+          questionText: q.questionText,
+          questionTextEn: q.questionTextEn,
+          type: q.type,
+          correctAnswer: q.correctAnswer,
+          allowPause: true,
+          allowRewind: true,
+          timeLimit: undefined,
+          points: q.points,
+          explanation: q.explanation
+        };
+
+        // Extract options - handle both array format and object format
+        let options: any = q.options;
+        if (typeof options === 'string') {
+          try {
+            options = JSON.parse(options);
+          } catch (e) {
+            options = [];
+          }
+        }
+
+        if (Array.isArray(options)) {
+          // Legacy format: options is array of strings
+          question.options = options;
+        } else if (options && typeof options === 'object') {
+          // New format: options is object with choices and media URLs
+          if (options.choices && Array.isArray(options.choices)) {
+            question.options = options.choices;
+          } else if (Array.isArray(options)) {
+            question.options = options;
+          } else {
+            question.options = [];
+          }
+
+          // Extract media URLs from options object
+          if (options.audioUrl) {
+            question.audioUrl = options.audioUrl;
+          }
+          if (options.videoUrl) {
+            question.videoUrl = options.videoUrl;
+          }
+          if (options.imageUrl) {
+            question.imageUrl = options.imageUrl;
+          }
+        } else {
+          question.options = [];
+        }
+
+        return question;
+      });
+
+      // Extract fileUrl from test tags (temporary solution - stored as "fileUrl:URL")
+      // In production, this should be stored in a metadata field
+      let fileUrl: string | undefined = undefined;
+      const fileUrlTag = test.tags.find(tag => tag.startsWith('fileUrl:'));
+      if (fileUrlTag) {
+        fileUrl = fileUrlTag.replace('fileUrl:', '');
+      }
+
       // Add computed fields
-      const testWithDetails: TestWithDetails = {
+      const testWithDetails: TestWithDetails & { fileUrl?: string } = {
         ...test,
+        questions: transformedQuestions as any,
+        fileUrl: fileUrl,
         isFavorited: false, // Will be calculated separately if needed
         bestScore,
         attemptsCount
@@ -365,8 +523,11 @@ export class TestService {
           },
           attempts: userId ? {
             where: { userId },
-            orderBy: { createdAt: 'desc' }
-          } : undefined
+            orderBy: { createdAt: 'desc' },
+            take: 10 // Limit attempts to avoid large payloads
+          } : {
+            take: 0 // Don't include attempts if no userId
+          }
         },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
@@ -388,8 +549,16 @@ export class TestService {
           }
         }
 
+        // Extract fileUrl from test tags (same logic as getTestById)
+        let fileUrl: string | undefined = undefined;
+        const fileUrlTag = test.tags.find(tag => tag.startsWith('fileUrl:'));
+        if (fileUrlTag) {
+          fileUrl = fileUrlTag.replace('fileUrl:', '');
+        }
+
         return {
           ...test,
+          fileUrl: fileUrl, // Include fileUrl for students to access uploaded content
           isFavorited: false, // Will be calculated separately if needed
           bestScore,
           attemptsCount
@@ -574,10 +743,26 @@ export class TestService {
         const userAnswer = answers.find(a => a.questionId === question.id);
         totalPoints += question.points;
 
+        console.log('🔍 Processing question:', {
+          questionId: question.id,
+          questionText: question.questionText,
+          correctAnswer: question.correctAnswer,
+          questionType: question.type,
+          userAnswer: userAnswer?.answer,
+          hasUserAnswer: !!userAnswer
+        });
+
         if (userAnswer) {
           const isCorrect = this.checkAnswer(question.correctAnswer, userAnswer.answer, question.type);
           const pointsEarned = isCorrect ? question.points : 0;
           totalScore += pointsEarned;
+
+          console.log('🔍 Answer evaluation result:', {
+            questionId: question.id,
+            isCorrect,
+            pointsEarned,
+            totalScore
+          });
 
           // Create question answer record
           questionAnswers.push({
@@ -589,6 +774,7 @@ export class TestService {
             timeSpent: userAnswer.timeSpent || 0
           });
         } else {
+          console.log('🔍 No answer provided for question:', question.id);
           // No answer provided
           questionAnswers.push({
             attemptId,
@@ -781,21 +967,47 @@ Réponds en français, de manière bienveillante et motivante.
    * Check if answer is correct
    */
   private static checkAnswer(correctAnswer: any, userAnswer: any, questionType: string): boolean {
+    console.log('🔍 Checking answer:', { correctAnswer, userAnswer, questionType, correctAnswerType: typeof correctAnswer, userAnswerType: typeof userAnswer });
+    
     switch (questionType) {
       case 'multiple-choice':
-        return correctAnswer === userAnswer;
+        // Handle type conversion for multiple choice questions
+        // correctAnswer might be stored as number (index) or string
+        // userAnswer might be sent as string from frontend
+        const correctNum = typeof correctAnswer === 'string' ? parseInt(correctAnswer) : correctAnswer;
+        const userNum = typeof userAnswer === 'string' ? parseInt(userAnswer) : userAnswer;
+        const correctStr = String(correctAnswer);
+        const userStr = String(userAnswer);
+        
+        console.log('🔍 Multiple choice comparison:', { correctNum, userNum, correctStr, userStr });
+        
+        // Try both numeric and string comparison
+        return correctNum === userNum || correctStr === userStr;
+        
       case 'true-false':
-        return correctAnswer === userAnswer;
+        // Handle boolean/string conversion for true-false questions
+        const correctBool = typeof correctAnswer === 'string' ? correctAnswer.toLowerCase() === 'true' : correctAnswer;
+        const userBool = typeof userAnswer === 'string' ? userAnswer.toLowerCase() === 'true' : userAnswer;
+        const correctBoolStr = String(correctAnswer).toLowerCase();
+        const userBoolStr = String(userAnswer).toLowerCase();
+        
+        console.log('🔍 True-false comparison:', { correctBool, userBool, correctBoolStr, userBoolStr });
+        
+        return correctBool === userBool || correctBoolStr === userBoolStr;
+        
       case 'fill-blank':
         if (typeof correctAnswer === 'string' && typeof userAnswer === 'string') {
           return correctAnswer.toLowerCase().trim() === userAnswer.toLowerCase().trim();
         }
         return correctAnswer === userAnswer;
+        
       case 'essay':
         // For essay questions, manual grading would be required
         // For now, return false (needs manual review)
         return false;
+        
       default:
+        console.log('🔍 Unknown question type:', questionType);
         return false;
     }
   }

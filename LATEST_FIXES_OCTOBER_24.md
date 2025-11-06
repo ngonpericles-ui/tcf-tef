@@ -110,11 +110,11 @@ Already implemented and working
 ### Build Status
 ✅ Frontend build successful
 ✅ Backend running on port 3001
-✅ Frontend running on port 3002
+✅ Frontend running on port 3000
 
 ### Servers
 - Backend: http://localhost:3001
-- Frontend: http://localhost:3002
+- Frontend: http://localhost:3000
 
 ---
 

@@ -48,14 +48,18 @@ export default function EnhancedHero() {
     stopStudySession, 
     resetStudySession 
   } = useStudySession()
-  const [dailyChallenges, setDailyChallenges] = useState<any[]>([])
-  const [selectedChallenge, setSelectedChallenge] = useState<any>(null)
   const [currentBackground, setCurrentBackground] = useState(0)
   const [mounted, setMounted] = useState(false)
   const [showTimeSetter, setShowTimeSetter] = useState(false)
   const [selectedMinutes, setSelectedMinutes] = useState(15)
   const [selectedSeconds, setSelectedSeconds] = useState(0)
-  const [challengesLoading, setChallengesLoading] = useState(true)
+  const [dailyGoal, setDailyGoal] = useState<any>(null)
+  const [showGoalEditor, setShowGoalEditor] = useState(false)
+  const [goalTitle, setGoalTitle] = useState('')
+  const [goalTarget, setGoalTarget] = useState(30)
+  const [goalLoading, setGoalLoading] = useState(false)
+  const [selectedChallengeType, setSelectedChallengeType] = useState<string | null>(null)
+  const [isChallengeStarted, setIsChallengeStarted] = useState(false)
 
   // Function declarations (moved before useEffect to avoid hoisting issues)
   const formatTime = (seconds: number) => {
@@ -86,44 +90,43 @@ export default function EnhancedHero() {
   }
 
   const handleCancelTime = () => {
-    
     setShowTimeSetter(false)
   }
 
-  const fetchDailyChallenges = async () => {
-    // Only fetch if user is authenticated
-    if (!isAuthenticated || !user) {
-      setChallengesLoading(false)
-      return
+  // Challenge type templates for students to choose from (UI templates only - NOT mock data)
+  const challengeTemplates = [
+    {
+      id: 'vocabulary',
+      icon: <BookOpen className="h-5 w-5" />,
+      title: { fr: 'Défi Vocabulaire Express', en: 'Express Vocabulary Challenge' },
+      description: { fr: 'Apprenez 10 nouveaux mots en 5 minutes', en: 'Learn 10 new words in 5 minutes' },
+      suggestedTime: 5,
+      difficulty: { fr: 'Facile', en: 'Easy' }
+    },
+    {
+      id: 'listening',
+      icon: <Headphones className="h-5 w-5" />,
+      title: { fr: 'Écoute Active', en: 'Active Listening' },
+      description: { fr: 'Compréhension orale avec audio natif', en: 'Oral comprehension with native audio' },
+      suggestedTime: 10,
+      difficulty: { fr: 'Moyen', en: 'Medium' }
+    },
+    {
+      id: 'expression',
+      icon: <Zap className="h-5 w-5" />,
+      title: { fr: 'Expression Rapide', en: 'Quick Expression' },
+      description: { fr: 'Construisez 5 phrases complexes', en: 'Build 5 complex sentences' },
+      suggestedTime: 15,
+      difficulty: { fr: 'Difficile', en: 'Difficult' }
     }
+  ]
 
-    try {
-      setChallengesLoading(true)
-      const response = await apiClient.get('/challenges/daily')
-      if (response.success) {
-        const challenges = (response.data as any[]).map((challenge: any) => ({
-          ...challenge,
-          icon: challenge.category === 'vocabulary' ? <BookOpen className="h-5 w-5" /> :
-                challenge.category === 'listening' ? <Headphones className="h-5 w-5" /> :
-                <Zap className="h-5 w-5" />,
-          color: challenge.category === 'vocabulary' ? "from-green-500/10 to-emerald-500/10" :
-                 challenge.category === 'listening' ? "from-blue-500/10 to-cyan-500/10" :
-                 "from-purple-500/10 to-pink-500/10",
-          borderColor: challenge.category === 'vocabulary' ? "border-green-500/20" :
-                      challenge.category === 'listening' ? "border-blue-500/20" :
-                      "border-purple-500/20"
-        }))
-        setDailyChallenges(challenges)
-        if (challenges.length > 0) {
-          setSelectedChallenge(challenges[0])
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching daily challenges:', error)
-      // Don't show error to user, just silently fail
-    } finally {
-      setChallengesLoading(false)
-    }
+  // Use challenge template to set goal
+  const useChallengeTemplate = (template: typeof challengeTemplates[0]) => {
+    setSelectedChallengeType(template.id)
+    setGoalTitle(lang === 'fr' ? template.title.fr : template.title.en)
+    setGoalTarget(template.suggestedTime)
+    setShowGoalEditor(true)
   }
 
   useEffect(() => {
@@ -136,11 +139,147 @@ export default function EnhancedHero() {
     return () => clearInterval(bgInterval)
   }, [])
 
+  // Fetch daily goal - REAL DATA ONLY, NO MOCK DATA
+  const fetchDailyGoal = async () => {
+    if (!isAuthenticated || !user) return
+
+    try {
+      const response = await apiClient.get('/daily-goals/today').catch(() => null)
+      if (response && response.success && response.data) {
+        const goalData = response.data as any
+        setDailyGoal(goalData)
+        setGoalTitle(goalData.title || '')
+        setGoalTarget(goalData.targetValue || 30)
+        // Reset selection if goal exists
+        if (goalData && !goalData.isCompleted) {
+          setSelectedChallengeType(null)
+        }
+      } else {
+        // No goal set - this is fine, user needs to create one
+        setDailyGoal(null)
+        setSelectedChallengeType(null) // Reset selection when no goal
+      }
+    } catch (error) {
+      console.error('Error fetching daily goal:', error)
+      // On error, no goal set - no mock data
+      setDailyGoal(null)
+      setSelectedChallengeType(null) // Reset selection on error
+    }
+  }
+
+  // Save daily goal
+  const saveDailyGoal = async () => {
+    if (!goalTitle.trim()) return
+
+    setGoalLoading(true)
+    try {
+      // XP reward is calculated based on difficulty/target - not fixed
+      const xpReward = Math.max(30, Math.floor(goalTarget * 1.5)) // Base: 1.5 XP per minute, minimum 30
+      
+      const response = await apiClient.post('/daily-goals/set', {
+        title: goalTitle,
+        targetValue: goalTarget,
+        unit: 'minutes',
+        xpReward: xpReward
+      })
+
+      if (response && response.success) {
+        setDailyGoal(response.data)
+        setShowGoalEditor(false)
+        setIsChallengeStarted(false)
+        setSelectedChallengeType(null) // Reset selection after saving
+      }
+    } catch (error) {
+      console.error('Error saving daily goal:', error)
+    } finally {
+      setGoalLoading(false)
+    }
+  }
+
+  // Complete daily goal - only when actually completed
+  const completeDailyGoal = async () => {
+    if (!dailyGoal || (dailyGoal as any).isCompleted) return
+    
+    setGoalLoading(true)
+    try {
+      const response = await apiClient.post('/daily-goals/complete')
+      if (response && response.success) {
+        setDailyGoal(response.data)
+        setIsChallengeStarted(false)
+        // XP is awarded automatically by backend when completing
+      }
+    } catch (error) {
+      console.error('Error completing goal:', error)
+    } finally {
+      setGoalLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated && user) {
-      fetchDailyChallenges()
+      fetchDailyGoal()
+    } else {
+      // Reset states when not authenticated
+      setDailyGoal(null)
+      setSelectedChallengeType(null)
     }
   }, [isAuthenticated, user])
+
+  // Sync study session progress with daily goal when challenge is started
+  useEffect(() => {
+    if (dailyGoal && isChallengeStarted && studySession?.isActive && !(dailyGoal as any).isCompleted) {
+      // Timer counts DOWN, so calculate progress from elapsed time
+      // If targetTime is 30 minutes (1800s) and timer is at 10 minutes (600s) left, then 20 minutes elapsed
+      const goal = dailyGoal as any
+      const elapsedSeconds = (goal.targetValue * 60) - studyTimer
+      const progressMinutes = Math.max(0, Math.floor(elapsedSeconds / 60))
+      
+      // Only update if progress increased (debounce)
+      if (progressMinutes > goal.currentValue && progressMinutes <= goal.targetValue) {
+        apiClient.put('/daily-goals/progress', {
+          progressValue: progressMinutes
+        }).then(response => {
+          if (response && response.success && response.data) {
+            const updatedGoal = response.data as any
+            setDailyGoal(updatedGoal)
+            // Auto-complete if target reached (progress = 100%)
+            if (updatedGoal && updatedGoal.progress >= 100 && !updatedGoal.isCompleted) {
+              completeDailyGoal()
+            }
+          }
+        }).catch(() => {})
+      }
+    }
+  }, [studyTimer, dailyGoal, studySession, isChallengeStarted])
+
+  // Start challenge - begins tracking progress
+  const startChallenge = async () => {
+    if (!dailyGoal) {
+      // First set a goal
+      setShowGoalEditor(true)
+      return
+    }
+
+    setIsChallengeStarted(true)
+    
+    // Start study session with the goal's target time (countdown timer)
+    const goal = dailyGoal as any
+    const targetSeconds = goal.targetValue * 60 // Convert minutes to seconds
+    try {
+      await startStudySession(targetSeconds)
+      // Initialize progress to 0 when starting
+      await apiClient.put('/daily-goals/progress', {
+        progressValue: 0
+      }).then(response => {
+        if (response && response.success) {
+          setDailyGoal(response.data)
+        }
+      })
+    } catch (error) {
+      console.error('Error starting challenge:', error)
+      setIsChallengeStarted(false)
+    }
+  }
 
   if (!mounted) {
     return null
@@ -278,7 +417,7 @@ export default function EnhancedHero() {
           </CardContent>
         </Card>
 
-        {/* Daily Challenge Card */}
+        {/* Défi du jour Card - Student's Daily Goal */}
         <Card className="lg:col-span-2 hover:shadow-lg transition-all duration-300">
           <CardContent className="p-6">
             <div className="space-y-6">
@@ -298,88 +437,167 @@ export default function EnhancedHero() {
                     }
                   </p>
                 </div>
-                
+                {!dailyGoal && (
                 <Badge className="bg-[#2ECC71]/10 text-[#2ECC71] border-[#2ECC71]/20">
                   {lang === "fr" ? "Nouveau" : "New"}
                 </Badge>
+                )}
               </div>
 
-              {/* Challenge Selection */}
-              <div className="grid md:grid-cols-3 gap-3">
-                {challengesLoading ? (
-                  <div className="col-span-3 text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2ECC71] mx-auto"></div>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {lang === "fr" ? "Chargement des défis..." : "Loading challenges..."}
-                    </p>
-                  </div>
-                ) : dailyChallenges.length > 0 ? dailyChallenges.map((challenge) => (
+              {/* Challenge Type Selection - ALWAYS show ALL 3 options when no active goal */}
+              {(!dailyGoal || (dailyGoal as any).isCompleted) && (
+                <>
+                  {/* Always show the 3 challenge type cards */}
+                  <div className="grid md:grid-cols-3 gap-3 mb-4">
+                    {challengeTemplates.map((template) => (
                   <button
-                    key={challenge.id}
-                    onClick={() => setSelectedChallenge(challenge)}
+                        key={template.id}
+                        onClick={() => useChallengeTemplate(template)}
                     className={`p-4 rounded-lg border transition-all text-left ${
-                      selectedChallenge.id === challenge.id
-                        ? `bg-gradient-to-br ${challenge.color} ${challenge.borderColor} border-2`
-                        : "border-gray-200 dark:border-gray-700 bg-card hover:bg-muted/50"
+                          selectedChallengeType === template.id
+                            ? 'bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30 border-2'
+                            : 'border-gray-200 dark:border-gray-700 bg-card hover:bg-muted/50'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-2">
-                      {challenge.icon}
+                          <div className={selectedChallengeType === template.id ? 'text-[#2ECC71]' : 'text-muted-foreground'}>
+                            {template.icon}
+                          </div>
                       <span className="font-semibold text-sm">
-                        {lang === "fr" ? challenge.title.fr : challenge.title.en}
+                            {lang === "fr" ? template.title.fr : template.title.en}
                       </span>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">
-                        {lang === "fr" ? challenge.description.fr : challenge.description.en}
+                            {lang === "fr" ? template.description.fr : template.description.en}
                       </p>
                       <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
-                          {challenge.difficulty}
+                              {template.difficulty ? (lang === "fr" ? template.difficulty.fr : template.difficulty.en) : ''}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
-                          {challenge.duration}
+                              {template.suggestedTime} min
                         </span>
                       </div>
                     </div>
                   </button>
-                )) : (
-                  <div className="col-span-3 text-center py-8">
-                    <p className="text-sm text-muted-foreground">
-                      {lang === "fr" ? "Aucun défi disponible" : "No challenges available"}
-                    </p>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Selected Challenge Details / Current Goal */}
+              {dailyGoal && !(dailyGoal as any).isCompleted ? (
+                <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex-1">
+                      <h4 className="font-semibold mb-1">{(dailyGoal as any).title || ''}</h4>
+                      {(dailyGoal as any).description && (
+                        <p className="text-sm text-muted-foreground mb-2">{(dailyGoal as any).description}</p>
+                      )}
+                      {/* Only show XP reward when completed */}
+                      {(dailyGoal as any).isCompleted && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Trophy className="h-4 w-4 text-[#2ECC71]" />
+                          <span className="text-sm font-medium">
+                            {lang === "fr" ? "Récompense gagnée" : "Reward earned"}: +${(dailyGoal as any).xpReward || 0} XP
+                          </span>
                   </div>
                 )}
               </div>
 
-              {/* Selected Challenge Details */}
-              {selectedChallenge && (
-                <div className={`p-4 rounded-lg bg-gradient-to-br ${selectedChallenge.color} border ${selectedChallenge.borderColor}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold mb-1">
-                      {lang === "fr" ? selectedChallenge.title.fr : selectedChallenge.title.en}
-                    </h4>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {lang === "fr" ? selectedChallenge.description.fr : selectedChallenge.description.en}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Trophy className="h-4 w-4 text-[#2ECC71]" />
-                      <span className="text-sm font-medium">
-                        {lang === "fr" ? selectedChallenge.reward.fr : selectedChallenge.reward.en}
-                      </span>
+                    <div className="flex flex-col gap-2 items-end">
+                      {!(dailyGoal as any).isCompleted ? (
+                        <>
+                          {!isChallengeStarted ? (
+                            <Button 
+                              className="bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black gap-2"
+                              onClick={startChallenge}
+                              disabled={goalLoading || loading}
+                            >
+                              <Play className="h-4 w-4" />
+                              {lang === "fr" ? "Commencer" : "Start"}
+                            </Button>
+                          ) : (
+                            <Button 
+                              variant="outline"
+                              onClick={() => setIsChallengeStarted(false)}
+                              size="sm"
+                            >
+                              {lang === "fr" ? "Arrêter" : "Stop"}
+                            </Button>
+                          )}
+                          <div className="text-center">
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              {(dailyGoal as any).targetValue || 0} {lang === "fr" ? "min" : "min"}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <Badge className="bg-[#2ECC71] text-white">
+                          {lang === "fr" ? "✓ Complété" : "✓ Completed"}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   
+                  {/* Progress Bar - Only show if started */}
+                  {isChallengeStarted && !(dailyGoal as any).isCompleted && (
+                    <div className="space-y-2 mt-3 pt-3 border-t border-green-500/20">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {lang === "fr" ? "Progression" : "Progress"}
+                        </span>
+                        <span className="font-semibold">
+                          {(dailyGoal as any).currentValue || 0} / {(dailyGoal as any).targetValue || 0} min
+                        </span>
+                      </div>
+                      <Progress 
+                        value={(dailyGoal as any).progress || 0} 
+                        className="h-2" 
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Show selected template preview below the 3 cards - student can see preview and start */}
+              {selectedChallengeType && (!dailyGoal || (dailyGoal as any).isCompleted) && (
+                <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold mb-1">
+                        {lang === "fr" ? challengeTemplates.find(t => t.id === selectedChallengeType)?.title.fr : challengeTemplates.find(t => t.id === selectedChallengeType)?.title.en}
+                      </h4>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {lang === "fr" ? challengeTemplates.find(t => t.id === selectedChallengeType)?.description.fr : challengeTemplates.find(t => t.id === selectedChallengeType)?.description.en}
+                      </p>
+                      {/* XP reward hidden - only shown after completion */}
+                  </div>
+                  
                   <div className="flex flex-col gap-2">
-                    <Button className="bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black gap-2">
+                      <Button 
+                        className="bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black gap-2"
+                        onClick={async () => {
+                          await saveDailyGoal()
+                          // After saving, the goal will be fetched and displayed
+                        }}
+                        disabled={goalLoading}
+                      >
+                        {goalLoading ? (
+                          <Timer className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
                       <Play className="h-4 w-4" />
                       {lang === "fr" ? "Commencer" : "Start"}
+                          </>
+                        )}
                     </Button>
                     <div className="text-center">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
-                        {selectedChallenge.duration}
+                          {challengeTemplates.find(t => t.id === selectedChallengeType)?.suggestedTime} {lang === "fr" ? "min" : "min"}
                       </div>
                     </div>
                   </div>
@@ -387,8 +605,9 @@ export default function EnhancedHero() {
                 </div>
               )}
 
+
               {/* Quick Actions */}
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 pt-4 border-t">
                 <Link href="/tests">
                   <Button variant="outline" size="sm" className="gap-2">
                     <Target className="h-4 w-4" />
@@ -410,7 +629,7 @@ export default function EnhancedHero() {
                 <Link href="/tests/all">
                   <Button variant="outline" size="sm" className="gap-2">
                     <ArrowRight className="h-4 w-4" />
-                    {lang === "fr" ? "Voir tout" : "View All"}
+                    {lang === "fr" ? "→ Voir tout" : "→ See All"}
                   </Button>
                 </Link>
               </div>
@@ -511,6 +730,78 @@ export default function EnhancedHero() {
                 </Button>
               </div>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Goal Editor Dialog */}
+      {showGoalEditor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowGoalEditor(false)}>
+          <Card className="w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <h3 className="font-semibold mb-2">
+                  {lang === "fr" ? "Définir votre défi du jour" : "Set Your Daily Challenge"}
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {lang === "fr" 
+                    ? "Définissez votre objectif d'étude pour aujourd'hui" 
+                    : "Set your study goal for today"
+                  }
+                </p>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    {lang === "fr" ? "Titre" : "Title"}
+                  </label>
+                  <input
+                    type="text"
+                    value={goalTitle}
+                    onChange={(e) => setGoalTitle(e.target.value)}
+                    placeholder={lang === "fr" ? "Ex: Étudier 30 minutes" : "Ex: Study 30 minutes"}
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-700"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium mb-1 block">
+                    {lang === "fr" ? "Objectif (minutes)" : "Target (minutes)"}
+                  </label>
+                  <input
+                    type="number"
+                    value={goalTarget}
+                    onChange={(e) => setGoalTarget(parseInt(e.target.value) || 30)}
+                    min="1"
+                    max="480"
+                    className="w-full px-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-700"
+                  />
+                </div>
+                
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    onClick={saveDailyGoal}
+                    disabled={goalLoading || !goalTitle.trim()}
+                    className="flex-1 bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black"
+                  >
+                    {goalLoading ? (
+                      <Timer className="h-4 w-4 animate-spin" />
+                    ) : (
+                      lang === "fr" ? "Sauvegarder" : "Save"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowGoalEditor(false)}
+                    disabled={goalLoading}
+                    className="flex-1"
+                  >
+                    {lang === "fr" ? "Annuler" : "Cancel"}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
           </Card>
         </div>
       )}

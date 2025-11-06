@@ -2,36 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    // Mock data for available voices
-    const mockVoices = [
-      {
-        id: 'voice-1',
-        name: 'Marie',
-        language: 'fr-FR',
-        gender: 'female',
-        description: 'Native French female voice'
-      },
-      {
-        id: 'voice-2', 
-        name: 'Pierre',
-        language: 'fr-FR',
-        gender: 'male',
-        description: 'Native French male voice'
-      },
-      {
-        id: 'voice-3',
-        name: 'Sophie',
-        language: 'fr-FR', 
-        gender: 'female',
-        description: 'Professional French voice'
+    // Fetch real voices from backend
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+    const response = await fetch(`${backendUrl}/api/voice-simulation/voices`, {
+      headers: {
+        'Authorization': request.headers.get('authorization') || ''
       }
-    ]
+    });
 
-    return NextResponse.json({
-      success: true,
-      data: mockVoices
-    })
-  } catch (error) {
+    if (!response.ok) {
+      throw new Error('Failed to fetch voices from backend');
+    }
+
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error: any) {
+    console.error('Error fetching voices:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch available voices'

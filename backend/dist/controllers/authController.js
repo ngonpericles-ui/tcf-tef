@@ -2,10 +2,10 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
-const authService_1 = require("../services/authService");
-const errorHandler_1 = require("../middleware/errorHandler");
-const logger_1 = require("../utils/logger");
-require("../middleware/auth");
+const authService_1 = require("@/services/authService");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
+require("@/middleware/auth");
 class AuthController {
 }
 exports.AuthController = AuthController;

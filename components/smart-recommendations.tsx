@@ -82,7 +82,7 @@ export default function SmartRecommendations() {
       isTrending: true,
       icon: <Users className="h-5 w-5" />,
       color: "from-green-500 to-emerald-500",
-      href: "/live/conversation"
+      href: "/live"
     },
     {
       id: "listening-mastery",

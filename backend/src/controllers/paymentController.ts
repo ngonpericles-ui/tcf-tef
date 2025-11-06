@@ -3,13 +3,13 @@ import { PaymentService } from '../services/paymentService';
 import { logger } from '../utils/logger';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
 import { PrismaClient } from '@prisma/client';
-import Stripe from 'stripe';
+// import Stripe from 'stripe';
 
 const prisma = new PrismaClient();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil'
-});
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+//   apiVersion: '2025-08-27.basil'
+// });
 
 export class PaymentController {
   /**

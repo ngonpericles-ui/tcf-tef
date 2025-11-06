@@ -2,10 +2,10 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CourseController = void 0;
-const courseService_1 = require("../services/courseService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const courseService_1 = require("@/services/courseService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class CourseController {
 }
 exports.CourseController = CourseController;
@@ -142,7 +142,7 @@ CourseController.unenrollFromCourse = (0, errorHandler_1.asyncHandler)(async (re
     res.status(200).json(response);
 });
 CourseController.getUserEnrolledCourses = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.userId;
     if (!userId) {
         res.status(401).json({
             success: false,
@@ -206,6 +206,33 @@ CourseController.getUserCreatedCourses = (0, errorHandler_1.asyncHandler)(async 
         message: 'Created courses retrieved successfully'
     };
     res.status(200).json(response);
+});
+CourseController.getCourseStatistics = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+    if (!userId || !userRole) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const statistics = await courseService_1.CourseService.getCourseStatistics(userId, userRole);
+        const response = {
+            success: true,
+            data: statistics,
+            message: 'Course statistics retrieved successfully'
+        };
+        res.status(200).json(response);
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get course statistics', { userId, error });
+        res.status(500).json({
+            success: false,
+            error: { message: 'Failed to retrieve course statistics' }
+        });
+    }
 });
 CourseController.healthCheck = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const response = {

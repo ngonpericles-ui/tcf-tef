@@ -18,6 +18,7 @@ export interface CloudinaryUploadResult {
     created_at: string;
 }
 export declare class CloudinaryService {
+    static isConfigured(): boolean;
     static uploadFile(filePath: string, options?: CloudinaryUploadOptions): Promise<CloudinaryUploadResult>;
     static uploadBuffer(buffer: Buffer, options?: CloudinaryUploadOptions): Promise<CloudinaryUploadResult>;
     static deleteFile(publicId: string, resourceType?: string): Promise<void>;

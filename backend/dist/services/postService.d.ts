@@ -23,39 +23,7 @@ interface SearchFilters {
 }
 export declare class PostService {
     static getAllPosts(pagination: PaginationOptions, filters: PostFilters, sort: SortOptions): Promise<{
-        posts: ({
-            _count: {
-                comments: number;
-                likes: number;
-                shares: number;
-            };
-            author: {
-                id: string;
-                firstName: string;
-                lastName: string;
-                role: import(".prisma/client").$Enums.UserRole;
-            };
-        } & {
-            level: import(".prisma/client").$Enums.CourseLevel | null;
-            id: string;
-            status: import(".prisma/client").$Enums.PostStatus;
-            createdAt: Date;
-            updatedAt: Date;
-            title: string;
-            category: string | null;
-            tags: string[];
-            scheduledAt: Date | null;
-            content: string;
-            excerpt: string | null;
-            media: string | null;
-            visibility: import(".prisma/client").$Enums.PostVisibility;
-            authorId: string;
-            objectives: string[];
-            keyPoints: string[];
-            targetTier: import(".prisma/client").$Enums.SubscriptionTier;
-            publishedAt: Date | null;
-            viewCount: number;
-        })[];
+        posts: any[];
         pagination: {
             page: number;
             limit: number;
@@ -180,9 +148,13 @@ export declare class PostService {
             replies: number;
         };
         author: {
+            email: string;
             id: string;
             firstName: string;
             lastName: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            profileImage: string;
+            profilePicture: string;
         };
     } & {
         id: string;
@@ -199,15 +171,23 @@ export declare class PostService {
                 replies: number;
             };
             author: {
+                email: string;
                 id: string;
                 firstName: string;
                 lastName: string;
+                role: import(".prisma/client").$Enums.UserRole;
+                profileImage: string;
+                profilePicture: string;
             };
             replies: ({
                 author: {
+                    email: string;
                     id: string;
                     firstName: string;
                     lastName: string;
+                    role: import(".prisma/client").$Enums.UserRole;
+                    profileImage: string;
+                    profilePicture: string;
                 };
             } & {
                 id: string;

@@ -1,15 +1,50 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.managerRoutes = void 0;
 const express_1 = require("express");
-const managerController_1 = require("../controllers/managerController");
-const settingsService_1 = require("../services/settingsService");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const client_1 = require("@prisma/client");
+const managerController_1 = require("@/controllers/managerController");
+const settingsService_1 = require("@/services/settingsService");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
+const prisma = new client_1.PrismaClient();
 const router = (0, express_1.Router)();
 exports.managerRoutes = router;
 const messageSchema = joi_1.default.object({
@@ -80,6 +115,75 @@ router.put('/settings', auth_1.authenticate, auth_1.requireManager, async (req, 
         });
     }
     catch (error) {
+        next(error);
+    }
+});
+router.get('/marketplace/profile', auth_1.authenticate, auth_1.requireManager, async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                role: true,
+                subscriptionTier: true,
+                profilePicture: true,
+                createdAt: true,
+                lastActivityAt: true
+            }
+        });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: { message: 'User not found' }
+            });
+        }
+        const completedReviews = 0;
+        const pendingReviews = 0;
+        const profile = {
+            id: user.id,
+            name: `${user.firstName} ${user.lastName}`,
+            email: user.email,
+            role: user.role,
+            subscriptionTier: user.subscriptionTier || 'FREE',
+            profilePicture: user.profilePicture,
+            memberSince: user.createdAt,
+            lastActive: user.lastActivityAt,
+            isTutor: true,
+            isActive: true,
+            tutorStats: {
+                completedReviews,
+                pendingReviews,
+                totalReviews: completedReviews + pendingReviews
+            }
+        };
+        res.json({
+            success: true,
+            data: profile
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+router.post('/marketplace/activate', auth_1.authenticate, auth_1.requireManager, async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        const { isActive } = req.body;
+        console.log('🔧 Manager marketplace activation request:', { userId, isActive });
+        const { MarketplaceService } = await Promise.resolve().then(() => __importStar(require('../services/marketplaceService')));
+        const result = await MarketplaceService.activateTutorProfile(userId, isActive);
+        if (!result.success) {
+            return res.status(result.error?.statusCode || 500).json(result);
+        }
+        console.log('✅ Manager marketplace profile activation successful:', result);
+        res.json(result);
+    }
+    catch (error) {
+        console.error('❌ Error in manager marketplace activation:', error);
         next(error);
     }
 });

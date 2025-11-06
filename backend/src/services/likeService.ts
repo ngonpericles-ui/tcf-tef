@@ -14,55 +14,70 @@ export class LikeService {
     contentType: LikeType
   ): Promise<{ success: boolean; liked: boolean; likeCount: number }> {
     try {
+      // Map contentId and contentType to postId or commentId
+      const whereCondition: any = { userId };
+      
+      if (contentType === LikeType.POST) {
+        whereCondition.postId = contentId;
+      } else if (contentType === LikeType.COMMENT) {
+        whereCondition.commentId = contentId;
+      } else {
+        throw new Error(`Invalid contentType: ${contentType}`);
+      }
+
       // Check if user already liked this content
-      const existingLike = await prisma.like.findUnique({
-        where: {
-          userId_contentId_contentType: {
-            userId,
-            contentId,
-            contentType
-          }
-        }
+      const existingLike = await prisma.like.findFirst({
+        where: whereCondition
       });
 
       if (existingLike) {
         // Unlike the content
         await prisma.like.delete({
           where: {
-            userId_contentId_contentType: {
-              userId,
-              contentId,
-              contentType
-            }
+            id: existingLike.id
           }
         });
 
         // Get updated like count
+        const countWhere: any = {};
+        if (contentType === LikeType.POST) {
+          countWhere.postId = contentId;
+        } else {
+          countWhere.commentId = contentId;
+        }
+        
         const likeCount = await prisma.like.count({
-          where: {
-            contentId,
-            contentType
-          }
+          where: countWhere
         });
 
         logger.info('Content unliked', { userId, contentId, contentType, likeCount });
         return { success: true, liked: false, likeCount };
       } else {
         // Like the content
+        const createData: any = {
+          userId
+        };
+        
+        if (contentType === LikeType.POST) {
+          createData.postId = contentId;
+        } else {
+          createData.commentId = contentId;
+        }
+        
         await prisma.like.create({
-          data: {
-            userId,
-            contentId,
-            contentType
-          }
+          data: createData
         });
 
         // Get updated like count
+        const countWhere: any = {};
+        if (contentType === LikeType.POST) {
+          countWhere.postId = contentId;
+        } else {
+          countWhere.commentId = contentId;
+        }
+        
         const likeCount = await prisma.like.count({
-          where: {
-            contentId,
-            contentType
-          }
+          where: countWhere
         });
 
         logger.info('Content liked', { userId, contentId, contentType, likeCount });
@@ -81,21 +96,27 @@ export class LikeService {
     contentType: LikeType
   ): Promise<{ liked: boolean; likeCount: number }> {
     try {
+      const whereCondition: any = { userId };
+      
+      if (contentType === LikeType.POST) {
+        whereCondition.postId = contentId;
+      } else {
+        whereCondition.commentId = contentId;
+      }
+
+      const countWhere: any = {};
+      if (contentType === LikeType.POST) {
+        countWhere.postId = contentId;
+      } else {
+        countWhere.commentId = contentId;
+      }
+
       const [liked, likeCount] = await Promise.all([
-        prisma.like.findUnique({
-          where: {
-            userId_contentId_contentType: {
-              userId,
-              contentId,
-              contentType
-            }
-          }
+        prisma.like.findFirst({
+          where: whereCondition
         }),
         prisma.like.count({
-          where: {
-            contentId,
-            contentType
-          }
+          where: countWhere
         })
       ]);
 
@@ -117,13 +138,17 @@ export class LikeService {
     limit: number = 20
   ) {
     const skip = (page - 1) * limit;
+    
+    const whereCondition: any = {};
+    if (contentType === LikeType.POST) {
+      whereCondition.postId = contentId;
+    } else {
+      whereCondition.commentId = contentId;
+    }
 
     const [likes, total] = await Promise.all([
       prisma.like.findMany({
-        where: {
-          contentId,
-          contentType
-        },
+        where: whereCondition,
         include: {
           user: {
             select: {
@@ -139,10 +164,7 @@ export class LikeService {
         take: limit
       }),
       prisma.like.count({
-        where: {
-          contentId,
-          contentType
-        }
+        where: whereCondition
       })
     ]);
 
@@ -167,8 +189,11 @@ export class LikeService {
     const skip = (page - 1) * limit;
     const where: any = { userId };
 
-    if (contentType) {
-      where.contentType = contentType;
+    // Filter by contentType if provided
+    if (contentType === LikeType.POST) {
+      where.postId = { not: null };
+    } else if (contentType === LikeType.COMMENT) {
+      where.commentId = { not: null };
     }
 
     const [likes, total] = await Promise.all([
@@ -182,7 +207,14 @@ export class LikeService {
               lastName: true,
               profileImage: true
             }
-          }
+          },
+          post: contentType === LikeType.POST ? {
+            select: {
+              id: true,
+              title: true,
+              excerpt: true
+            }
+          } : undefined
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -204,17 +236,20 @@ export class LikeService {
 
   // Get like statistics
   async getLikeStats(contentId: string, contentType: LikeType) {
+    const countWhere: any = {};
+    if (contentType === LikeType.POST) {
+      countWhere.postId = contentId;
+    } else {
+      countWhere.commentId = contentId;
+    }
+
     const [totalLikes, recentLikes] = await Promise.all([
       prisma.like.count({
-        where: {
-          contentId,
-          contentType
-        }
+        where: countWhere
       }),
       prisma.like.count({
         where: {
-          contentId,
-          contentType,
+          ...countWhere,
           createdAt: {
             gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
           }

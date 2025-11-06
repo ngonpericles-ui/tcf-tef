@@ -29,6 +29,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
+import { UploadProgressCard, type UploadFile, type UploadProgress } from "@/components/upload-progress-card"
+import axios from "axios"
 // import { useAuth } from "@/components/auth-provider"
 
 interface UploadedFile {
@@ -55,6 +57,12 @@ function AdminBulkUploadPageContent() {
   const [editingFile, setEditingFile] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
   const [uploading, setUploading] = useState(false)
+  
+  // Upload progress tracking
+  const [uploadProgresses, setUploadProgresses] = useState<Map<string, UploadProgress>>(new Map())
+  const [uploadControllers, setUploadControllers] = useState<Map<string, AbortController>>(new Map())
+  const [lastProgressUpdate, setLastProgressUpdate] = useState<Map<string, number>>(new Map())
+  const MAX_FILES = 20 // Maximum 20 files
 
   const [bulkSettings, setBulkSettings] = useState({
     title: "",
@@ -124,7 +132,15 @@ function AdminBulkUploadPageContent() {
   const currentConfig = contentTypeConfig[contentType as keyof typeof contentTypeConfig] || contentTypeConfig.course
 
   const handleFileUpload = useCallback((files: FileList) => {
-    const newFiles: UploadedFile[] = Array.from(files).map((file) => ({
+    const filesArray = Array.from(files)
+    
+    // Limit to 20 files
+    if (uploadedFiles.length + filesArray.length > MAX_FILES) {
+      toast.error(t(`Maximum ${MAX_FILES} fichiers autorisés`, `Maximum ${MAX_FILES} files allowed`))
+      return
+    }
+    
+    const newFiles: UploadedFile[] = filesArray.slice(0, MAX_FILES - uploadedFiles.length).map((file) => ({
       id: Math.random().toString(36).substring(2, 11),
       file,
       name: file.name,
@@ -134,10 +150,23 @@ function AdminBulkUploadPageContent() {
     }))
 
     setUploadedFiles((prev) => [...prev, ...newFiles])
+    
+    // Initialize progress for new files
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      newFiles.forEach((file) => {
+        newMap.set(file.id, {
+          fileId: file.id,
+          progress: 0,
+          status: 'pending'
+        })
+      })
+      return newMap
+    })
 
     setShowUploadAnimation(true)
     setTimeout(() => setShowUploadAnimation(false), 2000)
-  }, [])
+  }, [uploadedFiles.length, t])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -180,20 +209,12 @@ function AdminBulkUploadPageContent() {
     return uploadedFiles.reduce((total, file) => total + file.size, 0)
   }
 
-  const handleContinue = async () => {
-    if (uploadedFiles.length === 0 || !user) return
-
-    // Validate that at least one level and subscription are selected
-    if (bulkSettings.levels.length === 0 || bulkSettings.subscriptions.length === 0) {
-      alert(t("Veuillez sélectionner au moins un niveau et un abonnement", "Please select at least one level and subscription"))
-      return
-    }
-
-    setUploading(true)
-
-    try {
-      // ✅ FIXED: Upload each file ONCE with multiple levels and subscriptions
-      for (const file of uploadedFiles) {
+  // Upload single file with progress tracking
+  const uploadFileWithProgress = async (
+    file: UploadedFile,
+    onProgress: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<any> => {
         const formData = new FormData()
         formData.append('file', file.file)
 
@@ -214,46 +235,328 @@ function AdminBulkUploadPageContent() {
         formData.append('availableTiers', availableTiers)
         formData.append('category', category)
         formData.append('contentType', contentTypeValue)
-        formData.append('duration', '60')
+    
+    // Duration handling:
+    const isPDF = file.file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isVideo = file.file.type.startsWith('video/') || /\.(mp4|webm|mov|avi)$/i.test(file.name)
+    const isTest = contentTypeValue === 'TEST' || contentTypeValue === 'CORRIGER_TCF'
+    
+    if (isTest || isVideo) {
+      formData.append('duration', '0')
+    }
 
-        console.log('📤 Uploading file with data:', {
-          title,
-          description,
-          level,
-          subscriptionTier,
-          availableLevels,
-          availableTiers,
-          category,
-          contentType: contentTypeValue,
-          fileName: file.name
-        })
+    const apiUrl = typeof window !== 'undefined'
+      ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+      : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 
-        const response = await apiClient.post('/content-management/upload', formData, {
+    const token = localStorage.getItem('access_token') || 
+                  localStorage.getItem('tcf_tef_admin_session') ||
+                  localStorage.getItem('tcf_tef_session')
+
+    const response = await axios.post(`${apiUrl}/content-management/upload`, formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
-          },
-        })
-
-        if (!response.success) {
-          console.error('❌ Upload failed:', response)
-          throw new Error(response.error?.message || 'Upload failed')
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      },
+      timeout: 0, // No timeout
+      signal,
+      onUploadProgress: (progressEvent) => {
+        if (!progressEvent.total || progressEvent.total === 0) {
+          // If total size is unknown, show estimated progress
+          if (progressEvent.loaded && progressEvent.loaded > 0) {
+            const estimatedProgress = Math.min(Math.round((progressEvent.loaded / 1024 / 1024) * 1.5), 95)
+            onProgress(estimatedProgress)
+          }
+          return
         }
 
-        console.log('✅ File uploaded successfully:', response.data)
+        // Calculate real progress percentage
+        const loaded = progressEvent.loaded || 0
+        const total = progressEvent.total || 1
+        const rawProgress = (loaded / total) * 100
+        
+        // Ensure progress is between 0 and 99 (cap at 99 until complete)
+        const calculatedProgress = Math.min(Math.max(0, Math.round(rawProgress)), 99)
+        
+        // Always update progress to show real-time progress (1, 2, 3... 99, 100)
+        // Remove throttling to show every percentage change
+        onProgress(calculatedProgress)
+        
+        // Update last progress update time
+        setLastProgressUpdate((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(file.id, Date.now())
+          return newMap
+        })
       }
+    })
 
-      // Show success message
-      toast.success(t("Fichiers téléchargés avec succès!", "Files uploaded successfully!"))
+    return response.data
+  }
 
-      // Redirect to content management page
-      router.push("/admin/content")
+  const handleContinue = async () => {
+    if (uploadedFiles.length === 0 || !user) return
+
+    // Validate that at least one level and subscription are selected
+    if (bulkSettings.levels.length === 0 || bulkSettings.subscriptions.length === 0) {
+      toast.error(t("Veuillez sélectionner au moins un niveau et un abonnement", "Please select at least one level and subscription"))
+      return
+    }
+
+    setUploading(true)
+
+    // Reset all progresses to pending
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      uploadedFiles.forEach((file) => {
+        newMap.set(file.id, {
+          fileId: file.id,
+          progress: 0,
+          status: 'pending'
+        })
+      })
+      return newMap
+    })
+
+    // Upload all files in parallel with progress tracking
+    const uploadPromises = uploadedFiles.map(async (file) => {
+      const controller = new AbortController()
+      setUploadControllers((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(file.id, controller)
+        return newMap
+      })
+
+      // Update status to uploading
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        const current = newMap.get(file.id) || { fileId: file.id, progress: 0, status: 'pending' as const }
+        newMap.set(file.id, { ...current, status: 'uploading', progress: 0 })
+        return newMap
+      })
+
+      try {
+        const result = await uploadFileWithProgress(
+          file,
+          (progress) => {
+            setUploadProgresses((prev) => {
+              const newMap = new Map(prev)
+              const current = newMap.get(file.id) || { fileId: file.id, progress: 0, status: 'uploading' as const }
+              newMap.set(file.id, { ...current, progress, status: 'uploading' })
+              return newMap
+            })
+          },
+          controller.signal
+        )
+
+        // Update to completed - set to 100% only after successful response
+        setUploadProgresses((prev) => {
+          const newMap = new Map(prev)
+          // Set progress to 100% after successful upload
+          newMap.set(file.id, {
+            fileId: file.id,
+            progress: 100, // Set to 100% on completion
+            status: 'completed',
+            result: result.data || result,
+            contentId: result.data?.id || result.data?.content?.id || result.id
+          })
+          return newMap
+        })
+        
+        // Clear last progress update on completion
+        setLastProgressUpdate((prev) => {
+          const newMap = new Map(prev)
+          newMap.delete(file.id)
+          return newMap
+        })
+
+        // Show toast notification
+        toast.success(t(`${file.name} téléchargé avec succès!`, `${file.name} uploaded successfully!`))
+
+        return result
     } catch (error: any) {
-      console.error('❌ Error uploading files:', error)
-      const errorMessage = error.response?.data?.message || error.message || t("Erreur lors du téléchargement", "Error uploading files")
-      toast.error(errorMessage)
+        // Handle abort
+        if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+          setUploadProgresses((prev) => {
+            const newMap = new Map(prev)
+            const current = newMap.get(file.id) || { fileId: file.id, progress: 0, status: 'paused' as const }
+            newMap.set(file.id, { ...current, status: 'paused' })
+            return newMap
+          })
+          return null
+        }
+
+        // Handle error
+        setUploadProgresses((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(file.id, {
+            fileId: file.id,
+            progress: 0,
+            status: 'error',
+            error: error.response?.data?.error?.message || error.message || t("Erreur lors du téléchargement", "Upload error")
+          })
+          return newMap
+        })
+
+        toast.error(t(`Erreur lors du téléchargement de ${file.name}`, `Error uploading ${file.name}`))
+        return null
     } finally {
+        // Remove controller
+        setUploadControllers((prev) => {
+          const newMap = new Map(prev)
+          newMap.delete(file.id)
+          return newMap
+        })
+      }
+    })
+
+    // Wait for all uploads to complete
+    const results = await Promise.allSettled(uploadPromises)
+    
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value !== null).length
+    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null)).length
+
+    if (successful > 0) {
+      toast.success(t(`${successful} fichier(s) téléchargé(s) avec succès!`, `${successful} file(s) uploaded successfully!`))
+    }
+    
+    if (failed > 0) {
+      toast.error(t(`${failed} fichier(s) ont échoué`, `${failed} file(s) failed`))
+    }
+
+    // Check if all uploads are completed
+    const allCompleted = Array.from(uploadProgresses.values()).every(
+      p => p.status === 'completed' || p.status === 'error' || p.status === 'removed'
+    )
+
+    if (allCompleted && successful > 0) {
+      // Optionally redirect after a delay
+      setTimeout(() => {
+        router.push("/admin/content")
+      }, 2000)
+    }
+
       setUploading(false)
     }
+
+  // Handle pause upload
+  const handlePause = (fileId: string) => {
+    const controller = uploadControllers.get(fileId)
+    if (controller) {
+      controller.abort()
+    }
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      const current = newMap.get(fileId) || { fileId, progress: 0, status: 'paused' as const }
+      newMap.set(fileId, { ...current, status: 'paused' })
+      return newMap
+    })
+  }
+
+  // Handle resume upload
+  const handleResume = async (fileId: string) => {
+    const file = uploadedFiles.find(f => f.id === fileId)
+    if (!file) return
+
+    const currentProgress = uploadProgresses.get(fileId)
+    if (!currentProgress || currentProgress.status !== 'paused') return
+
+    // Resume upload from where it left off
+    const controller = new AbortController()
+    setUploadControllers((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(fileId, controller)
+      return newMap
+    })
+
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(fileId, { ...currentProgress, status: 'uploading' })
+      return newMap
+    })
+
+    try {
+      const result = await uploadFileWithProgress(
+        file,
+        (progress) => {
+          setUploadProgresses((prev) => {
+            const newMap = new Map(prev)
+            const current = newMap.get(fileId) || { fileId, progress: 0, status: 'uploading' as const }
+            newMap.set(fileId, { ...current, progress, status: 'uploading' })
+            return newMap
+          })
+        },
+        controller.signal
+      )
+
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(fileId, {
+          fileId,
+          progress: 100,
+          status: 'completed',
+          result: result.data,
+          contentId: result.data?.id || result.data?.content?.id
+        })
+        return newMap
+      })
+
+      toast.success(t(`${file.name} téléchargé avec succès!`, `${file.name} uploaded successfully!`))
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
+        setUploadProgresses((prev) => {
+          const newMap = new Map(prev)
+          const current = newMap.get(fileId) || { fileId, progress: 0, status: 'paused' as const }
+          newMap.set(fileId, { ...current, status: 'paused' })
+          return newMap
+        })
+      } else {
+        setUploadProgresses((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(fileId, {
+            fileId,
+            progress: 0,
+            status: 'error',
+            error: error.response?.data?.error?.message || error.message || t("Erreur lors du téléchargement", "Upload error")
+          })
+          return newMap
+        })
+        toast.error(t(`Erreur lors du téléchargement de ${file.name}`, `Error uploading ${file.name}`))
+      }
+    } finally {
+      setUploadControllers((prev) => {
+        const newMap = new Map(prev)
+        newMap.delete(fileId)
+        return newMap
+      })
+    }
+  }
+
+  // Handle remove file
+  const handleRemove = (fileId: string) => {
+    // Abort upload if in progress
+    const controller = uploadControllers.get(fileId)
+    if (controller) {
+      controller.abort()
+      setUploadControllers((prev) => {
+        const newMap = new Map(prev)
+        newMap.delete(fileId)
+        return newMap
+      })
+    }
+
+    // Remove from files list
+    setUploadedFiles((prev) => prev.filter((file) => file.id !== fileId))
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      newMap.delete(fileId)
+      return newMap
+    })
+  }
+
+  // Handle view content
+  const handleViewContent = (contentId: string) => {
+    router.push(`/admin/content/${contentId}`)
   }
 
   const mapSubscriptionTier = (subscription: string) => {
@@ -369,7 +672,47 @@ function AdminBulkUploadPageContent() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+          {/* Progress Cards - Top Left Column */}
+          {uploadProgresses.size > 0 && (
+            <div className="lg:col-span-1">
+              <Card className="bg-card border-gray-200 dark:border-gray-700 sticky top-4 z-10">
+                <CardHeader>
+                  <CardTitle className="text-foreground flex items-center">
+                    <Upload className="w-5 h-5 mr-2" />
+                    {t("Progression des téléchargements", "Upload Progress")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="max-h-[600px] overflow-y-auto">
+                  {Array.from(uploadProgresses.values()).map((progress) => {
+                    const file = uploadedFiles.find(f => f.id === progress.fileId)
+                    if (!file) return null
+                    
+                    return (
+                      <UploadProgressCard
+                        key={progress.fileId}
+                        upload={progress}
+                        file={{
+                          id: file.id,
+                          file: file.file,
+                          name: file.name,
+                          size: file.size,
+                          type: file.type
+                        }}
+                        onRemove={handleRemove}
+                        onPause={handlePause}
+                        onResume={handleResume}
+                        onView={handleViewContent}
+                      />
+                    )
+                  })}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Main Content Area */}
+          <div className={uploadProgresses.size > 0 ? "lg:col-span-2" : "lg:col-span-3"}>
+            <div className="space-y-6">
             {/* Upload Area */}
             <Card className="bg-card border-gray-200 dark:border-gray-700">
               <CardContent className="p-6">
@@ -414,8 +757,8 @@ function AdminBulkUploadPageContent() {
                   </div>
                   <p className="text-xs mt-4 text-foreground">
                     {t(
-                      "Formats supportés: PDF, DOC, MP4, MP3, JPG, PNG (Max: 100MB par fichier)",
-                      "Supported formats: PDF, DOC, MP4, MP3, JPG, PNG (Max: 100MB per file)",
+                      `Formats supportés: PDF, DOC, MP4, MP3, JPG, PNG, VIDÉO, AUDIO (Max: 10GB par fichier, jusqu'à ${MAX_FILES} fichiers)`,
+                      `Supported formats: PDF, DOC, MP4, MP3, JPG, PNG, VIDEO, AUDIO (Max: 10GB per file, up to ${MAX_FILES} files)`,
                     )}
                   </p>
                 </div>
@@ -740,6 +1083,7 @@ function AdminBulkUploadPageContent() {
                 </Button>
               </CardContent>
             </Card>
+            </div>
           </div>
         </div>
       </div>

@@ -106,6 +106,73 @@ class TemporaryTokenService {
         return { isValid: false, error: 'Simulation not found or access denied' };
       }
 
+      // NOUVELLE LOGIQUE: Vérifier les conditions d'accès basées sur la date de simulation
+      if (tokenData.simulationType === 'voice') {
+        const { prisma } = await import('@/database/connection');
+        const simulation = await prisma.voiceSimulation.findUnique({
+          where: { id: tokenData.simulationId }
+        });
+
+        if (!simulation) {
+          return { isValid: false, error: 'Simulation not found' };
+        }
+
+        // Vérifier si la simulation est terminée
+        if (simulation.status === 'COMPLETED' || simulation.status === 'CANCELLED') {
+          return { isValid: false, error: 'Cette simulation est terminée ou annulée' };
+        }
+
+        // Calculer le temps jusqu'au début de la simulation
+        const scheduledDate = new Date(simulation.scheduledDate);
+        const timeUntilStart = scheduledDate.getTime() - now.getTime();
+        const minutesUntilStart = timeUntilStart / (1000 * 60);
+
+        // LOGIQUE D'ACCÈS:
+        // - Accessible 5 minutes avant le début (ou moins)
+        // - Si simulation à 9:00 et qu'il est 8:58, accessible directement (2 minutes avant = accessible car <= 5 minutes)
+        // - Si simulation programmée pour plus de 10 minutes: accessible seulement 5 minutes avant le début
+        
+        // Calculer la fin de la simulation
+        const simulationEnd = new Date(scheduledDate.getTime() + simulation.duration * 1000);
+        
+        // Vérifier si on est après la fin de la simulation
+        if (now > simulationEnd) {
+          // Invalider le token après la fin de la simulation
+          await this.deleteToken(token);
+          return { isValid: false, error: 'Cette simulation est terminée' };
+        }
+
+        // Si on est dans la fenêtre de la simulation (pendant ou après le début mais avant la fin)
+        if (minutesUntilStart <= 0 && now <= simulationEnd) {
+          // Accessible: pendant la simulation
+          return {
+            isValid: true,
+            userId: tokenData.userId,
+            simulationId: tokenData.simulationId,
+            simulationType: tokenData.simulationType
+          };
+        }
+
+        // Si 5 minutes ou moins avant le début, accessible
+        if (minutesUntilStart > 0 && minutesUntilStart <= 5) {
+          // Accessible: 5 minutes ou moins avant le début
+          return {
+            isValid: true,
+            userId: tokenData.userId,
+            simulationId: tokenData.simulationId,
+            simulationType: tokenData.simulationType
+          };
+        }
+
+        // Si plus de 5 minutes avant le début, pas encore accessible
+        if (minutesUntilStart > 5) {
+          return { 
+            isValid: false, 
+            error: `Cette simulation n'est pas encore accessible. Elle sera accessible 5 minutes avant le début (dans ${Math.ceil(minutesUntilStart - 5)} minute${Math.ceil(minutesUntilStart - 5) > 1 ? 's' : ''}).`
+          };
+        }
+      }
+
       return {
         isValid: true,
         userId: tokenData.userId,

@@ -31,6 +31,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import apiClient from "@/lib/api-client"
 import { toast } from "sonner"
+import { useFileUpload } from "@/hooks/useFileUpload"
+import { UploadProgressCard } from "@/components/upload-progress-card"
+import axios from "axios"
 
 interface UploadedFile {
   id: string
@@ -68,6 +71,22 @@ function ManagerBulkUploadPageContent() {
   const [editingFile, setEditingFile] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
   const [uploading, setUploading] = useState(false)
+
+  // Use the upload hook for progress tracking
+  const { uploadProgresses, uploadFile, pauseUpload, resumeUpload, removeFile } = useFileUpload({
+    onSuccess: (fileId, result) => {
+      const file = uploadedFiles.find(f => f.id === fileId)
+      if (file) {
+        toast.success(t(`${file.name} téléchargé avec succès!`, `${file.name} uploaded successfully!`))
+      }
+    },
+    onError: (fileId, error) => {
+      const file = uploadedFiles.find(f => f.id === fileId)
+      if (file) {
+        toast.error(t(`Erreur lors du téléchargement de ${file.name}`, `Error uploading ${file.name}`))
+      }
+    }
+  })
   const [bulkSettings, setBulkSettings] = useState<BulkSettings>({
     title: "",
     levels: [],
@@ -270,39 +289,80 @@ function ManagerBulkUploadPageContent() {
   const handleContinue = async () => {
     if (uploadedFiles.length === 0) return
 
+    // Validate that at least one level and subscription are selected
+    if (bulkSettings.levels.length === 0 || bulkSettings.subscriptions.length === 0) {
+      toast.error(t("Veuillez sélectionner au moins un niveau et un abonnement", "Please select at least one level and subscription"))
+      return
+    }
+
     setUploading(true)
 
-    try {
-      // Upload each file to the backend
-      for (const file of uploadedFiles) {
+    // Upload all files in parallel with progress tracking
+    const uploadPromises = uploadedFiles.map(async (file) => {
+      const formDataBuilder = (uploadFile: UploadedFile) => {
         const formData = new FormData()
-        formData.append('file', file.file)
-        formData.append('title', bulkSettings.title || file.name.replace(/\.[^/.]+$/, ""))
+        formData.append('file', uploadFile.file)
+        formData.append('title', bulkSettings.title || uploadFile.name.replace(/\.[^/.]+$/, ""))
         formData.append('description', `Manager uploaded ${contentType} content`)
         formData.append('level', bulkSettings.levels.length > 0 ? bulkSettings.levels[0] : "A1")
         formData.append('subscriptionTier', mapSubscriptionTier(bulkSettings.subscription || "Gratuit"))
         formData.append('category', mapCategory(bulkSettings.category || "GENERAL"))
         formData.append('contentType', mapContentType(contentType))
-        formData.append('duration', '60')
-
-        await apiClient.post('/content-management/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        })
+        
+        // Duration handling: only append for tests and videos
+        const isPDF = uploadFile.file.type === 'application/pdf' || uploadFile.name.toLowerCase().endsWith('.pdf')
+        const isVideo = uploadFile.file.type.startsWith('video/') || /\.(mp4|webm|mov|avi)$/i.test(uploadFile.name)
+        const isTest = mapContentType(contentType) === 'TEST' || mapContentType(contentType) === 'CORRIGER_TCF'
+        
+        if (isTest || isVideo) {
+          formData.append('duration', '0') // Backend will extract actual duration for videos
+        }
+        
+        return formData
       }
 
-      // Show success message
-      toast.success(t("Fichiers téléchargés avec succès!", "Files uploaded successfully!"))
+      return uploadFile(
+        {
+          id: file.id,
+          file: file.file,
+          name: file.name,
+          size: file.size,
+          type: file.type
+        },
+        formDataBuilder
+      )
+    })
+
+    try {
+      const results = await Promise.allSettled(uploadPromises)
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value !== null).length
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null)).length
+
+      if (successful > 0) {
+        toast.success(t(`${successful} fichier(s) téléchargé(s) avec succès!`, `${successful} file(s) uploaded successfully!`))
+      }
       
-      // Redirect to content management page
+      if (failed > 0) {
+        toast.error(t(`${failed} fichier(s) ont échoué`, `${failed} file(s) failed`))
+      }
+
+      // Redirect after successful uploads
+      if (successful > 0) {
+        setTimeout(() => {
       router.push("/manager/content")
+        }, 2000)
+      }
     } catch (error) {
       console.error('Error uploading files:', error)
       toast.error(t("Erreur lors du téléchargement", "Error uploading files"))
     } finally {
       setUploading(false)
     }
+  }
+
+  // Handle view content
+  const handleViewContent = (contentId: string) => {
+    router.push(`/manager/content/${contentId}`)
   }
 
   const mapSubscriptionTier = (subscription: string) => {
@@ -440,6 +500,64 @@ function ManagerBulkUploadPageContent() {
             </Badge>
           </div>
         </div>
+
+        {/* Progress Cards - Top Left Column */}
+        {uploadProgresses.size > 0 && (
+          <Card className="bg-card border-gray-200 dark:border-gray-700 sticky top-4 z-10 mb-6">
+            <CardHeader>
+              <CardTitle className="text-foreground flex items-center">
+                <Upload className="w-5 h-5 mr-2" />
+                {t("Progression des téléchargements", "Upload Progress")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="max-h-[600px] overflow-y-auto">
+              {Array.from(uploadProgresses.values()).map((progress) => {
+                const file = uploadedFiles.find(f => f.id === progress.fileId)
+                if (!file) return null
+                
+                return (
+                  <UploadProgressCard
+                    key={progress.fileId}
+                    upload={progress}
+                    file={{
+                      id: file.id,
+                      file: file.file,
+                      name: file.name,
+                      size: file.size,
+                      type: file.type
+                    }}
+                    onRemove={removeFile}
+                    onPause={pauseUpload}
+                    onResume={(fileId) => {
+                      const uploadFile = uploadedFiles.find(f => f.id === fileId)
+                      if (!uploadFile) return
+                      // Resume by re-uploading
+                      const formDataBuilder = (f: UploadedFile) => {
+                        const formData = new FormData()
+                        formData.append('file', f.file)
+                        formData.append('title', bulkSettings.title || f.name.replace(/\.[^/.]+$/, ""))
+                        formData.append('description', `Manager uploaded ${contentType} content`)
+                        formData.append('level', bulkSettings.levels.length > 0 ? bulkSettings.levels[0] : "A1")
+                        formData.append('subscriptionTier', mapSubscriptionTier(bulkSettings.subscription || "Gratuit"))
+                        formData.append('category', mapCategory(bulkSettings.category || "GENERAL"))
+                        formData.append('contentType', mapContentType(contentType))
+                        return formData
+                      }
+                      resumeUpload({
+                        id: uploadFile.id,
+                        file: uploadFile.file,
+                        name: uploadFile.name,
+                        size: uploadFile.size,
+                        type: uploadFile.type
+                      }, formDataBuilder)
+                    }}
+                    onView={handleViewContent}
+                  />
+                )
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">

@@ -143,10 +143,13 @@ export class LiveSessionService {
       if (liveSession.requiredTier !== SubscriptionTier.FREE && userId) {
         const user = await prisma.user.findUnique({
           where: { id: userId },
-          select: { subscriptionTier: true }
+          select: { subscriptionTier: true, role: true }
         });
 
-        if (user && !this.hasAccessToTier(user.subscriptionTier, liveSession.requiredTier)) {
+        // Admins and managers (content providers) have full access to all sessions
+        if (user && [UserRole.ADMIN, UserRole.SENIOR_MANAGER, UserRole.JUNIOR_MANAGER].includes(user.role as any)) {
+          // Content providers have full access - no subscription check needed
+        } else if (user && !this.hasAccessToTier(user.subscriptionTier, liveSession.requiredTier)) {
           throw new AuthorizationError('Subscription upgrade required to access this session');
         }
       }
@@ -187,7 +190,10 @@ export class LiveSessionService {
       const { search, level, category, tier, status } = filters;
 
       // Build where clause
-      const where: any = {};
+      const where: any = {
+        // Filter out one-on-one sessions from public listing
+        isOneOnOne: false
+      };
 
       if (search) {
         where.OR = [
@@ -293,27 +299,30 @@ export class LiveSessionService {
         throw new NotFoundError('Live session not found');
       }
 
-      if (session.status !== LiveSessionStatus.SCHEDULED) {
+      if (session.status !== LiveSessionStatus.SCHEDULED && session.status !== LiveSessionStatus.LIVE) {
         throw new ValidationError('Cannot register for this session');
       }
 
-      // Check if session is in the future
-      if (session.date <= new Date()) {
+      // Check if session is in the future (only for SCHEDULED sessions)
+      if (session.status === LiveSessionStatus.SCHEDULED && session.date <= new Date()) {
         throw new ValidationError('Cannot register for past sessions');
       }
 
       // Check user subscription tier
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { subscriptionTier: true }
+        select: { subscriptionTier: true, role: true }
       });
 
       if (!user) {
         throw new NotFoundError('User not found');
       }
 
-      if (!this.hasAccessToTier(user.subscriptionTier, session.requiredTier)) {
-        throw new AuthorizationError('Subscription upgrade required to register for this session');
+      // Admins and managers (content providers) have full access to all sessions
+      if (![UserRole.ADMIN, UserRole.SENIOR_MANAGER, UserRole.JUNIOR_MANAGER].includes(user.role as any)) {
+        if (!this.hasAccessToTier(user.subscriptionTier, session.requiredTier)) {
+          throw new AuthorizationError('Subscription upgrade required to register for this session');
+        }
       }
 
       // Check if already registered
@@ -410,21 +419,46 @@ export class LiveSessionService {
     userRole: UserRole
   ): Promise<LiveSessionWithDetails> {
     try {
+      console.log('🔍 LiveSessionService.updateSessionStatus called:', {
+        sessionId,
+        newStatus,
+        userId,
+        userRole
+      });
+
       // Get existing session
       const existingSession = await prisma.liveSession.findUnique({
         where: { id: sessionId }
+      });
+
+      console.log('📋 Existing session found:', {
+        id: existingSession?.id,
+        status: existingSession?.status,
+        createdById: existingSession?.createdById
       });
 
       if (!existingSession) {
         throw new NotFoundError('Live session not found');
       }
 
-      // Check authorization
-      if (userRole !== UserRole.ADMIN && existingSession.createdById !== userId) {
-        throw new AuthorizationError('Access denied. You can only manage your own sessions.');
+      // Check authorization - Allow admins, managers, and session creators
+      const isAdminOrManager = [UserRole.ADMIN, UserRole.SENIOR_MANAGER, UserRole.JUNIOR_MANAGER].includes(userRole);
+      const isCreator = existingSession.createdById === userId;
+      
+      console.log('🔐 Authorization check:', {
+        isAdminOrManager,
+        isCreator,
+        userRole,
+        sessionCreatorId: existingSession.createdById,
+        requestingUserId: userId
+      });
+      
+      if (!isAdminOrManager && !isCreator) {
+        throw new AuthorizationError('Access denied. Only admins, managers, or session creators can update session status.');
       }
 
       // Update session status
+      console.log('🔄 Updating session status in database...');
       const updatedSession = await prisma.liveSession.update({
         where: { id: sessionId },
         data: {
@@ -451,6 +485,13 @@ export class LiveSessionService {
             }
           }
         }
+      });
+
+      console.log('✅ Session status updated successfully in database:', {
+        sessionId,
+        oldStatus: existingSession.status,
+        newStatus,
+        updatedBy: userId
       });
 
       logger.info('Live session status updated successfully', { 

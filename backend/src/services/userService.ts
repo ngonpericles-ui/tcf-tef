@@ -560,53 +560,72 @@ export class UserService {
    */
   private static async calculateUserStats(userId: string) {
     try {
-      const [
-        coursesCompleted,
-        testsCompleted,
-        totalTimeSpent,
-        averageScore
-      ] = await Promise.all([
-        // Courses completed
-        prisma.courseEnrollment.count({
+      // Calculate courses completed
+      let coursesCompleted = 0;
+      try {
+        coursesCompleted = await prisma.courseEnrollment.count({
           where: {
             userId,
             completedAt: { not: null }
           }
-        }),
+        });
+      } catch (error: any) {
+        logger.warn('Failed to count course enrollments', { userId, error: error.message });
+      }
 
-        // Tests completed
-        prisma.testAttempt.count({
+      // Calculate tests completed
+      let testsCompleted = 0;
+      try {
+        testsCompleted = await prisma.testAttempt.count({
           where: {
             userId,
             status: 'COMPLETED'
           }
-        }),
+        });
+      } catch (error: any) {
+        logger.warn('Failed to count test attempts', { userId, error: error.message });
+      }
 
-        // Total time spent (in seconds)
-        prisma.userProgress.aggregate({
+      // Total time spent (in seconds) - handle missing userProgress table
+      let totalTimeSpent = 0;
+      try {
+        // Check if userProgress table exists by trying to query it
+        const timeSpentResult = await prisma.userProgress.aggregate({
           where: { userId },
           _sum: { timeSpent: true }
-        }),
+        }).catch(() => null);
+        totalTimeSpent = timeSpentResult?._sum?.timeSpent || 0;
+      } catch (error: any) {
+        // Table might not exist, use default value
+        logger.warn('userProgress table not available, using default', { userId });
+        totalTimeSpent = 0;
+      }
 
         // Average test score
-        prisma.testAttempt.aggregate({
+      let averageScore = 0;
+      try {
+        const scoreResult = await prisma.testAttempt.aggregate({
           where: {
             userId,
             status: 'COMPLETED',
             score: { not: null }
           },
           _avg: { score: true }
-        })
-      ]);
+        });
+        averageScore = scoreResult._avg.score || 0;
+      } catch (error: any) {
+        logger.warn('Failed to calculate average score', { userId, error: error.message });
+      }
 
       return {
         coursesCompleted,
         testsCompleted,
-        totalTimeSpent: totalTimeSpent._sum.timeSpent || 0,
-        averageScore: averageScore._avg.score || 0
+        totalTimeSpent,
+        averageScore
       };
-    } catch (error) {
-      logger.error('Failed to calculate user stats', { userId, error });
+    } catch (error: any) {
+      logger.error('Failed to calculate user stats', { userId, error: error.message });
+      // Return default values on any error
       return {
         coursesCompleted: 0,
         testsCompleted: 0,

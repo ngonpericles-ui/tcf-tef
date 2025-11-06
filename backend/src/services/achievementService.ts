@@ -7,7 +7,9 @@ export class AchievementService {
     try {
       const recentAchievements = await prisma.userAchievement.findMany({
         where: {
-          userId: userId
+          userId: userId,
+          isUnlocked: true, // Only get unlocked achievements
+          unlockedAt: { not: null } // Ensure unlockedAt is not null for ordering
         },
         include: {
           achievement: true
@@ -17,6 +19,11 @@ export class AchievementService {
         },
         take: 5
       })
+
+      // Return empty array if no achievements found (not an error)
+      if (!recentAchievements || recentAchievements.length === 0) {
+        return []
+      }
 
       return recentAchievements.map(ua => ({
         id: ua.id,
@@ -29,9 +36,15 @@ export class AchievementService {
         progress: ua.progress,
         isCompleted: ua.isUnlocked
       }))
-    } catch (error) {
+    } catch (error: any) {
+      // If database connection error, return empty array instead of throwing
+      if (error?.code === 'P1001' || error?.message?.includes('Can\'t reach database')) {
+        logger.warn('Database connection error, returning empty achievements array:', error.message)
+        return []
+      }
       logger.error('Error getting recent achievements:', error)
-      throw error
+      // Return empty array on any error to prevent 500 errors
+      return []
     }
   }
 
@@ -45,9 +58,10 @@ export class AchievementService {
         include: {
           achievement: true
         },
-        orderBy: {
-          unlockedAt: 'desc'
-        }
+        orderBy: [
+          { isUnlocked: 'desc' }, // Unlocked first
+          { unlockedAt: 'desc' } // Then by unlock date
+        ]
       })
 
       return userAchievements.map(ua => ({

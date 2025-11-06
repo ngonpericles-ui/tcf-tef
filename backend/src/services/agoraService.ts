@@ -52,8 +52,8 @@ export interface CloudRecordingConfig {
 }
 
 export class AgoraService {
-  private static appId = process.env.AGORA_APP_ID!;
-  private static appCertificate = process.env.AGORA_APP_CERTIFICATE!;
+  private static appId = process.env.AGORA_APP_ID;
+  private static appCertificate = process.env.AGORA_APP_CERTIFICATE;
   private static customerId = process.env.AGORA_CUSTOMER_ID;
   private static customerSecret = process.env.AGORA_CUSTOMER_SECRET;
   private static baseUrl = 'https://api.agora.io';
@@ -64,6 +64,10 @@ export class AgoraService {
   static generateRTCToken(request: AgoraTokenRequest): AgoraTokenResponse {
     try {
       const { channelName, uid, role, expiry = 3600 } = request;
+
+      if (!this.appId || !this.appCertificate) {
+        throw new ValidationError('Agora service is not configured. Please set AGORA_APP_ID and AGORA_APP_CERTIFICATE environment variables.');
+      }
 
       if (!channelName) {
         throw new ValidationError('Channel name is required');

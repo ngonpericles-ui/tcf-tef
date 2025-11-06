@@ -200,6 +200,62 @@ export class AdminController {
   });
 
   /**
+   * Delete manager
+   */
+  static deleteManager = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { managerId } = req.params;
+    const deletedById = req.user?.userId;
+
+    logger.info('Delete manager request', { managerId, deletedById });
+
+    if (!deletedById) {
+      logger.warn('Delete manager: Authentication required', { managerId });
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    if (!managerId) {
+      logger.warn('Delete manager: Manager ID missing', { deletedById });
+      res.status(400).json({
+        success: false,
+        error: { message: 'Manager ID is required' }
+      });
+      return;
+    }
+
+    try {
+      await AdminService.deleteManager(managerId, deletedById);
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Manager deleted successfully'
+      };
+
+      logger.info('Manager deleted successfully via controller', { managerId, deletedById });
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      logger.error('Delete manager failed in controller', { managerId, deletedById, error: error.message });
+      
+      if (error.message === 'Manager not found') {
+        res.status(404).json({
+          success: false,
+          error: { message: 'Manager not found' }
+        });
+        return;
+      }
+
+      res.status(500).json({
+        success: false,
+        error: { message: error.message || 'Failed to delete manager' }
+      });
+    }
+  });
+
+  /**
    * Get manager performance analytics
    */
   static getManagerPerformance = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -212,6 +268,21 @@ export class AdminController {
       success: true,
       data: performance,
       message: 'Manager performance retrieved successfully'
+    };
+
+    res.status(200).json(response);
+  });
+
+  /**
+   * Get admin profile statistics
+   */
+  static getStatistics = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const stats = await AdminService.getStatistics();
+
+    const response: ApiResponse = {
+      success: true,
+      data: stats,
+      message: 'Admin statistics retrieved successfully'
     };
 
     res.status(200).json(response);
@@ -415,17 +486,30 @@ export class AdminController {
    * Update subscription plan
    */
   static updateSubscriptionPlan = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
-    const updateData = req.body;
-    const plan = await AdminService.updateSubscriptionPlan(id, updateData);
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      
+      logger.info('📥 Controller received update request', { id, updateData });
+      
+      const plan = await AdminService.updateSubscriptionPlan(id, updateData);
 
-    const response: ApiResponse = {
-      success: true,
-      data: plan,
-      message: 'Subscription plan updated successfully'
-    };
+      const response: ApiResponse = {
+        success: true,
+        data: plan,
+        message: 'Subscription plan updated successfully'
+      };
 
-    res.status(200).json(response);
+      res.status(200).json(response);
+    } catch (error: any) {
+      logger.error('❌ Controller error updating subscription plan', { 
+        errorMessage: error?.message, 
+        errorStack: error?.stack,
+        errorCode: error?.code,
+        errorName: error?.name
+      });
+      throw error; // Let asyncHandler handle it
+    }
   });
 
   /**
@@ -507,17 +591,36 @@ export class AdminController {
    * Create new audio simulation template
    */
   static createAudioSimulation = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const simulationData = req.body;
-    
-    const simulation = await AdminService.createAudioSimulation(simulationData);
+    try {
+      // Log incoming data for debugging
+      console.log('📝 Creating audio simulation with data:', {
+        title: req.body.title,
+        description: req.body.description?.substring(0, 50),
+        descriptionLength: req.body.description?.length,
+        hasSubscription: Array.isArray(req.body.subscription),
+        subscriptionCount: req.body.subscription?.length,
+        hasExtractedQuestions: Array.isArray(req.body.extractedQuestions),
+        extractedQuestionsCount: req.body.extractedQuestions?.length
+      });
 
-    const response: ApiResponse = {
-      success: true,
-      data: simulation,
-      message: 'Audio simulation created successfully'
-    };
+      const simulationData = {
+        ...req.body,
+        userId: req.user?.id || req.user?.userId || 'system' // Add userId from authenticated user
+      };
+      
+      const simulation = await AdminService.createAudioSimulation(simulationData);
 
-    res.status(201).json(response);
+      const response: ApiResponse = {
+        success: true,
+        data: simulation,
+        message: 'Audio simulation created successfully'
+      };
+
+      res.status(201).json(response);
+    } catch (error: any) {
+      console.error('❌ Error creating audio simulation:', error);
+      throw error; // Let asyncHandler handle it
+    }
   });
 
   /**

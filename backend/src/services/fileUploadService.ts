@@ -116,7 +116,7 @@ export class FileUploadService {
       fileFilter,
       limits: {
         fileSize: options.maxSize || this.MAX_FILE_SIZE,
-        files: 5 // Maximum 5 files per request
+        files: 20 // Maximum 20 files per request for bulk uploads
       }
     });
   }
@@ -156,9 +156,13 @@ export class FileUploadService {
         }
       }
 
-      // Generate URL
+      // Generate URL - ensure it's absolute
       const relativePath = path.relative(this.UPLOAD_DIR, processedPath);
       const url = `/uploads/${relativePath.replace(/\\/g, '/')}`;
+      
+      // Also create absolute URL for storage
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+      const absoluteUrl = `${backendUrl}${url}`;
 
       // Save to database
       const uploadedFile = await prisma.file.create({
@@ -169,7 +173,7 @@ export class FileUploadService {
           mimetype: file.mimetype,
           size: file.size,
           path: processedPath,
-          url,
+          url: absoluteUrl, // Save absolute URL for easier retrieval
           userId: userId,
           uploadedById: userId,
           category: options.category,
@@ -186,12 +190,12 @@ export class FileUploadService {
 
       return {
         id: uploadedFile.id,
+        url: absoluteUrl, // Return absolute URL
+        path: url, // Keep relative path for reference
         originalName: uploadedFile.originalName,
         filename: uploadedFile.filename,
         mimetype: uploadedFile.mimetype,
         size: uploadedFile.size,
-        path: uploadedFile.path,
-        url: uploadedFile.url,
         uploadedBy: uploadedFile.userId,
         uploadedAt: uploadedFile.createdAt,
         category: uploadedFile.category as any,
@@ -405,10 +409,20 @@ export class FileUploadService {
         throw new ValidationError('Profile image must be an image file');
       }
 
-      // Update user profile
+      // Generate absolute URL for the uploaded file
+      // Backend serves static files at http://localhost:3001/uploads/
+      const baseUrl = process.env.BACKEND_URL || process.env.API_URL?.replace('/api', '') || 'http://localhost:3001';
+      const absoluteUrl = file.url.startsWith('http') 
+        ? file.url 
+        : `${baseUrl}${file.url.startsWith('/') ? '' : '/'}${file.url}`;
+
+      // Update user profile - save ABSOLUTE URL to both profileImage and profilePicture for consistency
       await prisma.user.update({
         where: { id: userId },
-        data: { profileImage: file.url }
+        data: { 
+          profileImage: absoluteUrl, // Save absolute URL so frontend doesn't need to convert
+          profilePicture: absoluteUrl // Also update profilePicture field for compatibility
+        }
       });
 
       logger.info('Profile image updated', { userId, fileId });

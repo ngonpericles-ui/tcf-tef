@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationService = void 0;
-const connection_1 = require("../database/connection");
-const errorHandler_1 = require("../middleware/errorHandler");
+const connection_1 = require("@/database/connection");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class NotificationService {
     static async createNotification(notificationData, creatorRole) {
         try {
@@ -100,19 +100,46 @@ class NotificationService {
                     category
                 };
             }
-            const total = await connection_1.prisma.userNotification.count({ where });
-            const unreadCount = await connection_1.prisma.userNotification.count({
-                where: {
-                    userId,
-                    status: client_1.NotificationStatus.UNREAD,
-                    notification: {
-                        OR: [
-                            { expiresAt: null },
-                            { expiresAt: { gte: new Date() } }
-                        ]
-                    }
+            let total = 0;
+            let unreadCount = 0;
+            let retryCount = 0;
+            const maxRetries = 3;
+            while (retryCount < maxRetries) {
+                try {
+                    total = await connection_1.prisma.userNotification.count({ where });
+                    unreadCount = await connection_1.prisma.userNotification.count({
+                        where: {
+                            userId,
+                            status: client_1.NotificationStatus.UNREAD,
+                            notification: {
+                                OR: [
+                                    { expiresAt: null },
+                                    { expiresAt: { gte: new Date() } }
+                                ]
+                            }
+                        }
+                    });
+                    break;
                 }
-            });
+                catch (dbError) {
+                    retryCount++;
+                    console.log(`Database connection attempt ${retryCount} failed for notifications:`, dbError.message);
+                    if (retryCount >= maxRetries) {
+                        console.log('All database retry attempts failed for notifications, returning fallback');
+                        return {
+                            notifications: [],
+                            pagination: {
+                                page: 1,
+                                limit: 10,
+                                total: 0,
+                                totalPages: 0
+                            },
+                            unreadCount: 0
+                        };
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                }
+            }
             const userNotifications = await connection_1.prisma.userNotification.findMany({
                 where,
                 include: {

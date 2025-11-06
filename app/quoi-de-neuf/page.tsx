@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
-import { Heart, MessageSquare, Share2, Lock, CheckCircle, Shield, Send, User } from "lucide-react"
+import { Heart, MessageSquare, Share2, Lock, CheckCircle, Shield, Send, User, Camera, Smile, MoreHorizontal, Home, Users, UserPlus, ShoppingCart, Bookmark, Flag, Star, ChevronDown, X } from "lucide-react"
+import dynamic from "next/dynamic"
+
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), { ssr: false })
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -60,6 +63,43 @@ export default function QuoiDeNeufPage() {
   const { theme } = useTheme()
   const { user, isAuthenticated } = useAuth()
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
+  
+  // Fetch full user profile data including profileImage
+  const [userProfile, setUserProfile] = useState<any>(null)
+  
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user?.id) return
+      
+      try {
+        // Try to get user profile from /users/profile (which returns current user)
+        const response = await apiClient.get(`/users/profile`).catch(async () => {
+          // Fallback to /users/{id} if profile endpoint fails
+          return await apiClient.get(`/users/${user.id}`)
+        })
+        
+        if (response.success && response.data) {
+          const responseData = response.data as any
+          const profileData = responseData.user || responseData
+          setUserProfile(profileData)
+          console.log('✅ User profile fetched:', { 
+            id: profileData?.id, 
+            hasProfileImage: !!(profileData?.profileImage || profileData?.profilePicture) 
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch user profile:', error)
+        // Fallback to user from auth context
+        setUserProfile(user)
+      }
+    }
+    
+    if (user?.id) {
+      fetchUserProfile()
+    } else {
+      setUserProfile(null)
+    }
+  }, [user?.id])
 
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +112,16 @@ export default function QuoiDeNeufPage() {
   const [loadedComments, setLoadedComments] = useState<Record<string, Comment[]>>({})
   const [userLikedPosts, setUserLikedPosts] = useState<Set<string>>(new Set())
   const [userSharedPosts, setUserSharedPosts] = useState<Set<string>>(new Set())
+  const [showEmojiPicker, setShowEmojiPicker] = useState<Record<string, boolean>>({})
+
+  // Utility function to normalize image URLs
+  const normalizeImageUrl = (url: string | null | undefined): string => {
+    if (!url) return ''
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    if (url.startsWith('/uploads')) return `http://localhost:3001${url}`
+    if (url.startsWith('/')) return `http://localhost:3001${url}`
+    return `http://localhost:3001/uploads/${url}`
+  }
 
   // Fetch posts from backend
   useEffect(() => {
@@ -102,12 +152,12 @@ export default function QuoiDeNeufPage() {
               preview: post.excerpt || post.content?.substring(0, 200) + '...' || '',
               content: post.content,
               excerpt: post.excerpt,
-              media: post.media,
+              media: post.media ? (post.media.startsWith('http') ? post.media : normalizeImageUrl(post.media)) : undefined,
               public: post.visibility === 'PUBLIC',
               likes: post._count?.likes || 0,
               comments: post._count?.comments || 0,
               shares: post._count?.shares || 0,
-              avatar: post.author?.profileImage || undefined,
+              avatar: normalizeImageUrl(post.author?.profileImage || post.author?.profilePicture || ''),
               authorId: post.authorId,
               status: post.status,
               visibility: post.visibility,
@@ -151,7 +201,11 @@ export default function QuoiDeNeufPage() {
           const likedPostIds = new Set<string>()
           const likes = (response.data as any).likes || []
           likes.forEach((like: any) => {
-            likedPostIds.add(like.contentId)
+            // Handle both old format (contentId) and new format (postId/commentId)
+            const postId = like.postId || like.contentId
+            if (postId) {
+              likedPostIds.add(postId)
+            }
           })
           setUserLikedPosts(likedPostIds)
           console.log('✅ User liked posts loaded:', Array.from(likedPostIds))
@@ -201,7 +255,7 @@ export default function QuoiDeNeufPage() {
           likes: 0,
           comments: 0,
           shares: 0,
-          avatar: user.profileImage || undefined,
+          avatar: normalizeImageUrl((userProfile || user)?.profileImage || (userProfile || user)?.profilePicture || ''),
           authorId: user.id,
           status: 'PUBLISHED',
           visibility: 'PUBLIC',
@@ -297,14 +351,31 @@ export default function QuoiDeNeufPage() {
         try {
           const response = await apiClient.get(`/posts/${postId}/comments`)
           if ((response as any).success) {
-            const comments = ((response as any).data || []).map((comment: any) => ({
+            const commentsData = (response as any).data?.comments || (response as any).data || []
+            const comments = commentsData.map((comment: any) => {
+              const author = comment.author || {}
+              const profileImg = normalizeImageUrl(author.profileImage || author.profilePicture || '')
+              const authorName = `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email || 'User'
+              
+              console.log('📝 Comment author data:', {
+                id: comment.id,
+                authorId: author.id,
+                authorName,
+                hasProfileImage: !!profileImg,
+                profileImage: author.profileImage,
+                profilePicture: author.profilePicture
+              })
+              
+              return {
               id: comment.id,
-              author: `${comment.author?.firstName || ''} ${comment.author?.lastName || ''}`.trim() || comment.author?.email || 'User',
-              avatar: comment.author?.profileImage,
+                author: authorName,
+                avatar: profileImg,
               content: comment.content,
               createdAt: comment.createdAt,
-              userId: comment.author?.id
-            }))
+                userId: author.id
+              }
+            })
+            console.log('✅ Loaded comments:', comments)
             setLoadedComments({ ...loadedComments, [postId]: comments })
           }
         } catch (error) {
@@ -328,14 +399,27 @@ export default function QuoiDeNeufPage() {
         setPosts(posts.map(post =>
           post.id === postId ? { ...post, comments: post.comments + 1 } : post
         ))
-        // Add new comment to loaded comments
+        // Add new comment to loaded comments - use backend response data
+        const commentData = (response as any).data?.comment || (response as any).data
+        const author = commentData?.author || {}
+        const profileImg = normalizeImageUrl(author.profileImage || author.profilePicture || (userProfile || user)?.profileImage || (userProfile || user)?.profilePicture || '')
+        const authorName = `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email || (userProfile || user)?.firstName + ' ' + (userProfile || user)?.lastName || (userProfile || user)?.email || 'You'
+        
+        console.log('💬 New comment author data:', {
+          commentId: commentData?.id,
+          authorId: author.id,
+          authorName,
+          hasProfileImage: !!profileImg,
+          profileImage: author.profileImage || author.profilePicture
+        })
+        
         const newComment: Comment = {
-          id: (response as any).data?.id || Date.now().toString(),
-          author: user?.firstName + ' ' + user?.lastName || user?.email || 'You',
-          avatar: user?.profileImage,
-          content: text,
-          createdAt: new Date().toISOString(),
-          userId: user?.id
+          id: commentData?.id || Date.now().toString(),
+          author: authorName,
+          avatar: profileImg,
+          content: commentData?.content || text,
+          createdAt: commentData?.createdAt || new Date().toISOString(),
+          userId: author.id || (userProfile || user)?.id || user?.id
         }
         setLoadedComments({
           ...loadedComments,
@@ -357,8 +441,63 @@ export default function QuoiDeNeufPage() {
       {/* Site Header */}
       <SiteHeader />
 
-      {/* Main Content */}
-      <div className="container mx-auto max-w-6xl px-4 py-8">
+      {/* Main Content - Three Column Layout */}
+      <div className="container mx-auto max-w-7xl px-4 py-6">
+        <div className="grid grid-cols-12 gap-6 relative">
+          {/* Left Sidebar */}
+          <aside className="hidden lg:block col-span-3 space-y-6 sticky top-6 h-fit" style={{ transform: 'translateX(calc(-50% - 12px))' }}>
+            {/* Navigation Links */}
+            <div className="bg-card rounded-2xl border border-border p-4">
+              <nav className="space-y-1">
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                  <Home className="h-5 w-5" />
+                  <span className="font-medium">{t("Accueil", "Home")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <Users className="h-5 w-5" />
+                  <span className="font-medium">{t("Amis", "Friends")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <UserPlus className="h-5 w-5" />
+                  <span className="font-medium">{t("Groupes", "Groups")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <ShoppingCart className="h-5 w-5" />
+                  <span className="font-medium">{t("Marketplace", "Marketplace")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <Bookmark className="h-5 w-5" />
+                  <span className="font-medium">{t("Enregistrés", "Saved")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <Flag className="h-5 w-5" />
+                  <span className="font-medium">{t("Pages", "Pages")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <Star className="h-5 w-5" />
+                  <span className="font-medium">{t("Favoris", "Favourites")}</span>
+                </a>
+                <a href="#" className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors">
+                  <ChevronDown className="h-5 w-5" />
+                  <span className="font-medium">{t("Voir plus", "See More")}</span>
+                </a>
+              </nav>
+            </div>
+
+            {/* My Groups Section */}
+            <div className="bg-card rounded-2xl border border-border p-4">
+              <h3 className="font-semibold text-foreground mb-3">{t("Mes Groupes", "My Groups")}</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
+                  <span className="text-sm font-medium">{t("AUCUNE ACTIVITÉ", "NO ACTIVITY")}</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Center Feed */}
+          <main className="col-span-12 lg:col-span-6 flex flex-col items-center">
         {/* Header with Tabs */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
@@ -374,8 +513,8 @@ export default function QuoiDeNeufPage() {
                   </div>
                 )}
               </div>
-              <p className="text-muted-foreground">
-                {t("Actualités et marketplace des tuteurs", "News and tutor marketplace")}
+                  <p className="text-muted-foreground font-bold text-lg">
+                    {t("TOUTE LES ACTUALITER DE LA PLATEFORME", "ALL PLATFORM NEWS")}
               </p>
             </div>
           </div>
@@ -390,15 +529,31 @@ export default function QuoiDeNeufPage() {
           </div>
 
             {/* Actualités - Social Media Style */}
-            <div className="mt-8">
-              <div className="max-w-2xl mx-auto">
+              <div className="mt-8 w-full">
+                <div className="max-w-4xl mx-auto w-full">
                 {/* Create Post Section - Instagram Style */}
                 <div className="bg-card rounded-2xl border border-border shadow-sm mb-6">
                   <div className="p-4">
                     <div className="flex items-center gap-3 mb-4">
+                      {userProfile?.profileImage || user?.profileImage ? (
+                        <div className="h-10 w-10 rounded-full overflow-hidden border-2 border-border">
+                          <Image
+                            src={normalizeImageUrl(userProfile?.profileImage || user?.profileImage || '')}
+                            alt={userProfile?.firstName || user?.firstName || 'User'}
+                            width={40}
+                            height={40}
+                            className="h-10 w-10 rounded-full object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement
+                              target.src = "/placeholder.svg?height=40&width=40&query=profile"
+                            }}
+                          />
+                        </div>
+                      ) : (
                       <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#2ECC71] to-[#27AE60] flex items-center justify-center">
                         <User className="h-5 w-5 text-white" />
                       </div>
+                      )}
                       <Button
                         onClick={() => setShowCreatePost(true)}
                         className="flex-1 justify-start bg-muted hover:bg-muted/80 text-muted-foreground rounded-full h-10"
@@ -449,7 +604,7 @@ export default function QuoiDeNeufPage() {
                 )}
 
                 {/* Posts Feed - Instagram Style */}
-                <div className="space-y-6">
+                <div className="space-y-6 w-full max-w-4xl">
                   {loading ? (
                     <>
                       <SkeletonCard />
@@ -462,7 +617,7 @@ export default function QuoiDeNeufPage() {
                     shown.map((p, idx) => (
                       <article
                         key={p.id}
-                        className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden"
+                        className="bg-card rounded-2xl border border-border shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden backdrop-blur-sm bg-gradient-to-br from-white/95 to-white/90 dark:from-gray-900/95 dark:to-gray-800/90 w-full"
                         style={{ animation: `fadeUp 220ms ease-out ${idx * 60}ms both` as any }}
                       >
                         {/* Post Header */}
@@ -506,26 +661,39 @@ export default function QuoiDeNeufPage() {
                               </div>
                               <span className="text-sm text-muted-foreground">{p.time}</span>
                             </div>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-5 w-5" />
+                            </Button>
                           </div>
 
-                          {/* Post Content */}
-                          <div className="space-y-3">
-                            <h3 className="text-lg font-semibold text-foreground leading-tight">
+                          {/* Post Content - Facebook Style */}
+                          <div className="space-y-2">
+                            {p.title && (
+                              <h3 className="text-lg font-semibold text-gray-900 dark:text-white leading-tight">
                               {p.title}
                             </h3>
-                            <p className="text-muted-foreground leading-relaxed">{p.preview}</p>
+                            )}
+                            <p className="text-gray-800 dark:text-gray-200 leading-relaxed text-[15px] whitespace-pre-wrap">
+                              {p.preview || p.content}
+                            </p>
                           </div>
                         </div>
 
-                        {/* Post Media */}
+                        {/* Post Media - Social Media Style */}
                         {p.media && (
-                          <div className="relative aspect-video w-full overflow-hidden">
-                            <Image
-                              src={p.media || "/placeholder.svg"}
+                          <div className="relative w-full overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900">
+                            <div className="relative w-full" style={{ minHeight: '300px', maxHeight: '600px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <img
+                                src={normalizeImageUrl(p.media) || "/placeholder.svg"}
                               alt={lang === "fr" ? "Aperçu du média" : "Media preview"}
-                              fill
-                              className="object-cover"
-                            />
+                                className="max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-500 hover:scale-105"
+                                style={{ maxHeight: '600px', objectFit: 'contain', display: 'block' }}
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement
+                                  target.src = "/placeholder.svg"
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" />
                             {!p.public && !subscribed && (
                               <div className="absolute inset-0 bg-black/80 backdrop-blur-sm grid place-items-center text-white">
                                 <div className="flex flex-col items-center gap-4 text-center p-6">
@@ -546,63 +714,113 @@ export default function QuoiDeNeufPage() {
                                 </div>
                               </div>
                             )}
+                            </div>
                           </div>
                         )}
 
-                        {/* Post Actions */}
-                        <div className="p-4 pt-3">
+                        {/* Post Actions - Facebook Style */}
+                        <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700">
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-1 flex-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleLike(p.id)}
-                                className={`flex items-center gap-2 p-2 ${
+                                className={`flex items-center gap-2 px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 flex-1 justify-center ${
                                   userLikedPosts.has(p.id)
-                                    ? "text-red-500 bg-red-50 dark:bg-red-950/20"
-                                    : "text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                                 }`}
                               >
-                                <Heart className={`h-5 w-5 ${userLikedPosts.has(p.id) ? "fill-current" : ""}`} />
-                                <span className="font-medium">{p.likes}</span>
+                                <Heart className={`h-5 w-5 transition-transform duration-150 ${userLikedPosts.has(p.id) ? "fill-current" : ""}`} />
+                                <span className="font-medium text-sm">{p.likes}</span>
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleToggleComments(p.id)}
-                                className="flex items-center gap-2 text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 p-2"
+                                className="flex items-center gap-2 px-4 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 flex-1 justify-center"
                               >
                                 <MessageSquare className="h-5 w-5" />
-                                <span className="font-medium">{p.comments}</span>
+                                <span className="font-medium text-sm">{p.comments}</span>
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="flex items-center gap-2 text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 p-2"
+                                className="flex items-center gap-2 px-4 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 flex-1 justify-center"
                                 onClick={() => handleShare(p.id)}
                               >
                                 <Share2 className="h-5 w-5" />
-                                <span className="font-medium">{p.shares}</span>
+                                <span className="font-medium text-sm">{p.shares}</span>
                               </Button>
                             </div>
                           </div>
 
-                          {/* Comment Section */}
+                          {/* Comment Section - Dribbble Style */}
+                          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            {/* Comment Input - Always visible */}
+                            <div className="relative">
+                              <Input
+                                placeholder={t("Écrivez votre commentaire", "Write your comment")}
+                                value={commentText[p.id] || ''}
+                                onChange={(e) => setCommentText({ ...commentText, [p.id]: e.target.value })}
+                                className="pr-20 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter' && commentText[p.id]?.trim()) {
+                                    handleAddComment(p.id)
+                                  }
+                                }}
+                              />
+                              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-gray-200 dark:hover:bg-gray-700">
+                                  <Camera className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                </Button>
+                                <div className="relative">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 w-8 p-0 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    onClick={() => setShowEmojiPicker({ ...showEmojiPicker, [p.id]: !showEmojiPicker[p.id] })}
+                                  >
+                                    <Smile className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                  </Button>
+                                  {showEmojiPicker[p.id] && (
+                                    <div className="absolute bottom-full right-0 mb-2 z-50 shadow-lg rounded-lg overflow-hidden">
+                                      <EmojiPicker
+                                        onEmojiClick={(emojiData) => {
+                                          setCommentText({ ...commentText, [p.id]: (commentText[p.id] || '') + emojiData.emoji })
+                                          setShowEmojiPicker({ ...showEmojiPicker, [p.id]: false })
+                                        }}
+                                        theme={theme === 'dark' ? 'dark' as any : 'light' as any}
+                                        width={320}
+                                        height={400}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Display existing comments */}
                           {expandedComments.has(p.id) && (
-                            <div className="mt-4 pt-4 border-t border-border space-y-3">
-                              {/* Display existing comments */}
-                              {loadedComments[p.id] && loadedComments[p.id].length > 0 && (
-                                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                              <div className="mt-4 space-y-3">
+                                {loadedComments[p.id] && loadedComments[p.id].length > 0 ? (
+                                  <>
+                                    <div className="space-y-3 max-h-64 overflow-y-auto">
                                   {loadedComments[p.id].map((comment) => (
-                                    <div key={comment.id} className="flex gap-3 p-2 bg-muted/30 rounded-lg">
+                                        <div key={comment.id} className="flex gap-3">
                                       <div className="flex-shrink-0">
                                         {comment.avatar ? (
                                           <Image
-                                            src={comment.avatar}
+                                                src={normalizeImageUrl(comment.avatar)}
                                             alt={comment.author}
                                             width={32}
                                             height={32}
-                                            className="h-8 w-8 rounded-full object-cover"
+                                                className="h-8 w-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                                                onError={(e) => {
+                                                  const target = e.target as HTMLImageElement
+                                                  target.src = "/placeholder.svg?height=32&width=32&query=profile"
+                                                }}
                                           />
                                         ) : (
                                           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
@@ -611,37 +829,28 @@ export default function QuoiDeNeufPage() {
                                         )}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-semibold text-sm">{comment.author}</span>
-                                          <span className="text-xs text-muted-foreground">
-                                            {new Date(comment.createdAt).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US')}
-                                          </span>
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className="font-semibold text-sm text-foreground">{comment.author}</span>
+                                            </div>
+                                            <p className="text-sm text-foreground break-words">{comment.content}</p>
+                                          </div>
                                         </div>
-                                        <p className="text-sm text-foreground mt-1 break-words">{comment.content}</p>
-                                      </div>
+                                      ))}
                                     </div>
-                                  ))}
+                                    {loadedComments[p.id].length > 3 && (
+                                      <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                                        {t("Voir tous les commentaires", "View all comments")}
+                                      </button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="text-center py-4 text-sm text-muted-foreground">
+                                    {t("Aucun commentaire", "No comments yet")}
                                 </div>
                               )}
-                              {/* Comment input */}
-                              <div className="flex gap-2">
-                                <Input
-                                  placeholder={t("Ajouter un commentaire...", "Add a comment...")}
-                                  value={commentText[p.id] || ''}
-                                  onChange={(e) => setCommentText({ ...commentText, [p.id]: e.target.value })}
-                                  className="flex-1"
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAddComment(p.id)}
-                                  disabled={!commentText[p.id]?.trim()}
-                                  className="bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black"
-                                >
-                                  {t("Envoyer", "Send")}
-                                </Button>
                               </div>
+                            )}
                             </div>
-                          )}
                         </div>
                       </article>
                     ))
@@ -649,6 +858,49 @@ export default function QuoiDeNeufPage() {
                 </div>
               </div>
             </div>
+            </div>
+          </main>
+
+          {/* Right Sidebar */}
+          <aside className="hidden lg:block col-span-3 space-y-6 sticky top-6 h-fit" style={{ transform: 'translateX(calc(50% + 12px))' }}>
+            {/* Birthdays Section */}
+            <div className="bg-card rounded-2xl border border-border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/20">
+                    <span className="text-xl">🎂</span>
+                  </div>
+                  <span className="text-sm font-medium">{t("Anniversaires", "Birthdays")}</span>
+                </div>
+                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t("AUCUNE ACTIVITÉ", "NO ACTIVITY")}
+              </p>
+            </div>
+
+            {/* Latest Activity Section */}
+            <div className="bg-card rounded-2xl border border-border p-4">
+              <h3 className="font-semibold text-foreground mb-3">{t("Dernière Activité", "Latest Activity")}</h3>
+              <div className="space-y-3">
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  {t("AUCUNE ACTIVITÉ", "NO ACTIVITY")}
+                </div>
+              </div>
+            </div>
+
+            {/* Active Friends Section */}
+            <div className="bg-card rounded-2xl border border-border p-4">
+              <h3 className="font-semibold text-foreground mb-3">{t("Amis Actifs", "Active Friends")}</h3>
+              <div className="space-y-2">
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  {t("AUCUNE ACTIVITÉ", "NO ACTIVITY")}
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
     </div>

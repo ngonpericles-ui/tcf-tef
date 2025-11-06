@@ -23,6 +23,7 @@ import { notificationRoutes } from './routes/notifications';
 import { contentRoutes } from './routes/content';
 import { analyticsRoutes } from './routes/analytics';
 import { healthRoutes } from './routes/health';
+import pusherAuthRoutes from './routes/pusherAuth';
 import { adminRoutes } from './routes/admin';
 import { managerRoutes } from './routes/manager';
 import { postRoutes } from './routes/posts';
@@ -44,27 +45,41 @@ import marketplaceRoutes from './routes/marketplaceRoutes';
 import marketplaceApiRoutes from './routes/marketplace';
 import contentManagementRoutes from './routes/contentManagement';
 import messagesRoutes from './routes/messages';
+import fallbackRoutes from './routes/fallback';
 import aiAssistantRoutes from './routes/aiAssistant';
 import enhancedFileManagementRoutes from './routes/enhancedFileManagement';
 import likesRoutes from './routes/likes';
 import homeRoutes from './routes/home'
 import challengeRoutes from './routes/challenges';
 import achievementRoutes from './routes/achievements';
+import dailyGoalRoutes from './routes/dailyGoals';
 import { teacherRoutes } from './routes/teachers';
 import userActivityRoutes from './routes/userActivity';
 import moderationRoutes from './routes/moderation';
 import { chatRoomService } from './services/chatRoomService';
+import { RealTimeMessagingService } from './services/realTimeMessagingService';
+import { MessageQueueWorker } from './workers/messageQueueWorker';
+import { monitoringService } from './services/monitoringService';
+import { checkRedisHealth } from './config/redis';
 
 const app = express();
 const server = createServer(app);
 
-// Security middleware
-app.use(helmet());
+// Security middleware - Fixed for image CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin images
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "img-src": ["'self'", "data:", "http://localhost:3001", "https:"],
+    },
+  },
+}));
 
 // CORS configuration
 app.use(cors({
   origin: [
-    'http://localhost:3000',  // Frontend (only port 3000)
+    'http://localhost:3000',  // Frontend (port 3000)
     config.corsOrigin
   ],
   credentials: true,
@@ -114,9 +129,9 @@ if (config.nodeEnv === 'production') {
   console.log('🔓 Development rate limiting enabled (relaxed limits)');
 }
 
-// Body parsing middleware
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ extended: true, limit: '500mb' }));
+// Body parsing middleware - Increased limits for large file uploads (10GB)
+app.use(express.json({ limit: '10gb' }));
+app.use(express.urlencoded({ extended: true, limit: '10gb' }));
 
 // Compression middleware
 app.use(compression());
@@ -169,9 +184,12 @@ app.use('/api/voice-simulation', voiceSimulationRoutes);
 app.use('/api/immigration-simulation', immigrationSimulationRoutes);
 app.use('/api/floating-ai-assistant', floatingAiAssistantRoutes);
 app.use('/api/simulations', simulationRoutes);
+// Marketplace routes - registered early to ensure /marketplace/specialties works
 app.use('/api', marketplaceRoutes);
-app.use('/api/marketplace', marketplaceApiRoutes);
+// Note: marketplaceApiRoutes is deprecated - using marketplaceRoutes instead
+// app.use('/api/marketplace', marketplaceApiRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/fallback', fallbackRoutes);
 app.use('/api/content-management', contentManagementRoutes);
 app.use('/api/ai-assistant', aiAssistantRoutes);
 app.use('/api/file-management', enhancedFileManagementRoutes);
@@ -179,9 +197,12 @@ app.use('/api/likes', likesRoutes);
 app.use('/api/home', homeRoutes);
 app.use('/api/challenges', challengeRoutes);
 app.use('/api/achievements', achievementRoutes);
+app.use('/api/daily-goals', dailyGoalRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/user', userActivityRoutes);
 app.use('/api', moderationRoutes);
+app.use('/api/health', healthRoutes);
+app.use('/api/pusher', pusherAuthRoutes);
 
 // Static file serving for uploads
 app.use('/uploads', express.static('uploads'));
@@ -195,31 +216,76 @@ app.use(errorLogger);
 // Global error handler
 app.use(errorHandler);
 
-// Initialize Socket.IO chat service
-chatRoomService.initialize(server);
+// Initialize real-time messaging service (this includes Socket.IO)
+const realTimeMessagingService = new RealTimeMessagingService(server);
+
+// Initialize Socket.IO chat service (use the same Socket.IO instance)
+// chatRoomService.initialize(server); // Commented out to prevent duplicate Socket.IO initialization
+
+// Initialize message queue worker
+const messageQueueWorker = new MessageQueueWorker();
+
+// Start monitoring service
+monitoringService.start();
 
 // Start server
 const PORT = config.port || 3001;
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${config.nodeEnv}`);
   console.log(`🔗 Database: ${config.databaseUrl ? 'Connected' : 'Not configured'}`);
   console.log(`💬 Socket.IO chat service initialized`);
+  console.log(`📨 Real-time messaging service initialized`);
+  console.log(`⚡ Message queue worker initialized`);
+  console.log(`📊 Monitoring service started`);
+  
+  // Check Redis health
+  const redisHealth = await checkRedisHealth();
+  console.log(`🔴 Redis: ${redisHealth ? 'Connected' : 'Not connected'}`);
+  
+  // Start message queue worker
+  try {
+    await messageQueueWorker.start();
+    console.log(`🔄 Message queue worker started`);
+  } catch (error) {
+    console.error(`❌ Failed to start message queue worker:`, error);
+  }
+  
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`📊 Environment: ${config.nodeEnv}`);
   logger.info(`🔗 Database: ${config.databaseUrl ? 'Connected' : 'Not configured'}`);
   logger.info(`💬 Socket.IO chat service initialized`);
+  logger.info(`📨 Real-time messaging service initialized`);
+  logger.info(`⚡ Message queue worker initialized`);
+  logger.info(`📊 Monitoring service started`);
+  logger.info(`🔴 Redis: ${redisHealth ? 'Connected' : 'Not connected'}`);
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  
+  // Stop services
+  if (messageQueueWorker) {
+    await messageQueueWorker.stop();
+  }
+  
+  monitoringService.stop();
+  
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  
+  // Stop services
+  if (messageQueueWorker) {
+    await messageQueueWorker.stop();
+  }
+  
+  monitoringService.stop();
+  
   process.exit(0);
 });
 

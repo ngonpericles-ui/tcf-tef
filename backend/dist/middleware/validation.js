@@ -306,11 +306,14 @@ exports.testSchemas = {
 };
 exports.immigrationSimulationSchemas = {
     create: joi_1.default.object({
-        country: joi_1.default.string().valid('canada', 'france', 'belgium').required(),
-        immigrationType: joi_1.default.string().valid('skilled_worker', 'student', 'family_reunification', 'work_permit', 'family', 'work').required(),
-        level: joi_1.default.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').required(),
-        voicePreference: joi_1.default.string().valid('france_female_1', 'france_male_1', 'quebec_female_1', 'quebec_male_1').optional(),
-        personalInfo: joi_1.default.object().optional()
+        country: joi_1.default.string().valid('canada', 'france', 'belgium', 'CANADA', 'FRANCE', 'BELGIUM').required(),
+        immigrationType: joi_1.default.string().valid('skilled_worker', 'student', 'family_reunification', 'work_permit', 'family', 'work', 'immigration', 'school', 'relocation').required(),
+        level: joi_1.default.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').optional().default('B1'),
+        voicePreference: joi_1.default.string().optional(),
+        personalInfo: joi_1.default.object().optional(),
+        bookingType: joi_1.default.string().valid('AUTO', 'MANUAL').optional().default('AUTO'),
+        scheduledDate: joi_1.default.date().iso().optional(),
+        questionsData: joi_1.default.object().optional()
     }),
     params: joi_1.default.object({
         id: joi_1.default.string().pattern(/^[a-z0-9]{25}$/).required().messages({

@@ -10,22 +10,37 @@ export class SubscriptionController {
    * Get all subscription plans
    */
   static getSubscriptionPlans = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const plans = await SubscriptionService.getSubscriptionPlans();
+    try {
+      const plans = await SubscriptionService.getSubscriptionPlans();
 
-    const response: ApiResponse = {
-      success: true,
-      data: { plans },
-      message: 'Subscription plans retrieved successfully'
-    };
+      const response: ApiResponse = {
+        success: true,
+        data: { plans },
+        message: 'Subscription plans retrieved successfully'
+      };
 
-    res.status(200).json(response);
+      res.status(200).json(response);
+    } catch (error: any) {
+      logger.error('Error getting subscription plans:', error);
+      console.error('Error in getSubscriptionPlans:', {
+        message: error?.message,
+        stack: error?.stack
+      });
+      res.status(500).json({
+        success: false,
+        error: { 
+          message: 'Failed to retrieve subscription plans',
+          details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+        }
+      });
+    }
   });
 
   /**
    * Create subscription for user
    */
   static createSubscription = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const subscriptionData: CreateSubscriptionRequest = req.body;
 
     if (!userId) {
@@ -53,7 +68,7 @@ export class SubscriptionController {
    * Get user's subscriptions
    */
   static getUserSubscriptions = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
 
     if (!userId) {
       res.status(401).json({
@@ -86,32 +101,48 @@ export class SubscriptionController {
    * Get active subscription for user
    */
   static getActiveSubscription = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.userId;
+    try {
+      const userId = req.user?.userId || req.user?.id;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: { message: 'Authentication required' }
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: { message: 'Authentication required' }
+        });
+        return;
+      }
+
+      const subscription = await SubscriptionService.getActiveSubscription(userId);
+
+      const response: ApiResponse = {
+        success: true,
+        data: subscription ? { subscription } : null,
+        message: subscription ? 'Active subscription retrieved successfully' : 'No active subscription found'
+      };
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      logger.error('Error getting active subscription:', error);
+      console.error('Error in getActiveSubscription:', {
+        message: error?.message,
+        stack: error?.stack,
+        userId: req.user?.userId || req.user?.id
       });
-      return;
+      res.status(500).json({
+        success: false,
+        error: { 
+          message: 'Failed to retrieve active subscription',
+          details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+        }
+      });
     }
-
-    const subscription = await SubscriptionService.getActiveSubscription(userId);
-
-    const response: ApiResponse = {
-      success: true,
-      data: { subscription },
-      message: subscription ? 'Active subscription retrieved successfully' : 'No active subscription found'
-    };
-
-    res.status(200).json(response);
   });
 
   /**
    * Cancel subscription
    */
   static cancelSubscription = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const { subscriptionId } = req.params;
 
     if (!userId) {
@@ -138,7 +169,7 @@ export class SubscriptionController {
    * Upgrade/Downgrade subscription
    */
   static changeSubscription = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const { tier, billingCycle } = req.body;
 
     if (!userId) {

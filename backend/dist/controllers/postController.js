@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PostController = void 0;
-const postService_1 = require("../services/postService");
-const errorHandler_1 = require("../middleware/errorHandler");
-const logger_1 = require("../utils/logger");
+const postService_1 = require("@/services/postService");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
 class PostController {
 }
 exports.PostController = PostController;

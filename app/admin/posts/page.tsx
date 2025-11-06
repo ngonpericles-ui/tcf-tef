@@ -24,7 +24,14 @@ import {
   Calendar,
   RefreshCw,
   AlertCircle,
+  Facebook,
+  Twitter,
+  Linkedin,
+  Send,
+  ThumbsUp,
 } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface ManagerPostsPageProps {
@@ -38,6 +45,7 @@ interface Post {
   excerpt?: string
   status: string
   privacy: string
+  visibility?: string
   createdAt: string
   updatedAt: string
   views: number
@@ -45,12 +53,16 @@ interface Post {
   comments: number
   shares: number
   images: string[]
+  media?: string
   author?: {
     id: string
     firstName: string
     lastName: string
     email: string
+    profileImage?: string
+    profilePicture?: string
   }
+  isLiked?: boolean
 }
 
 export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps = {}) {
@@ -62,9 +74,22 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [userLikedPosts, setUserLikedPosts] = useState<Set<string>>(new Set())
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
+  const [loadedComments, setLoadedComments] = useState<Record<string, any[]>>({})
+  const [commentText, setCommentText] = useState<Record<string, string>>({})
   
   // Determine current role
   const currentRole = "admin" // Always admin for admin posts page
+
+  // Utility function to normalize image URLs
+  const normalizeImageUrl = (url: string | null | undefined): string => {
+    if (!url) return ''
+    if (url.startsWith('http://') || url.startsWith('https://')) return url
+    if (url.startsWith('/uploads')) return `http://localhost:3001${url}`
+    if (url.startsWith('/')) return `http://localhost:3001${url}`
+    return `http://localhost:3001/uploads/${url}`
+  }
 
   // Fetch posts from backend
   const fetchPosts = async () => {
@@ -87,13 +112,18 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
       // Ensure all posts have required properties with defaults
       const normalizedPosts = postsData.map((post: any) => ({
         ...post,
-        images: post.images || [],
+        images: post.media ? [normalizeImageUrl(post.media)] : (post.images || []).map((img: string) => normalizeImageUrl(img)),
+        media: normalizeImageUrl(post.media || ''),
         likes: post._count?.likes || post.likes || 0,
         comments: post._count?.comments || post.comments || 0,
         shares: post._count?.shares || post.shares || 0,
-        views: post.views || 0,
+        views: post.viewCount || post.views || 0,
         privacy: post.visibility || post.privacy || 'PUBLIC',
-        status: post.status || 'PUBLISHED'
+        status: post.status || 'PUBLISHED',
+        author: post.author ? {
+          ...post.author,
+          profileImage: normalizeImageUrl(post.author.profileImage || post.author.profilePicture || '')
+        } : undefined
       }))
       
       setPosts(normalizedPosts)
@@ -129,9 +159,114 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
     try {
       await apiClient.delete(`/posts/${postId}`)
       setPosts(posts.filter(post => post.id !== postId))
+      toast.success(t("Post supprimé", "Post deleted"))
     } catch (error) {
       console.error('Failed to delete post:', error)
       setError('Failed to delete post')
+      toast.error(t("Erreur lors de la suppression", "Error deleting post"))
+    }
+  }
+
+  // Like post
+  const handleLike = async (postId: string) => {
+    try {
+      const response = await apiClient.post(`/posts/${postId}/like`) as any
+      if (response.success) {
+        const { liked, likeCount } = response.data || {}
+        setPosts(posts.map(post =>
+          post.id === postId ? { ...post, likes: likeCount || 0, isLiked: liked } : post
+        ))
+        setUserLikedPosts(prev => {
+          const newSet = new Set(prev)
+          if (liked) newSet.add(postId)
+          else newSet.delete(postId)
+          return newSet
+        })
+      }
+    } catch (error) {
+      console.error('Error liking post:', error)
+      toast.error(t("Erreur lors du like", "Error liking post"))
+    }
+  }
+
+  // Share post
+  const handleShare = async (postId: string) => {
+    try {
+      const response = await apiClient.post(`/posts/${postId}/share`) as any
+      if (response.success) {
+        const { shared, shareCount } = response.data || {}
+        setPosts(posts.map(post =>
+          post.id === postId ? { ...post, shares: shareCount || 0 } : post
+        ))
+        toast.success(t("Post partagé", "Post shared"))
+      }
+    } catch (error) {
+      console.error('Error sharing post:', error)
+      toast.error(t("Erreur lors du partage", "Error sharing post"))
+    }
+  }
+
+  // Toggle comments
+  const handleToggleComments = async (postId: string) => {
+    const newExpanded = new Set(expandedComments)
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId)
+    } else {
+      newExpanded.add(postId)
+      // Fetch comments if not already loaded
+      if (!loadedComments[postId]) {
+        try {
+          const response = await apiClient.get(`/posts/${postId}/comments`) as any
+          if (response.success) {
+            const comments = (response.data || []).map((comment: any) => ({
+              id: comment.id,
+              author: `${comment.author?.firstName || ''} ${comment.author?.lastName || ''}`.trim() || comment.author?.email || 'User',
+              avatar: normalizeImageUrl(comment.author?.profileImage || comment.author?.profilePicture || ''),
+              content: comment.content,
+              createdAt: comment.createdAt,
+              userId: comment.author?.id
+            }))
+            setLoadedComments({ ...loadedComments, [postId]: comments })
+          }
+        } catch (error) {
+          console.error('Error fetching comments:', error)
+        }
+      }
+    }
+    setExpandedComments(newExpanded)
+  }
+
+  // Add comment
+  const handleAddComment = async (postId: string) => {
+    const text = commentText[postId]?.trim()
+    if (!text) return
+
+    try {
+      const response = await apiClient.post(`/posts/${postId}/comments`, { content: text }) as any
+      if (response.success) {
+        setCommentText({ ...commentText, [postId]: '' })
+        // Refresh comments
+        const commentsResponse = await apiClient.get(`/posts/${postId}/comments`) as any
+        if (commentsResponse.success) {
+          const comments = (commentsResponse.data || []).map((comment: any) => ({
+            id: comment.id,
+            author: `${comment.author?.firstName || ''} ${comment.author?.lastName || ''}`.trim() || comment.author?.email || 'User',
+            avatar: normalizeImageUrl(comment.author?.profileImage || comment.author?.profilePicture || ''),
+            content: comment.content,
+            createdAt: comment.createdAt,
+            userId: comment.author?.id
+          }))
+          setLoadedComments({ ...loadedComments, [postId]: comments })
+          // Update post comment count
+          setPosts(posts.map(post =>
+            post.id === postId ? { ...post, comments: (post.comments || 0) + 1 } : post
+          ))
+        }
+        toast.success(t("Commentaire ajouté", "Comment added"))
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error)
+      toast.error(t("Erreur lors de l'ajout du commentaire", "Error adding comment"))
     }
   }
 
@@ -351,23 +486,31 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
         ) : (
           <div className="space-y-6">
             {filteredPosts.map((post) => (
-            <Card key={post.id} className="bg-card/80 backdrop-blur-sm border-border shadow-lg">
+            <Card key={post.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 rounded-lg mb-4">
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                    <span className="text-white font-semibold">M</span>
-                  </div>
+                  <Avatar className="w-10 h-10 border-2 border-gray-200 dark:border-gray-700">
+                    <AvatarImage 
+                      src={normalizeImageUrl(post.author?.profileImage || post.author?.profilePicture || '')} 
+                      alt={`${post.author?.firstName || ''} ${post.author?.lastName || ''}`.trim() || 'Admin'}
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-semibold">
+                      {post.author?.firstName?.charAt(0) || post.author?.lastName?.charAt(0) || 'A'}
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="text-foreground font-semibold">
-                        {currentRole === "admin" ? t("Admin", "Admin") : 
+                        {post.author ? `${post.author.firstName || ''} ${post.author.lastName || ''}`.trim() || post.author.email : 
+                         currentRole === "admin" ? t("Admin", "Admin") : 
                          currentRole === "senior" ? t("Manager", "Manager") :
                          currentRole === "content" ? t("Content Manager", "Content Manager") :
                          t("Junior Manager", "Junior Manager")}
                       </span>
-                      <Badge variant="outline" className={getPrivacyColor(post.privacy)}>
-                        {t(post.privacy, post.privacy)}
+                      <Badge variant="outline" className={getPrivacyColor(post.visibility || post.privacy)}>
+                        {(post.visibility || post.privacy || 'PUBLIC').toUpperCase()}
                       </Badge>
                     </div>
                     <div className="flex items-center space-x-1 text-sm text-muted-foreground">
@@ -403,47 +546,143 @@ export default function AdminPostsPage({ role: propRole }: ManagerPostsPageProps
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Post Content */}
-              <div className="space-y-2">
-                <h3 className="text-foreground text-lg font-semibold">{post.title || 'Untitled Post'}</h3>
-                <p className="text-muted-foreground">{post.content || 'No content available'}</p>
+              {/* Full Post Content - Facebook Style */}
+              <div className="space-y-3">
+                {post.title && (
+                  <h3 className="text-gray-900 dark:text-white text-xl font-bold leading-tight">
+                    {post.title}
+                  </h3>
+                )}
+                <div className="text-gray-800 dark:text-gray-200 text-[15px] leading-relaxed whitespace-pre-wrap">
+                  {post.content || post.excerpt || 'No content available'}
+                </div>
               </div>
 
-              {/* Post Images */}
+              {/* Post Images - Social Media Style */}
               {post.images && post.images.length > 0 && (
-                <div className={`grid gap-2 ${post.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                <div className={`grid gap-4 ${post.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
                   {post.images.map((image, index) => (
+                    <div key={index} className="relative overflow-hidden rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 group">
                     <img
-                      key={index}
-                      src={image || "/placeholder.svg"}
+                        src={normalizeImageUrl(image) || "/placeholder.svg"}
                       alt={`Post image ${index + 1}`}
-                      className="w-full h-64 object-cover rounded-lg"
-                    />
+                        className="w-full h-auto max-h-96 object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = "/placeholder.svg"
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </div>
                   ))}
                 </div>
               )}
 
-              {/* Post Stats */}
-              <div className="flex items-center justify-between pt-4 border-t border-border">
-                <div className="flex items-center space-x-6">
-                  <div className="flex items-center space-x-2 text-foreground">
-                    <Heart className="w-4 h-4 text-red-500" />
-                    <span>{post.likes || 0}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-foreground">
-                    <MessageCircle className="w-4 h-4 text-blue-500" />
-                    <span>{post.comments || 0}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-foreground">
-                    <Share2 className="w-4 h-4 text-green-500" />
-                    <span>{post.shares || 0}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-foreground">
-                    <Eye className="w-4 h-4 text-purple-500" />
-                    <span>{post.views || 0}</span>
+              {/* Interactive Actions - Facebook Style */}
+              <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-1 flex-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleLike(post.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 flex-1 justify-center ${
+                      post.isLiked || userLikedPosts.has(post.id) 
+                        ? 'text-red-600 dark:text-red-400' 
+                        : 'text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
+                    }`}
+                  >
+                    <ThumbsUp className={`w-5 h-5 transition-transform duration-150 ${post.isLiked || userLikedPosts.has(post.id) ? 'fill-current' : ''}`} />
+                    <span className="font-medium text-sm">{post.likes || 0}</span>
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleToggleComments(post.id)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 flex-1 justify-center"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span className="font-medium text-sm">{post.comments || 0}</span>
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleShare(post.id)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 flex-1 justify-center"
+                  >
+                    <Share2 className="w-5 h-5" />
+                    <span className="font-medium text-sm">{post.shares || 0}</span>
+                  </Button>
+                  
+                  <div className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-400">
+                    <Eye className="w-5 h-5" />
+                    <span className="font-medium text-sm">{post.views || 0}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Comments Section - Facebook Style */}
+              {expandedComments.has(post.id) && (
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-3 bg-gray-50 dark:bg-gray-900/50 px-4 py-3">
+                  <h4 className="font-semibold text-gray-900 dark:text-white text-sm">{t("Commentaires", "Comments")}</h4>
+                  
+                  {/* Add Comment */}
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="w-8 h-8">
+                      <AvatarImage src={normalizeImageUrl(user?.profileImage || user?.profilePicture || '')} />
+                      <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs">
+                        {user?.firstName?.charAt(0) || user?.lastName?.charAt(0) || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <Input
+                      placeholder={t("Ajouter un commentaire...", "Add a comment...")}
+                      value={commentText[post.id] || ''}
+                      onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleAddComment(post.id)
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleAddComment(post.id)}
+                      disabled={!commentText[post.id]?.trim()}
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {/* Comments List */}
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {loadedComments[post.id]?.map((comment: any) => (
+                      <div key={comment.id} className="flex items-start space-x-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={comment.avatar} />
+                          <AvatarFallback className="bg-gray-300 dark:bg-gray-700 text-xs">
+                            {comment.author?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold text-sm text-foreground">{comment.author}</span>
+                            <span className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</span>
+                          </div>
+                          <p className="text-sm text-foreground mt-1">{comment.content}</p>
+                        </div>
+                  </div>
+                    ))}
+                    {(!loadedComments[post.id] || loadedComments[post.id].length === 0) && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {t("Aucun commentaire", "No comments yet")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
             ))}

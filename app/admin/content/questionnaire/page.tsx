@@ -10,9 +10,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Trash2, Save, Eye, ArrowLeft, BookOpen, CheckCircle, Sparkles, Loader, Upload, X } from "lucide-react"
+import { Plus, Trash2, Save, Eye, ArrowLeft, BookOpen, CheckCircle, Sparkles, Loader, Upload, X, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api-client"
+
+interface Question {
+  id: number
+  type: string
+  question: string
+  options: string[]
+  correctAnswer: number | string
+  explanation: string
+  points: number
+}
 
 export default function QuestionnaireCreator() {
   const router = useRouter()
@@ -29,26 +39,16 @@ export default function QuestionnaireCreator() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([])
   const [selectedSubscriptions, setSelectedSubscriptions] = useState<string[]>([])
 
-  const [questions, setQuestions] = useState([
-    {
-      id: 1,
-      type: "multiple-choice",
-      question: "",
-      options: ["", "", "", ""],
-      correctAnswer: 0 as number | string,
-      explanation: "",
-      points: 1,
-    },
-  ])
+  const [questions, setQuestions] = useState<Question[]>([])
 
   const [activeTab, setActiveTab] = useState("settings")
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
-  const [aiPrompt, setAiPrompt] = useState("")
-  const [questionCount, setQuestionCount] = useState(5)
+  const [questionCount, setQuestionCount] = useState(0)
   const [difficultyLevel, setDifficultyLevel] = useState("medium")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isProcessingFile, setIsProcessingFile] = useState(false)
   const [filePreview, setFilePreview] = useState<string | null>(null)
+  const [extractedPdfContent, setExtractedPdfContent] = useState<string>("") // Store PDF content for AI generation
   const [uploadedAudio, setUploadedAudio] = useState<File | null>(null)
   const [audioPreview, setAudioPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -91,6 +91,18 @@ export default function QuestionnaireCreator() {
       "Pro+": "PRO"
     }
     return subscriptionMap[frenchName] || frenchName
+  }
+
+  // Mapping function for category names (frontend to backend enum)
+  const mapCategoryToBackend = (category: string): string => {
+    const categoryMap: Record<string, string> = {
+      "grammar": "GRAMMAR",
+      "listening": "LISTENING", 
+      "reading": "READING",
+      "vocabulary": "VOCABULARY",
+      "oral": "ORAL"
+    }
+    return categoryMap[category] || "GRAMMAR"
   }
 
   const selectAllLevels = () => {
@@ -210,7 +222,7 @@ export default function QuestionnaireCreator() {
         throw new Error('Veuillez sélectionner une catégorie')
       }
       if (questions.length === 0) {
-        throw new Error('Veuillez ajouter au moins une question')
+        throw new Error('Veuillez ajouter au moins une question. Cliquez sur "Ajouter une Question" pour commencer.')
       }
 
       // For expression orale, validate specific requirements
@@ -223,25 +235,53 @@ export default function QuestionnaireCreator() {
         }
       }
 
+      // Upload test-level file if needed (for reading comprehension)
+      let testFileUrl: string | undefined = undefined
+      if (questionnaire.category === "reading" && uploadedFile) {
+        try {
+          // Upload file to Cloudinary using the general upload endpoint
+          const formData = new FormData()
+          formData.append('file', uploadedFile)
+          formData.append('category', 'TEST')
+          formData.append('title', questionnaire.title)
+          
+          const uploadResponse = await apiClient.post('/upload', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          })
+          
+          if (uploadResponse.success && (uploadResponse.data as any)?.url) {
+            testFileUrl = (uploadResponse.data as any).url
+            toast.success('Fichier uploadé avec succès!')
+          }
+        } catch (error) {
+          console.error('Error uploading test file:', error)
+          toast.error('Erreur lors de l\'upload du fichier. Le test sera créé sans fichier.')
+        }
+      }
+
       // Prepare test data
       const testData = {
         title: questionnaire.title.trim(),
         description: questionnaire.description.trim(),
         type: "PRACTICE" as const,
         level: selectedLevels[0] as any, // Use first selected level as primary
-        category: questionnaire.category as any,
+        category: mapCategoryToBackend(questionnaire.category),
         requiredTier: mapSubscriptionToBackend(selectedSubscriptions[0] || "FREE"), // Map French to English
         duration: questionnaire.category === "oral" ? maxDuration : (parseInt(questionnaire.duration) || 30),
         questionCount: questions.length,
         difficulty: 1,
         passingScore: 60,
-        tags: [questionnaire.category, ...selectedLevels],
+        tags: [mapCategoryToBackend(questionnaire.category), ...selectedLevels],
         aiPowered: false,
         hasAIFeedback: false,
         isOfficial: false,
         // Add multi-selection data
         levels: selectedLevels,
         subscriptions: selectedSubscriptions.map(mapSubscriptionToBackend), // Map all subscriptions
+        // Store fileUrl in metadata for reading comprehension
+        ...(testFileUrl && { fileUrl: testFileUrl }),
         // Expression orale specific data
         ...(questionnaire.category === "oral" && {
           voiceSelection,
@@ -250,18 +290,79 @@ export default function QuestionnaireCreator() {
         })
       }
 
-      // Prepare questions data
-      const questionsData = questions.map((q, index) => ({
-        questionText: q.question,
+      // Prepare questions data with media URLs stored in options JSON
+      const questionsData = questions.map((q, index) => {
+        // Validate question text
+        if (!q.question || q.question.trim().length < 5) {
+          throw new Error(`Question ${index + 1} doit contenir au moins 5 caractères`)
+        }
+        
+        // For multiple-choice, options must be an array of strings
+        let optionsArray: string[] = []
+        if (q.type === "multiple-choice") {
+          optionsArray = Array.isArray(q.options) ? q.options.map(opt => String(opt || "")) : []
+          // Ensure at least 2 options (validation requires at least 2)
+          if (optionsArray.length < 2) {
+            optionsArray = ["Option A", "Option B", "Option C", "Option D"]
+          }
+          // Limit to 10 options max (validation requirement)
+          optionsArray = optionsArray.slice(0, 10)
+        }
+        
+        // Validate correctAnswer
+        let correctAnswer: any = q.correctAnswer
+        if (q.type === "multiple-choice") {
+          // Ensure correctAnswer is a valid index
+          if (typeof correctAnswer !== 'number' || correctAnswer < 0 || correctAnswer >= optionsArray.length) {
+            correctAnswer = 0 // Default to first option
+          }
+        } else if (q.type === "true-false") {
+          // Ensure correctAnswer is boolean or string
+          if (correctAnswer !== true && correctAnswer !== false && correctAnswer !== "true" && correctAnswer !== "false") {
+            correctAnswer = "true" // Default to true
+          }
+        } else {
+          // For short-answer/essay, ensure it's a string (max 1000 chars for validation)
+          correctAnswer = String(correctAnswer || "").substring(0, 1000)
+        }
+        
+        // Validate points
+        const points = Math.min(Math.max(1, q.points || 1), 10)
+        
+        // Ensure category is valid enum value
+        const category = mapCategoryToBackend(questionnaire.category)
+        // Ensure level is valid enum value
+        const level = (selectedLevels[0] || 'A1') as any
+        
+        // Validate category and level are valid
+        const validCategories = ['GRAMMAR', 'LISTENING', 'READING', 'VOCABULARY', 'WRITING', 'ORAL']
+        const validLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+        
+        if (!validCategories.includes(category)) {
+          throw new Error(`Catégorie invalide: ${category}. Doit être l'un de: ${validCategories.join(', ')}`)
+        }
+        if (!validLevels.includes(level)) {
+          throw new Error(`Niveau invalide: ${level}. Doit être l'un de: ${validLevels.join(', ')}`)
+        }
+        
+        return {
+          questionText: q.question.trim(),
         type: q.type,
-        options: q.type === "multiple-choice" ? q.options : null,
-        correctAnswer: q.correctAnswer,
-        points: q.points,
-        explanation: q.explanation,
+          options: optionsArray, // Send as array, not object
+          correctAnswer: correctAnswer,
+          points: points,
+          explanation: (q.explanation || "").substring(0, 1000) || null, // Max 1000 chars, null if empty
         order: index + 1,
-        level: selectedLevels[0] as any,
-        category: questionnaire.category as any
-      }))
+          level: level,
+          category: category
+        }
+      })
+
+      // Debug: Log the data being sent
+      console.log('🔍 Sending test data:', {
+        test: testData,
+        questions: questionsData
+      })
 
       // Save to database using apiClient
       const response = await apiClient.post('/tests', {
@@ -287,15 +388,7 @@ export default function QuestionnaireCreator() {
         category: "",
         instructions: "",
       })
-      setQuestions([{
-        id: 1,
-        type: "multiple-choice",
-        question: "",
-        options: ["", "", "", ""],
-        correctAnswer: 0 as number | string,
-        explanation: "",
-        points: 1,
-      }])
+      setQuestions([])
       // Reset expression orale state
       setExpressionOralePdf(null)
       setSelectedSujets([])
@@ -305,7 +398,17 @@ export default function QuestionnaireCreator() {
       
     } catch (error: any) {
       console.error("Error saving questionnaire:", error)
-      toast.error(`Erreur lors de la sauvegarde: ${error.message || 'Erreur inconnue'}`)
+      console.error("Full error object:", error)
+      
+      // Try to extract more detailed error information
+      let errorMessage = error.message || 'Erreur inconnue'
+      if (error.data && error.data.message) {
+        errorMessage = error.data.message
+      } else if (error.response && error.response.data && error.response.data.message) {
+        errorMessage = error.response.data.message
+      }
+      
+      toast.error(`Erreur lors de la sauvegarde: ${errorMessage}`)
     }
   }
 
@@ -375,9 +478,6 @@ export default function QuestionnaireCreator() {
   }
 
   // Simple prompt change handler - no auto-generation
-  const handlePromptChange = (value: string) => {
-    setAiPrompt(value)
-  }
 
   const handleGenerateQuestionsWithAI = async () => {
     try {
@@ -396,17 +496,40 @@ export default function QuestionnaireCreator() {
         return
       }
 
-      if (!aiPrompt.trim()) {
-        toast.error("Veuillez saisir une description pour générer les questions")
+      // Check if we have PDF content (ONLY file-based generation)
+      if (!extractedPdfContent?.trim()) {
+        toast.error("Veuillez télécharger un fichier PDF pour générer les questions avec l'IA")
+        return
+      }
+      
+      // If questionCount is 0, ask user for the number of questions
+      if (questionCount === 0) {
+        toast.error("Veuillez spécifier le nombre de questions à générer (1-30)")
         return
       }
 
 
       setIsGeneratingQuestions(true)
 
-      // Call AI API to generate questions
+      // Use ONLY PDF content for AI generation
+      const contentToUse = extractedPdfContent;
+      const contentSource = "PDF content";
+
+      console.log('🤖 Generating questions with AI:', {
+        content: contentToUse.substring(0, 100),
+        contentSource: contentSource,
+        contentLength: contentToUse.length,
+        lessonTitle: questionnaire.title,
+        courseTitle: questionnaire.description,
+        level: selectedLevels[0],
+        category: questionnaire.category,
+        difficulty: difficultyLevel,
+        questionCount: questionCount
+      })
+
+      // Call AI API to generate questions using PDF content if available
       const response = await apiClient.post('/ai/generate-questions', {
-        content: aiPrompt,
+        content: contentToUse,
         lessonTitle: questionnaire.title,
         courseTitle: questionnaire.description,
         level: selectedLevels[0],
@@ -418,34 +541,89 @@ export default function QuestionnaireCreator() {
           : ["multiple-choice", "true-false", "short-answer"]
       })
 
-      if (!response.success) {
-        throw new Error((response as any).message || 'Failed to generate questions')
+      console.log('📥 AI Response received:', JSON.stringify(response, null, 2))
+
+      // apiClient.post() returns response.data directly from axios, which is the ApiResponse
+      // So response is { success: true, data: { questions: [...] }, message: ... }
+      if (!response?.success) {
+        const errorMessage = (response as any)?.error?.message || (response as any)?.message || 'Failed to generate questions'
+        console.error('❌ AI Generation failed:', errorMessage, response)
+        throw new Error(errorMessage)
       }
 
-      // Parse generated questions and add them to the list
-      const generatedQuestions = (response.data as any)?.questions || []
+      // Parse generated questions
+      // Backend returns: { success: true, data: { questions: [...] } }
+      // apiClient.post() returns response.data from axios, which is the ApiResponse object
+      // So response = { success: true, data: { questions: [...] } }
+      // Therefore response.data.questions is the questions array
+      const questionsData = (response.data as any)?.questions || []
+      const generatedQuestions = Array.isArray(questionsData) ? questionsData : []
+      
+      console.log('📋 Generated questions count:', generatedQuestions.length)
+      console.log('📋 First question sample:', generatedQuestions[0])
 
       if (generatedQuestions.length === 0) {
         toast.error("Aucune question n'a pu être générée. Veuillez réessayer.")
         return
       }
 
-      // Add generated questions to the questions list
-      const newQuestions = generatedQuestions.map((q: any, index: number) => ({
+      // Add generated questions to the questions list with proper formatting
+      const newQuestions = generatedQuestions.map((q: any, index: number) => {
+        // Ensure options is an array for multiple-choice questions
+        let options = q.options || []
+        if (!Array.isArray(options)) {
+          // If options is not an array, try to extract from different formats
+          if (typeof options === 'object' && options !== null) {
+            // Check if it's an object with choices array
+            options = options.choices || options.options || []
+          } else {
+            options = []
+          }
+        }
+        
+        // Ensure at least 4 options for multiple-choice with actual content
+        if (q.type === "multiple-choice") {
+          // If AI didn't provide options, create empty ones
+          if (options.length === 0) {
+            options = ["", "", "", ""]
+          } else if (options.length < 4) {
+            // Fill with empty strings if less than 4
+            while (options.length < 4) {
+              options.push("")
+            }
+          }
+          // Ensure options are strings
+          options = options.map((opt: any) => String(opt || ""))
+        }
+        
+        return {
         id: Date.now() + index,
         type: q.type || "multiple-choice",
         question: q.questionText || q.question || "",
-        options: q.options || (q.type === "multiple-choice" ? ["", "", "", ""] : []),
-        correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : 0,
+          options: options,
+          correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "multiple-choice" ? 0 : ""),
         explanation: q.explanation || "",
         points: q.points || 1,
-      }))
+        }
+      })
 
+      console.log('✅ Adding questions to list:', newQuestions.length)
+      console.log('✅ Sample question to add:', newQuestions[0])
+      
+      if (newQuestions.length > 0) {
       setQuestions([...questions, ...newQuestions])
-      setAiPrompt("")
       toast.success(`✅ ${newQuestions.length} questions générées avec succès!`)
+        // ✅ AI generates only from PDF content
+      } else {
+        toast.error("Aucune question valide n'a pu être générée. Veuillez réessayer avec un fichier PDF différent.")
+      }
     } catch (error: any) {
-      console.error("Error generating questions:", error)
+      console.error("❌ Error generating questions:", error)
+      console.error("❌ Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        stack: error.stack
+      })
       toast.error(`Erreur lors de la génération: ${error.message || 'Erreur inconnue'}`)
     } finally {
       setIsGeneratingQuestions(false)
@@ -499,42 +677,93 @@ export default function QuestionnaireCreator() {
       formData.append('level', selectedLevels[0] || 'A1')
       formData.append('category', questionnaire.category || 'grammar')
       formData.append('questionCount', questionCount.toString())
+      formData.append('difficulty', difficultyLevel) // ✅ ADD: Send difficulty level
 
       // Call backend API to process file and generate questions
+      console.log('📤 Uploading file for AI extraction:', file.name)
+      
       const response = await apiClient.post('/ai/generate-questions-from-file', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
 
-      if (!response.success) {
-        throw new Error((response as any).message || 'Failed to process file')
+      console.log('📥 File upload response received:', response)
+
+      // apiClient.post() returns response.data directly
+      if (!response?.success) {
+        const errorMessage = (response as any)?.error?.message || (response as any)?.message || 'Failed to process file'
+        console.error('❌ File upload failed:', errorMessage, response)
+        throw new Error(errorMessage)
       }
 
-      // Parse generated questions
-      const generatedQuestions = (response.data as any)?.questions || []
+      // Parse generated questions and store PDF content
+      // apiClient.post() returns response.data directly, which is { success: true, data: { questions: [...], content: "..." } }
+      const responseData = (response.data as any) || (response as any)?.data || {}
+      const questionsData = responseData.questions || []
+      const pdfContent = responseData.content || responseData.extractedText || "" // Store extracted PDF content
+      const generatedQuestions = Array.isArray(questionsData) ? questionsData : []
+      
+      console.log('📋 Generated questions from file:', generatedQuestions.length, 'from response:', response)
+      console.log('📄 Extracted PDF content length:', pdfContent.length)
+      
+      // Store PDF content for future AI generation
+      if (pdfContent && pdfContent.trim().length > 0) {
+        setExtractedPdfContent(pdfContent)
+        console.log('✅ PDF content stored for AI generation')
+      }
 
       if (generatedQuestions.length === 0) {
         toast.error("Aucune question n'a pu être générée à partir du fichier. Veuillez réessayer.")
         return
       }
 
-      // Add generated questions to the questions list
-      const newQuestions = generatedQuestions.map((q: any, index: number) => ({
+      // Add generated questions to the questions list with proper formatting
+      const newQuestions = generatedQuestions.map((q: any, index: number) => {
+        // Ensure options is an array for multiple-choice questions
+        let options = q.options || []
+        if (!Array.isArray(options)) {
+          // If options is not an array, try to extract from different formats
+          if (typeof options === 'object' && options !== null) {
+            // Check if it's an object with choices array
+            options = options.choices || options.options || []
+          } else {
+            options = []
+          }
+        }
+        
+        // Ensure at least 4 options for multiple-choice with actual content
+        if (q.type === "multiple-choice") {
+          // If AI didn't provide options, create empty ones
+          if (options.length === 0) {
+            options = ["", "", "", ""]
+          } else if (options.length < 4) {
+            // Fill with empty strings if less than 4
+            while (options.length < 4) {
+              options.push("")
+            }
+          }
+          // Ensure options are strings
+          options = options.map((opt: any) => String(opt || ""))
+        }
+        
+        return {
         id: Date.now() + index,
         type: q.type || "multiple-choice",
         question: q.questionText || q.question || "",
-        options: q.options || (q.type === "multiple-choice" ? ["", "", "", ""] : []),
-        correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : 0,
+          options: options,
+          correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "multiple-choice" ? 0 : ""),
         explanation: q.explanation || "",
         points: q.points || 1,
-      }))
+        }
+      })
 
       setQuestions([...questions, ...newQuestions])
-      setUploadedFile(null)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
+      // Keep the file visible after question generation
+      // setUploadedFile(null) - REMOVED: Keep file visible
+      // if (fileInputRef.current) {
+      //   fileInputRef.current.value = ''
+      // }
       toast.success(`✅ ${newQuestions.length} questions générées à partir du fichier!`)
     } catch (error: any) {
       console.error("Error processing file:", error)
@@ -1124,7 +1353,16 @@ export default function QuestionnaireCreator() {
                   <CardContent className="text-center py-12">
                     <CheckCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-foreground mb-2">Aucune question ajoutée</h3>
-                    <p className="text-muted-foreground mb-6">Commencez par ajouter des questions à votre questionnaire</p>
+                    <p className="text-muted-foreground mb-6">
+                      Vous devez créer manuellement chaque question. Cliquez sur "Ajouter une Question" pour commencer.
+                    </p>
+                    <Button 
+                      onClick={() => addQuestion("multiple-choice")}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Ajouter votre première question
+                    </Button>
                   </CardContent>
                 </Card>
               )}
@@ -1462,24 +1700,17 @@ export default function QuestionnaireCreator() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="ai-prompt" className="text-foreground font-medium">
-                    Description du contenu
-                  </Label>
-                  <Textarea
-                    id="ai-prompt"
-                    value={aiPrompt}
-                    onChange={(e) => handlePromptChange(e.target.value)}
-                    placeholder={
-                      questionnaire.category === "listening"
-                        ? "Ex: Conversation entre deux amis discutant de leurs vacances. Questions sur les détails, l'opinion, et la compréhension générale..."
-                        : questionnaire.category === "grammar"
-                        ? "Ex: Générez des questions sur les temps du passé en français (passé composé, imparfait, plus-que-parfait) pour un niveau B1..."
-                        : questionnaire.category === "vocabulary"
-                        ? "Ex: Vocabulaire de la famille, des professions, des émotions. Questions de définition, synonymes, et usage contextuel..."
-                        : "Ex: Décrivez le contenu pour générer des questions appropriées..."
-                    }
-                    className="bg-background border-input text-foreground min-h-[120px]"
-                  />
+                  <div className="flex items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 dark:bg-gray-900 dark:border-gray-700">
+                    <div className="text-center">
+                      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 dark:text-gray-400 text-lg font-medium">
+                        L'IA génère uniquement à partir des fichiers PDF uploadés
+                      </p>
+                      <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
+                        Uploadez un fichier PDF pour commencer la génération automatique de questions
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1489,15 +1720,28 @@ export default function QuestionnaireCreator() {
                     </Label>
                     <Input
                       id="question-count"
-                      type="number"
-                      min="1"
-                      max="30"
+                      type="text"
+                      inputMode="numeric"
                       value={questionCount}
                       onChange={(e) => {
+                        const value = e.target.value
+                        // Allow empty string while typing
+                        if (value === "") {
+                          setQuestionCount(0)
+                          return
+                        }
+                        // Only allow numbers
+                        const numValue = parseInt(value)
+                        if (!isNaN(numValue) && numValue >= 1 && numValue <= 30) {
+                          setQuestionCount(numValue)
+                        }
+                      }}
+                      onBlur={(e) => {
+                        // Ensure valid value on blur
                         const value = parseInt(e.target.value) || 1
                         setQuestionCount(Math.min(30, Math.max(1, value)))
                       }}
-                      placeholder="Entrez le nombre de questions (1-30)"
+                      placeholder="Entrez le nombre exact de questions (1-30)"
                       className="bg-background border-input text-foreground"
                     />
                   </div>
@@ -1525,7 +1769,7 @@ export default function QuestionnaireCreator() {
 
                 <Button
                   onClick={handleGenerateQuestionsWithAI}
-                  disabled={isGeneratingQuestions || !aiPrompt.trim() || selectedLevels.length === 0}
+                    disabled={isGeneratingQuestions || !extractedPdfContent?.trim() || selectedLevels.length === 0}
                   className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white"
                 >
                   {isGeneratingQuestions ? (
@@ -1536,7 +1780,7 @@ export default function QuestionnaireCreator() {
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4 mr-2" />
-                      Générer {questionCount} question{questionCount > 1 ? 's' : ''} avec l'IA
+                      {questionCount === 0 ? 'Générer Questions avec l\'IA' : `Générer ${questionCount} question${questionCount > 1 ? 's' : ''} avec l'IA`}
                     </>
                   )}
                 </Button>

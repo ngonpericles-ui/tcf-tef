@@ -28,6 +28,7 @@ const notifications_1 = require("./routes/notifications");
 const content_1 = require("./routes/content");
 const analytics_1 = require("./routes/analytics");
 const health_1 = require("./routes/health");
+const pusherAuth_1 = __importDefault(require("./routes/pusherAuth"));
 const admin_1 = require("./routes/admin");
 const manager_1 = require("./routes/manager");
 const posts_1 = require("./routes/posts");
@@ -46,22 +47,34 @@ const requestLogger_1 = require("./middleware/requestLogger");
 const simulations_1 = __importDefault(require("./routes/simulations"));
 const ai_1 = __importDefault(require("./routes/ai"));
 const marketplaceRoutes_1 = __importDefault(require("./routes/marketplaceRoutes"));
-const marketplace_1 = __importDefault(require("./routes/marketplace"));
 const contentManagement_1 = __importDefault(require("./routes/contentManagement"));
 const messages_1 = __importDefault(require("./routes/messages"));
+const fallback_1 = __importDefault(require("./routes/fallback"));
 const aiAssistant_1 = __importDefault(require("./routes/aiAssistant"));
 const enhancedFileManagement_1 = __importDefault(require("./routes/enhancedFileManagement"));
 const likes_1 = __importDefault(require("./routes/likes"));
 const home_1 = __importDefault(require("./routes/home"));
 const challenges_1 = __importDefault(require("./routes/challenges"));
 const achievements_1 = __importDefault(require("./routes/achievements"));
+const dailyGoals_1 = __importDefault(require("./routes/dailyGoals"));
 const teachers_1 = require("./routes/teachers");
 const userActivity_1 = __importDefault(require("./routes/userActivity"));
 const moderation_1 = __importDefault(require("./routes/moderation"));
-const chatRoomService_1 = require("./services/chatRoomService");
+const realTimeMessagingService_1 = require("./services/realTimeMessagingService");
+const messageQueueWorker_1 = require("./workers/messageQueueWorker");
+const monitoringService_1 = require("./services/monitoringService");
+const redis_1 = require("./config/redis");
 const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
-app.use((0, helmet_1.default)());
+app.use((0, helmet_1.default)({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet_1.default.contentSecurityPolicy.getDefaultDirectives(),
+            "img-src": ["'self'", "data:", "http://localhost:3001", "https:"],
+        },
+    },
+}));
 app.use((0, cors_1.default)({
     origin: [
         'http://localhost:3000',
@@ -104,8 +117,8 @@ else {
     app.use('/api/', limiter);
     console.log('🔓 Development rate limiting enabled (relaxed limits)');
 }
-app.use(express_1.default.json({ limit: '500mb' }));
-app.use(express_1.default.urlencoded({ extended: true, limit: '500mb' }));
+app.use(express_1.default.json({ limit: '10gb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '10gb' }));
 app.use((0, compression_1.default)());
 app.use((0, morgan_1.default)('combined', {
     stream: {
@@ -147,8 +160,8 @@ app.use('/api/immigration-simulation', immigrationSimulation_1.default);
 app.use('/api/floating-ai-assistant', floatingAiAssistant_1.default);
 app.use('/api/simulations', simulations_1.default);
 app.use('/api', marketplaceRoutes_1.default);
-app.use('/api/marketplace', marketplace_1.default);
 app.use('/api/messages', messages_1.default);
+app.use('/api/fallback', fallback_1.default);
 app.use('/api/content-management', contentManagement_1.default);
 app.use('/api/ai-assistant', aiAssistant_1.default);
 app.use('/api/file-management', enhancedFileManagement_1.default);
@@ -156,31 +169,60 @@ app.use('/api/likes', likes_1.default);
 app.use('/api/home', home_1.default);
 app.use('/api/challenges', challenges_1.default);
 app.use('/api/achievements', achievements_1.default);
+app.use('/api/daily-goals', dailyGoals_1.default);
 app.use('/api/teachers', teachers_1.teacherRoutes);
 app.use('/api/user', userActivity_1.default);
 app.use('/api', moderation_1.default);
+app.use('/api/health', health_1.healthRoutes);
+app.use('/api/pusher', pusherAuth_1.default);
 app.use('/uploads', express_1.default.static('uploads'));
 app.use(notFoundHandler_1.notFoundHandler);
 app.use(requestLogger_1.errorLogger);
 app.use(errorHandler_1.errorHandler);
-chatRoomService_1.chatRoomService.initialize(server);
+const realTimeMessagingService = new realTimeMessagingService_1.RealTimeMessagingService(server);
+const messageQueueWorker = new messageQueueWorker_1.MessageQueueWorker();
+monitoringService_1.monitoringService.start();
 const PORT = environment_1.config.port || 3001;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Environment: ${environment_1.config.nodeEnv}`);
     console.log(`🔗 Database: ${environment_1.config.databaseUrl ? 'Connected' : 'Not configured'}`);
     console.log(`💬 Socket.IO chat service initialized`);
+    console.log(`📨 Real-time messaging service initialized`);
+    console.log(`⚡ Message queue worker initialized`);
+    console.log(`📊 Monitoring service started`);
+    const redisHealth = await (0, redis_1.checkRedisHealth)();
+    console.log(`🔴 Redis: ${redisHealth ? 'Connected' : 'Not connected'}`);
+    try {
+        await messageQueueWorker.start();
+        console.log(`🔄 Message queue worker started`);
+    }
+    catch (error) {
+        console.error(`❌ Failed to start message queue worker:`, error);
+    }
     logger_1.logger.info(`🚀 Server running on port ${PORT}`);
     logger_1.logger.info(`📊 Environment: ${environment_1.config.nodeEnv}`);
     logger_1.logger.info(`🔗 Database: ${environment_1.config.databaseUrl ? 'Connected' : 'Not configured'}`);
     logger_1.logger.info(`💬 Socket.IO chat service initialized`);
+    logger_1.logger.info(`📨 Real-time messaging service initialized`);
+    logger_1.logger.info(`⚡ Message queue worker initialized`);
+    logger_1.logger.info(`📊 Monitoring service started`);
+    logger_1.logger.info(`🔴 Redis: ${redisHealth ? 'Connected' : 'Not connected'}`);
 });
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
     logger_1.logger.info('SIGTERM received, shutting down gracefully');
+    if (messageQueueWorker) {
+        await messageQueueWorker.stop();
+    }
+    monitoringService_1.monitoringService.stop();
     process.exit(0);
 });
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     logger_1.logger.info('SIGINT received, shutting down gracefully');
+    if (messageQueueWorker) {
+        await messageQueueWorker.stop();
+    }
+    monitoringService_1.monitoringService.stop();
     process.exit(0);
 });
 exports.default = app;

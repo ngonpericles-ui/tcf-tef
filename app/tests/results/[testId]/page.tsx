@@ -63,12 +63,87 @@ export default function TestResultsPage() {
     const fetchResults = async () => {
       try {
         setLoading(true)
-        const testId = params?.testId as string
-        if (!testId) return
+        const attemptId = params?.testId as string // This is actually the attempt ID now
+        if (!attemptId) return
         
-        const response = await apiClient.get(`/tests/attempts/${testId}`)
+        console.log('🔍 Fetching test results for attempt:', attemptId)
+        console.log('🔍 API endpoint:', `/tests/attempts/${attemptId}`)
+        const response = await apiClient.get(`/tests/attempts/${attemptId}`)
+        console.log('🔍 Test results response:', response)
+        
         if (response.success) {
-          setResult(response.data as TestResult)
+          const attempt = response.data.attempt
+          console.log('🔍 Attempt data:', attempt)
+          console.log('🔍 Attempt score:', attempt.score)
+          console.log('🔍 Attempt percentage:', attempt.percentage)
+          console.log('🔍 Attempt questions:', attempt.questions)
+          console.log('🔍 Questions structure:', attempt.questions?.map(q => ({ 
+            questionId: q.question?.id, 
+            questionText: q.question?.questionText,
+            userAnswer: q.userAnswer,
+            isCorrect: q.isCorrect 
+          })))
+          
+          // Calculate values from the attempt data
+          const totalQuestions = attempt.questions?.length || 0
+          const correctAnswers = attempt.questions?.filter((qa: any) => qa.isCorrect).length || 0
+          const totalPoints = attempt.questions?.reduce((sum: number, qa: any) => sum + (qa.question?.points || 0), 0) || 0
+          const earnedPoints = attempt.questions?.reduce((sum: number, qa: any) => sum + (qa.isCorrect ? (qa.question?.points || 0) : 0), 0) || 0
+          const percentage = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0
+          
+          console.log('🔍 Calculated values:', {
+            totalQuestions,
+            correctAnswers,
+            totalPoints,
+            earnedPoints,
+            percentage,
+            timeSpent: attempt.timeSpent,
+            startedAt: attempt.startedAt,
+            completedAt: attempt.completedAt
+          })
+          
+          // Transform the attempt data to match our TestResult interface
+          const testResult: TestResult = {
+            id: attempt.id,
+            testId: attempt.testId,
+            testTitle: attempt.test.title,
+            testDescription: attempt.test.description || '',
+            score: earnedPoints,
+            maxScore: totalPoints,
+            percentage: percentage,
+            status: attempt.status,
+            startedAt: attempt.startedAt,
+            completedAt: attempt.completedAt || new Date().toISOString(),
+            duration: attempt.timeSpent || 0,
+            correctAnswers: correctAnswers,
+            totalQuestions: totalQuestions,
+            feedback: attempt.feedback,
+            questions: attempt.questions?.map((qa: any) => {
+              // Convert user answer from index to actual text for display
+              let displayUserAnswer = qa.userAnswer;
+              if (qa.question?.type === 'multiple-choice' && qa.question?.options && typeof qa.userAnswer === 'string') {
+                const answerIndex = parseInt(qa.userAnswer);
+                if (!isNaN(answerIndex) && qa.question.options[answerIndex]) {
+                  displayUserAnswer = qa.question.options[answerIndex];
+                }
+              }
+              
+              return {
+                id: qa.question?.id,
+                questionText: qa.question?.questionText,
+                type: qa.question?.type,
+                options: qa.question?.options,
+                correctAnswer: qa.question?.correctAnswer,
+                userAnswer: displayUserAnswer,
+                isCorrect: qa.isCorrect,
+                points: qa.question?.points,
+                explanation: qa.question?.explanation
+              };
+            }) || []
+          }
+          
+          console.log('🔍 Final test result:', testResult)
+          setResult(testResult)
         }
       } catch (error) {
         console.error('Error fetching test results:', error)
@@ -232,11 +307,21 @@ export default function TestResultsPage() {
                     <div className="text-foreground">
                       <p className="font-medium mb-3">{question.questionText}</p>
                       
+                      {/* User's Answer Section */}
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800 font-medium mb-1">
+                          {t("Votre réponse:", "Your answer:")}
+                        </p>
+                        <p className="text-blue-900">
+                          {question.userAnswer || t("Aucune réponse", "No answer")}
+                        </p>
+                      </div>
+                      
                       {question.type === "multiple-choice" && question.options && (
                         <div className="space-y-2">
                           {question.options.map((option, optionIndex) => {
                             const isCorrectOption = optionIndex === question.correctAnswer
-                            const isUserChoice = question.userAnswer === optionIndex
+                            const isUserChoice = question.userAnswer === option
                             
                             return (
                               <div
@@ -418,7 +503,7 @@ export default function TestResultsPage() {
           <Button onClick={() => router.push('/tests')} variant="outline">
             {t("Voir tous les tests", "View all tests")}
           </Button>
-          <Button onClick={() => router.push(`/tests/take/${params?.testId}`)}>
+          <Button onClick={() => router.push(`/tests/take/${result.testId}`)}>
             {t("Refaire le test", "Retake test")}
           </Button>
         </div>

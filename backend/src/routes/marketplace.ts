@@ -26,11 +26,11 @@ router.get('/tutors', authenticate, async (req: Request, res: Response, next: Ne
       });
     }
 
-    // Get tutor profiles (managers and admins)
+    // Get tutor profiles (managers and admins) - include both ACTIVE and ONLINE users
     const tutors = await prisma.user.findMany({
       where: {
         role: { in: ['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'] },
-        status: 'ACTIVE'
+        status: { in: ['ACTIVE', 'ONLINE'] }
       },
       select: {
         id: true,
@@ -39,24 +39,79 @@ router.get('/tutors', authenticate, async (req: Request, res: Response, next: Ne
         email: true,
         role: true,
         profilePicture: true,
+        preferences: true, // CRITICAL: Must select preferences to check marketplaceProfile.isActive
         createdAt: true,
         // Add tutor-specific fields if they exist
       }
     });
 
-    const tutorProfiles = tutors.map(tutor => ({
-      id: tutor.id,
-      name: `${tutor.firstName} ${tutor.lastName}`,
-      email: tutor.email,
-      role: tutor.role,
-      profilePicture: tutor.profilePicture,
-      experience: tutor.role === 'ADMIN' ? 'Expert' : tutor.role === 'SENIOR_MANAGER' ? 'Senior' : 'Junior',
-      specialties: tutor.role === 'JUNIOR_MANAGER' ? ['A1', 'A2', 'B1'] : ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'],
-      rating: 4.5 + Math.random() * 0.5, // Mock rating
-      reviewCount: Math.floor(Math.random() * 100) + 10,
-      responseTime: '< 24h',
-      isAvailable: true
-    }));
+    // Filter tutors to only show those with activated marketplace profiles
+    const activeTutors = tutors.filter(tutor => {
+      // Only show ADMIN and SENIOR_MANAGER (not JUNIOR_MANAGER for general marketplace)
+      if (tutor.role !== 'ADMIN' && tutor.role !== 'SENIOR_MANAGER') {
+        return false;
+      }
+
+      // Check if marketplace profile is activated - parse preferences properly
+      let preferences = {};
+      try {
+        if (tutor.preferences) {
+          if (typeof tutor.preferences === 'string') {
+            preferences = JSON.parse(tutor.preferences);
+          } else if (typeof tutor.preferences === 'object') {
+            preferences = tutor.preferences;
+          }
+        }
+      } catch (parseError) {
+        console.error(`❌ Error parsing preferences for ${tutor.email}:`, parseError);
+        preferences = {};
+      }
+      
+      const marketplaceProfile = (preferences as any).marketplaceProfile || {};
+      const isActive = marketplaceProfile.isActive === true;
+      
+      console.log(`🔍 Marketplace filter: ${tutor.email} (${tutor.role}): isActive=${isActive}`);
+      
+      return isActive;
+    });
+
+    console.log(`✅ Filtered ${activeTutors.length} active tutors from ${tutors.length} total`);
+
+    const tutorProfiles = activeTutors.map(tutor => {
+      // Parse preferences to get marketplace profile data
+      let preferences = {};
+      try {
+        if (tutor.preferences) {
+          if (typeof tutor.preferences === 'string') {
+            preferences = JSON.parse(tutor.preferences);
+          } else if (typeof tutor.preferences === 'object') {
+            preferences = tutor.preferences;
+          }
+        }
+      } catch (parseError) {
+        preferences = {};
+      }
+      
+      const marketplaceProfile = (preferences as any).marketplaceProfile || {};
+      
+      return {
+        id: tutor.id,
+        name: `${tutor.firstName} ${tutor.lastName}`,
+        email: tutor.email,
+        role: tutor.role,
+        profilePicture: tutor.profilePicture,
+        bio: marketplaceProfile.bio || `Expert formateur en français langue étrangère`,
+        specialties: Array.isArray(marketplaceProfile.specialties) ? marketplaceProfile.specialties : ['Grammaire', 'Expression Orale'],
+        languages: Array.isArray(marketplaceProfile.languages) ? marketplaceProfile.languages : ['Français', 'English'],
+        availability: Array.isArray(marketplaceProfile.availability) ? marketplaceProfile.availability : ['Lun-Ven'],
+        location: marketplaceProfile.location || null,
+        experience: tutor.role === 'ADMIN' ? 'Expert' : 'Senior',
+        rating: 4.5 + Math.random() * 0.5, // Mock rating
+        reviewCount: Math.floor(Math.random() * 100) + 10,
+        responseTime: '< 24h',
+        isAvailable: true
+      };
+    });
 
     res.json({
       success: true,
@@ -328,6 +383,184 @@ router.post('/tutor-response', authenticate, async (req: Request, res: Response,
       data: updatedFeedback,
       message: 'Review completed successfully'
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route GET /api/marketplace/profile
+ * @desc Get marketplace profile for current user
+ * @access Private
+ */
+router.get('/profile', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        subscriptionTier: true,
+        profilePicture: true,
+        createdAt: true,
+        lastActivityAt: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    // Determine if user is a tutor
+    const isTutor = ['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'].includes(user.role);
+    
+    // Get tutor-specific stats if user is a tutor
+    let tutorStats = null;
+    if (isTutor) {
+      const completedReviews = await prisma.aIFeedback.count({
+        where: {
+          humanReviewerId: userId,
+          status: 'HUMAN_COMPLETED'
+        }
+      });
+
+      const pendingReviews = await prisma.aIFeedback.count({
+        where: {
+          humanReviewerId: userId,
+          status: 'PENDING_HUMAN'
+        }
+      });
+
+      tutorStats = {
+        completedReviews,
+        pendingReviews,
+        totalReviews: completedReviews + pendingReviews
+      };
+    }
+
+    // Get student-specific stats if user is a student
+    let studentStats = null;
+    if (user.role === 'STUDENT') {
+      const myRequests = await prisma.aIFeedback.count({
+        where: {
+          userId,
+          status: { in: ['PENDING_HUMAN', 'HUMAN_COMPLETED'] }
+        }
+      });
+
+      studentStats = {
+        myRequests,
+        hasProSubscription: ['PRO', 'PREMIUM'].includes(user.subscriptionTier || 'FREE')
+      };
+    }
+
+    const profile = {
+      id: user.id,
+      name: `${user.firstName} ${user.lastName}`,
+      email: user.email,
+      role: user.role,
+      subscriptionTier: user.subscriptionTier || 'FREE',
+      profilePicture: user.profilePicture,
+      memberSince: user.createdAt,
+      lastActive: user.lastActivityAt,
+      isTutor,
+      tutorStats,
+      studentStats
+    };
+
+    res.json({
+      success: true,
+      data: profile
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route POST /api/marketplace/activate
+ * @desc Activate marketplace features for user
+ * @access Private
+ */
+router.post('/activate', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const { action, tutorId } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    if (action === 'become_tutor') {
+      // Check if user can become a tutor
+      if (!['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'].includes(user.role)) {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Only managers and admins can become tutors' }
+        });
+      }
+
+      // Update user profile for tutoring
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          // Add any tutor-specific fields here
+          updatedAt: new Date()
+        }
+      });
+
+      res.json({
+        success: true,
+        message: 'Tutor profile activated successfully',
+        data: {
+          isTutor: true,
+          tutorId: userId
+        }
+      });
+    } else if (action === 'request_tutor') {
+      // Check if user has Pro+ subscription
+      if (!['PRO', 'PREMIUM'].includes(user.subscriptionTier || 'FREE')) {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Pro+ subscription required to request tutors' }
+        });
+      }
+
+      // Create tutor request (you might want to add a TutorRequest model)
+      const tutorRequest = {
+        id: `tutor_req_${Date.now()}`,
+        studentId: userId,
+        tutorId,
+        status: 'PENDING',
+        createdAt: new Date()
+      };
+
+      res.json({
+        success: true,
+        message: 'Tutor request submitted successfully',
+        data: tutorRequest
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid action. Use "become_tutor" or "request_tutor"' }
+      });
+    }
   } catch (error) {
     next(error);
   }

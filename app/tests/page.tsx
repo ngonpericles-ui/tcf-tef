@@ -69,11 +69,30 @@ const TestsPage = React.memo(function TestsPage() {
     "/images/tests/hero4.jpg",
     "/images/tests/hero5.jpg",
   ], [])
-  const [heroIndex, setHeroIndex] = useState(0)
 
+  // Calculate hero index based on 24-hour cycle
+  // Changes every 24 hours by using the number of days since epoch
+  const [heroIndex, setHeroIndex] = useState(() => {
+    const now = new Date()
+    // Get the number of days since epoch (rounded down)
+    const daysSinceEpoch = Math.floor(now.getTime() / (1000 * 60 * 60 * 24))
+    // Use modulo to cycle through images
+    return daysSinceEpoch % heroImages.length
+  })
+
+  // Update hero index every hour to check if day has changed
   useEffect(() => {
-    const id = setInterval(() => setHeroIndex((i) => (i + 1) % heroImages.length), 15000)
-    return () => clearInterval(id)
+    const updateHeroIndex = () => {
+      const now = new Date()
+      const daysSinceEpoch = Math.floor(now.getTime() / (1000 * 60 * 60 * 24))
+      setHeroIndex(daysSinceEpoch % heroImages.length)
+    }
+    
+    // Update immediately and then every hour
+    updateHeroIndex()
+    const interval = setInterval(updateHeroIndex, 60 * 60 * 1000) // Check every hour
+    
+    return () => clearInterval(interval)
   }, [heroImages.length])
 
   // Fetch tests from backend

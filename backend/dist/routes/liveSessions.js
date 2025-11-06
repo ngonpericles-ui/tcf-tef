@@ -5,9 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.liveSessionRoutes = void 0;
 const express_1 = require("express");
-const liveSessionController_1 = require("../controllers/liveSessionController");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const liveSessionController_1 = require("@/controllers/liveSessionController");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
 const router = (0, express_1.Router)();
 exports.liveSessionRoutes = router;
@@ -42,7 +42,9 @@ router.get('/', auth_1.optionalAuthenticate, liveSessionController_1.LiveSession
 router.post('/', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validate)(createLiveSessionSchema), liveSessionController_1.LiveSessionController.createLiveSession);
 router.get('/:sessionId', auth_1.optionalAuthenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.getLiveSessionById);
 router.post('/:sessionId/register', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.registerForSession);
+router.post('/:sessionId/join', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.registerForSession);
 router.delete('/:sessionId/register', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.unregisterFromSession);
+router.post('/:sessionId/leave', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.unregisterFromSession);
 router.put('/:sessionId', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), (0, validation_1.validate)(joi_1.default.object({
     title: joi_1.default.string().min(3).max(200).optional(),
     description: joi_1.default.string().min(10).max(1000).optional(),
@@ -59,4 +61,12 @@ router.post('/reminder', auth_1.authenticate, (0, validation_1.validate)(joi_1.d
     sessionId: validation_1.commonSchemas.id.required(),
     reminderTime: joi_1.default.string().valid('5min', '10min').required()
 })), liveSessionController_1.LiveSessionController.setReminder);
+router.get('/:sessionId/participants', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.getSessionParticipants);
+router.post('/:sessionId/participants/:participantId/mute', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id, participantId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.muteParticipant);
+router.post('/:sessionId/participants/:participantId/pin', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id, participantId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.pinParticipant);
+router.delete('/:sessionId/participants/:participantId', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id, participantId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.removeParticipant);
+router.get('/:sessionId/messages', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), liveSessionController_1.LiveSessionController.getSessionMessages);
+router.post('/:sessionId/messages', auth_1.authenticate, (0, validation_1.validateParams)({ sessionId: validation_1.commonSchemas.id }), (0, validation_1.validate)(joi_1.default.object({
+    message: joi_1.default.string().min(1).max(1000).required()
+})), liveSessionController_1.LiveSessionController.sendMessage);
 //# sourceMappingURL=liveSessions.js.map

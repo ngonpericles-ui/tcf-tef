@@ -34,6 +34,13 @@ router.get('/enrolled', authenticate, CourseController.getUserEnrolledCourses);
 router.get('/created', authenticate, requireManager, CourseController.getUserCreatedCourses);
 
 /**
+ * @route   GET /api/courses/statistics
+ * @desc    Get course statistics for user (Manager/Admin only)
+ * @access  Private (Manager+)
+ */
+router.get('/statistics', authenticate, requireManager, CourseController.getCourseStatistics);
+
+/**
  * @route   GET /api/courses/:courseId
  * @desc    Get course by ID
  * @access  Public (with optional authentication for personalized data)

@@ -132,13 +132,19 @@ export class CourseService {
 
       // Check if user has access to this course
       if (course.requiredTier !== SubscriptionTier.FREE && userId) {
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { subscriptionTier: true }
-        });
+        // Course creators have automatic access to their own courses
+        if (course.createdById === userId) {
+          // Creator has full access to their own course
+        } else {
+          // Check subscription tier for non-creators
+          const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { subscriptionTier: true }
+          });
 
-        if (user && !this.hasAccessToTier(user.subscriptionTier, course.requiredTier)) {
-          throw new AuthorizationError('Subscription upgrade required to access this course');
+          if (user && !this.hasAccessToTier(user.subscriptionTier, course.requiredTier)) {
+            throw new AuthorizationError('Subscription upgrade required to access this course');
+          }
         }
       }
 
@@ -147,7 +153,10 @@ export class CourseService {
         ...course,
         userProgress: course.progress?.[0],
         isFavorited: false, // Will be calculated separately if needed
-        isEnrolled: userId ? course.enrollments.some(e => e.userId === userId) : false,
+        isEnrolled: userId ? (
+          course.enrollments.some(e => e.userId === userId) || 
+          course.createdById === userId // Course creators are automatically enrolled
+        ) : false,
         progress: course.progress?.[0] ? {
           completedLessons: 0, // This would need to be calculated based on actual progress
           totalLessons: course._count.lessons_data,
@@ -414,7 +423,12 @@ export class CourseService {
         throw new ValidationError('Course is not published');
       }
 
-      // Check user subscription tier
+      // Course creators don't need to enroll in their own courses
+      if (course.createdById === userId) {
+        throw new ValidationError('Course creators have automatic access to their own courses');
+      }
+
+      // Check user subscription tier for non-creators
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { subscriptionTier: true }
@@ -594,6 +608,56 @@ export class CourseService {
       };
     } catch (error) {
       logger.error('Failed to get user enrolled courses', { userId, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Get course statistics for a user
+   */
+  static async getCourseStatistics(userId: string, userRole: UserRole): Promise<{
+    totalCourses: number;
+    publishedCourses: number;
+    totalEnrollments: number;
+    averageRating: number;
+  }> {
+    try {
+      const whereClause: any = { createdById: userId };
+
+      // Get basic statistics
+      const [
+        totalCourses,
+        publishedCourses,
+        totalEnrollments,
+        averageRating
+      ] = await Promise.all([
+        // Total courses created by user
+        prisma.course.count({ where: whereClause }),
+        
+        // Published courses
+        prisma.course.count({ 
+          where: { ...whereClause, isPublished: true } 
+        }),
+        
+        // Total enrollments across all user's courses
+        prisma.courseEnrollment.count({
+          where: {
+            course: whereClause
+          }
+        }),
+        
+        // Average rating (placeholder - would need rating system)
+        Promise.resolve(4.5) // Mock average rating
+      ]);
+
+      return {
+        totalCourses,
+        publishedCourses,
+        totalEnrollments,
+        averageRating
+      };
+    } catch (error) {
+      logger.error('Failed to get course statistics', { userId, error });
       throw error;
     }
   }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Bell } from "lucide-react"
 import MessengerIcon from "./icons/messenger-icon"
+import MessageIcon from "./MessageIcon"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -17,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import apiClient from "@/lib/api-client"
 import { useLang } from "@/components/language-provider"
 import { useAuth } from "@/contexts/AuthContext"
+import { useMessagingRoute } from "@/hooks/useMessagingRoute"
 import { formatDistanceToNow } from "date-fns"
 import { fr, enUS } from "date-fns/locale"
 
@@ -50,6 +52,7 @@ interface NotificationIndicatorProps {
 export default function NotificationIndicator({ type }: NotificationIndicatorProps) {
   const { lang } = useLang()
   const { isAuthenticated, user } = useAuth()
+  const { getMessagingRoute } = useMessagingRoute()
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
   
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -134,7 +137,7 @@ export default function NotificationIndicator({ type }: NotificationIndicatorPro
             message: msg.subject || msg.content.substring(0, 100) + '...',
             isRead: msg.isRead,
             priority: 'MEDIUM',
-            actionUrl: `/messages/${msg.id}`,
+            actionUrl: `${getMessagingRoute()}/${msg.id}`,
             createdAt: msg.createdAt
           }))
           setNotifications(messages)
@@ -213,15 +216,27 @@ export default function NotificationIndicator({ type }: NotificationIndicatorPro
     })
   }
 
+  if (type === 'messages') {
+    return (
+      <div className="relative">
+        <MessageIcon size="sm" variant="ghost" />
+        {unreadCount > 0 && (
+          <Badge 
+            variant="destructive" 
+            className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Badge>
+        )}
+      </div>
+    )
+  }
+
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="relative">
-          {type === 'notifications' ? (
-            <Bell className="w-5 h-5" />
-          ) : (
-            <MessengerIcon className="w-5 h-5" />
-          )}
+          <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
             <Badge 
               variant="destructive" 
@@ -314,7 +329,7 @@ export default function NotificationIndicator({ type }: NotificationIndicatorPro
             <DropdownMenuItem 
               className="text-center text-sm text-primary cursor-pointer"
               onClick={() => {
-                const url = type === 'notifications' ? '/notifications' : '/messages'
+                const url = type === 'notifications' ? '/notifications' : getMessagingRoute()
                 window.location.href = url
                 setIsOpen(false)
               }}

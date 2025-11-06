@@ -1,12 +1,13 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
 import { LevelAssessmentService } from '../services/levelAssessmentService';
 import { AITeacherFeedbackService } from '../services/aiTeacherFeedbackService';
 import { logger } from '../utils/logger';
+import { checkSimulationLimit } from '../services/simulationLimitService';
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
 
 /**
  * @route GET /api/simulations
@@ -129,6 +130,21 @@ router.post('/:id/start', authenticate, async (req: Request, res: Response, next
     const { id } = req.params;
     const userId = req.user!.userId;
 
+    // STRICT LIMIT ENFORCEMENT: Check simulation limit before creating
+    const limitCheck = await checkSimulationLimit(userId);
+    if (!limitCheck.canCreate) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: limitCheck.error || 'Simulation limit reached for this billing period. Please upgrade your subscription or wait for the next billing cycle.',
+          limitReached: true,
+          remaining: limitCheck.remaining,
+          maxSimulations: limitCheck.maxSimulations,
+          periodEndDate: limitCheck.periodEndDate.toISOString()
+        }
+      });
+    }
+
     // Get simulation details
     const simulation = await prisma.test.findUnique({
       where: { id },
@@ -153,8 +169,10 @@ router.post('/:id/start', authenticate, async (req: Request, res: Response, next
         testId: id,
         status: 'IN_PROGRESS',
         startedAt: new Date(),
-        answers: {},
+        answers: {
         timeRemaining: simulation.duration * 60, // Convert minutes to seconds
+          progress: {}
+        } as any,
       }
     });
 
@@ -275,17 +293,19 @@ router.put('/sessions/:id/progress', authenticate, async (req: Request, res: Res
       });
     }
 
-    await prisma.testAttempt.update({
-      where: { id },
-      data: {
-        answers: answers as any,
+    // Merge answers with progress metadata
+    const updatedAnswers = {
+      ...(typeof answers === 'object' ? answers : {}),
         timeRemaining,
-        // Store additional progress data in metadata
-        metadata: {
           currentSection,
           currentQuestion,
           lastSaved: new Date().toISOString()
-        } as any
+    };
+
+    await prisma.testAttempt.update({
+      where: { id },
+      data: {
+        answers: updatedAnswers as any
       }
     });
 
@@ -355,6 +375,22 @@ router.post('/sessions/:id/submit', authenticate, async (req: Request, res: Resp
     });
 
     const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+    const grade = getGradeFromPercentage(percentage);
+
+    // Prepare detailed results for storage in feedback
+    const detailedResults = {
+        maxScore,
+        percentage,
+        correctAnswers,
+      grade,
+        level: session.test.level,
+        sections: generateSectionResults(session.test.questions, answers),
+        overallFeedback: generateOverallFeedback(percentage),
+        strengths: generateStrengths(questionResults),
+        weaknesses: generateWeaknesses(questionResults),
+      recommendations: generateRecommendations(percentage, session.test.level),
+      questionResults
+    };
 
     // Update session with final results
     const completedSession = await prisma.testAttempt.update({
@@ -363,42 +399,23 @@ router.post('/sessions/:id/submit', authenticate, async (req: Request, res: Resp
         status: 'COMPLETED',
         completedAt: new Date(),
         score: totalScore,
-        maxScore,
-        percentage,
-        correctAnswers,
-        duration: timeSpent,
-        answers: answers as any
-      }
-    });
-
-    // Create result record
-    const result = await prisma.simulationResult.create({
-      data: {
-        userId,
-        testAttemptId: id,
-        simulationTitle: session.test.title,
-        totalScore,
-        maxScore,
-        percentage,
-        grade: getGradeFromPercentage(percentage),
-        level: session.test.level,
         timeSpent,
-        sections: generateSectionResults(session.test.questions, answers),
-        overallFeedback: generateOverallFeedback(percentage),
-        strengths: generateStrengths(questionResults),
-        weaknesses: generateWeaknesses(questionResults),
-        recommendations: generateRecommendations(percentage, session.test.level)
+        answers: answers as any,
+        feedback: JSON.stringify(detailedResults)
       }
     });
 
     res.json({
       success: true,
       data: {
-        resultId: result.id,
+        resultId: completedSession.id,
         score: totalScore,
         maxScore,
         percentage,
-        grade: result.grade
+        grade,
+        correctAnswers,
+        totalQuestions: session.test.questions.length,
+        timeSpent
       }
     });
   } catch (error) {
@@ -415,22 +432,62 @@ router.get('/results', authenticate, async (req: Request, res: Response, next: N
   try {
     const userId = req.user!.userId;
 
-    const results = await prisma.simulationResult.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        testAttempt: {
+    const attempts = await prisma.testAttempt.findMany({
+      where: { 
+        userId,
+        status: 'COMPLETED'
+      },
           include: {
             test: {
               select: {
+            id: true,
                 title: true,
+            titleEn: true,
                 level: true,
-                type: true
+            type: true,
+            category: true
               }
             }
-          }
+      },
+      orderBy: { completedAt: 'desc' }
+    });
+
+    // Transform attempts to results format
+    const results = attempts.map(attempt => {
+      let feedbackData: any = {};
+      if (attempt.feedback) {
+        try {
+          feedbackData = JSON.parse(attempt.feedback);
+        } catch (e) {
+          // If parsing fails, use empty object
         }
       }
+
+      // Calculate maxScore from test questions if not in feedback
+      const maxScore = feedbackData.maxScore || 100;
+      const percentage = feedbackData.percentage || (attempt.score && maxScore > 0 
+        ? Math.round((attempt.score / maxScore) * 100) 
+        : 0);
+
+      return {
+        id: attempt.id,
+        userId: attempt.userId,
+        testAttemptId: attempt.id,
+        simulationTitle: attempt.test.title,
+        totalScore: attempt.score || 0,
+        maxScore,
+        percentage,
+        grade: feedbackData.grade || getGradeFromPercentage(percentage),
+        level: attempt.test.level || feedbackData.level,
+        timeSpent: attempt.timeSpent || 0,
+        sections: feedbackData.sections || [],
+        overallFeedback: feedbackData.overallFeedback || '',
+        strengths: feedbackData.strengths || [],
+        weaknesses: feedbackData.weaknesses || [],
+        recommendations: feedbackData.recommendations || [],
+        createdAt: attempt.completedAt || attempt.createdAt,
+        test: attempt.test
+      };
     });
 
     res.json({
@@ -453,19 +510,69 @@ router.get('/results/:id', authenticate, async (req: Request, res: Response, nex
     const { id } = req.params;
     const userId = req.user!.userId;
 
-    const result = await prisma.simulationResult.findFirst({
+    const attempt = await prisma.testAttempt.findFirst({
       where: {
         id,
-        userId
+        userId,
+        status: 'COMPLETED'
+      },
+      include: {
+        test: {
+          select: {
+            id: true,
+            title: true,
+            titleEn: true,
+            level: true,
+            type: true,
+            category: true
+          }
+        }
       }
     });
 
-    if (!result) {
+    if (!attempt) {
       return res.status(404).json({
         success: false,
         error: { message: 'Results not found' }
       });
     }
+
+    // Parse feedback data
+    let feedbackData: any = {};
+    if (attempt.feedback) {
+      try {
+        feedbackData = JSON.parse(attempt.feedback);
+      } catch (e) {
+        // If parsing fails, use empty object
+      }
+    }
+
+    // Calculate values if not in feedback
+    const maxScore = feedbackData.maxScore || 100;
+    const percentage = feedbackData.percentage || (attempt.score && maxScore > 0 
+      ? Math.round((attempt.score / maxScore) * 100) 
+      : 0);
+
+    const result = {
+      id: attempt.id,
+      userId: attempt.userId,
+      testAttemptId: attempt.id,
+      simulationTitle: attempt.test.title,
+      totalScore: attempt.score || 0,
+      maxScore,
+      percentage,
+      grade: feedbackData.grade || getGradeFromPercentage(percentage),
+      level: attempt.test.level || feedbackData.level,
+      timeSpent: attempt.timeSpent || 0,
+      sections: feedbackData.sections || [],
+      overallFeedback: feedbackData.overallFeedback || '',
+      strengths: feedbackData.strengths || [],
+      weaknesses: feedbackData.weaknesses || [],
+      recommendations: feedbackData.recommendations || [],
+      questionResults: feedbackData.questionResults || [],
+      createdAt: attempt.completedAt || attempt.createdAt,
+      test: attempt.test
+    };
 
     res.json({
       success: true,
@@ -860,50 +967,75 @@ router.post('/sessions/:sessionId/submit', authenticate, async (req: Request, re
   }
 });
 
+
 /**
  * @route GET /api/simulations/free-attempts/count
- * @desc Get count of free simulation attempts for current user
+ * @desc Get count of simulation attempts for current user based on subscription
  * @access Private
+ * @note Counts ALL simulation types: testAttempt, VoiceSimulation, ImmigrationSimulation
  */
 router.get('/free-attempts/count', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.userId;
 
-    // Count test attempts where user has no subscription (FREE tier)
-    const freeAttempts = await prisma.testAttempt.count({
+    // Use helper function to get limit information
+    const limitInfo = await checkSimulationLimit(userId);
+
+    // Get detailed breakdown for response
+    const [testAttempts, voiceSimulations, immigrationSimulations] = await Promise.all([
+      prisma.testAttempt.count({
       where: {
         userId,
-        test: {
-          requiredTier: 'FREE'
-        }
+          createdAt: { gte: limitInfo.periodStartDate }
       }
-    });
+      }),
+      prisma.voiceSimulation.count({
+        where: {
+          userId,
+          createdAt: { gte: limitInfo.periodStartDate }
+        }
+      }),
+      prisma.immigrationSimulation.count({
+        where: {
+          userId,
+          createdAt: { gte: limitInfo.periodStartDate }
+        }
+      })
+    ]);
 
-    // Get user's subscription tier
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { subscriptionTier: true }
-    });
-
-    const subscriptionTier = user?.subscriptionTier || 'FREE';
-    const canAccessPaid = subscriptionTier !== 'FREE';
-    const remainingFreeAttempts = Math.max(0, 5 - freeAttempts);
+    const totalSimulationsUsed = testAttempts + voiceSimulations + immigrationSimulations;
+    
+    // Calculate days remaining in current period
+    const now = new Date();
+    const daysRemaining = Math.max(0, Math.ceil((limitInfo.periodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
     res.json({
       success: true,
       data: {
-        freeAttemptsUsed: freeAttempts,
-        remainingFreeAttempts,
-        canAccessPaid,
-        subscriptionTier,
-        isBlocked: freeAttempts >= 5 && !canAccessPaid
+        totalSimulationsUsed,
+        remainingSimulations: limitInfo.remaining,
+        maxSimulations: limitInfo.maxSimulations,
+        subscriptionTier: limitInfo.subscriptionTier,
+        isBlocked: !limitInfo.canCreate,
+        canAccessPaid: limitInfo.subscriptionTier !== 'FREE',
+        periodStartDate: limitInfo.periodStartDate.toISOString(),
+        periodEndDate: limitInfo.periodEndDate.toISOString(),
+        daysRemaining,
+        // Keep legacy fields for backward compatibility
+        freeAttemptsUsed: limitInfo.subscriptionTier === 'FREE' ? totalSimulationsUsed : 0,
+        remainingFreeAttempts: limitInfo.subscriptionTier === 'FREE' ? limitInfo.remaining : 0,
+        breakdown: {
+          testAttempts,
+          voiceSimulations,
+          immigrationSimulations
+        }
       }
     });
   } catch (error) {
-    console.error('Error getting free attempts count:', error);
+    console.error('Error getting simulation attempts count:', error);
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to get free attempts count' }
+      error: { message: 'Failed to get simulation attempts count' }
     });
   }
 });
@@ -996,6 +1128,222 @@ router.get('/test-niveau', authenticate, async (req: Request, res: Response, nex
       success: false,
       error: { message: 'Failed to fetch simulations' }
     });
+  }
+});
+
+/**
+ * @route POST /api/simulations/extract-questions
+ * @desc Extract questions from PDF using AI
+ * @access Private (Manager+)
+ */
+router.post('/extract-questions', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { pdfUrl, simulationType, level } = req.body;
+
+    if (!pdfUrl) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'PDF URL is required' }
+      });
+    }
+
+    // Import AIService dynamically
+    const { AIService } = await import('../services/aiService');
+    const pdfParse = (await import('pdf-parse')).default;
+    const axios = (await import('axios')).default;
+    const fs = (await import('fs')).default;
+    const path = (await import('path')).default;
+    const os = (await import('os')).default;
+
+    // Download PDF from URL
+    const response = await axios.get(pdfUrl, { responseType: 'arraybuffer' });
+    const pdfBuffer = Buffer.from(response.data);
+
+    // Extract text from PDF
+    const pdfData = await pdfParse(pdfBuffer);
+    const extractedText = pdfData.text;
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Could not extract text from PDF' }
+      });
+    }
+
+    // Generate questions using AI
+    const questionCount = 25; // Default for TCF/TEF simulations
+    const questionTypes = ["multiple-choice", "true-false", "short-answer"];
+    const category = "reading"; // Default category for simulations
+
+    const result = await AIService.generateQuestions(
+      extractedText,
+      `Simulation ${simulationType || 'TCF/TEF'}`,
+      `Simulation ${simulationType || 'TCF/TEF'} - Niveau ${level || 'B1'}`,
+      questionCount,
+      questionTypes,
+      category,
+      "medium"
+    );
+
+    // Transform questions to match simulation builder format
+    const transformedQuestions = result.questions.map((q: any, index: number) => {
+      // Ensure options is an array
+      let options = q.options || [];
+      if (!Array.isArray(options)) {
+        options = [];
+      }
+      // Ensure at least 4 options for multiple-choice
+      if (q.type === "multiple-choice" && options.length < 4) {
+        while (options.length < 4) {
+          options.push("");
+        }
+      }
+
+      // Map question types
+      let mappedType = "MULTIPLE_CHOICE";
+      if (q.type === "true-false") {
+        mappedType = "TRUE_FALSE";
+      } else if (q.type === "short-answer") {
+        mappedType = "FILL_BLANK";
+      } else if (q.type === "essay") {
+        mappedType = "ESSAY";
+      }
+
+      return {
+        id: `q_${Date.now()}_${index}`,
+        question: q.questionText || q.question || "",
+        type: mappedType,
+        options: options,
+        correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "multiple-choice" ? 0 : ""),
+        points: q.points || 1,
+        section: "comprehension_ecrite" // Default section
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        questions: transformedQuestions,
+        extractedText: extractedText.substring(0, 500) + '...'
+      }
+    });
+  } catch (error) {
+    console.error('Error extracting questions from PDF:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route POST /api/simulations
+ * @desc Create a new simulation
+ * @access Private (Manager+)
+ */
+router.post('/', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const {
+      title,
+      description,
+      type,
+      level,
+      targetTier,
+      questions,
+      questionCount,
+      sections,
+      totalDuration,
+      createdById
+    } = req.body;
+
+    if (!title || !questions || questions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Title and questions are required' }
+      });
+    }
+
+    // Map targetTier to SubscriptionTier
+    const subscriptionTierMap: Record<string, string> = {
+      'FREE': 'FREE',
+      'ESSENTIAL': 'ESSENTIAL',
+      'PREMIUM': 'PREMIUM',
+      'PRO': 'PRO'
+    };
+    const requiredTier = subscriptionTierMap[targetTier] || 'FREE';
+
+    // Map category based on sections
+    let category = 'READING';
+    if (sections && sections.length > 0) {
+      const firstSection = sections[0];
+      if (firstSection.key === 'comprehension_orale') {
+        category = 'LISTENING';
+      } else if (firstSection.key === 'expression_ecrite') {
+        category = 'WRITING';
+      } else if (firstSection.key === 'expression_orale') {
+        category = 'ORAL';
+      }
+    }
+
+    // Create test (simulation) in database
+    const test = await prisma.test.create({
+      data: {
+        title,
+        description: description || '',
+        type: 'PRACTICE',
+        level: level || 'B1',
+        category: category as any,
+        requiredTier: requiredTier as any,
+        duration: totalDuration || 60,
+        questionCount: questionCount || questions.length,
+        difficulty: 1,
+        passingScore: 60,
+        tags: [type || 'SIMULATION', level || 'B1'],
+        aiPowered: true,
+        hasAIFeedback: false,
+        isOfficial: false,
+        isPublished: true,
+        status: 'PUBLISHED',
+        createdById: createdById || userId
+      }
+    });
+
+    // Create questions
+    if (questions && questions.length > 0) {
+      await prisma.testQuestion.createMany({
+        data: questions.map((q: any, index: number) => {
+          // Build options object
+          let optionsData: any = {};
+          if (q.type === "MULTIPLE_CHOICE" && Array.isArray(q.options)) {
+            optionsData.choices = q.options;
+          } else if (q.options && !Array.isArray(q.options)) {
+            optionsData = q.options;
+          }
+
+          return {
+            testId: test.id,
+            questionText: q.question || q.questionText || '',
+            type: q.type || 'MULTIPLE_CHOICE',
+            options: Object.keys(optionsData).length > 0 ? optionsData : (Array.isArray(q.options) ? q.options : []),
+            correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "MULTIPLE_CHOICE" ? 0 : ""),
+            points: q.points || 1,
+            explanation: q.explanation || null,
+            order: index + 1,
+            level: level || 'B1',
+            category: category as any
+          };
+        })
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        test,
+        message: 'Simulation created successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Error creating simulation:', error);
+    next(error);
   }
 });
 

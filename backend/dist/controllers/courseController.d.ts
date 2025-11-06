@@ -9,6 +9,7 @@ export declare class CourseController {
     static unenrollFromCourse: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static getUserEnrolledCourses: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static getUserCreatedCourses: (req: Request, res: Response, next: import("express").NextFunction) => void;
+    static getCourseStatistics: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static healthCheck: (req: Request, res: Response, next: import("express").NextFunction) => void;
 }
 //# sourceMappingURL=courseController.d.ts.map

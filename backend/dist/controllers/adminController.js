@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
-const adminService_1 = require("../services/adminService");
-const errorHandler_1 = require("../middleware/errorHandler");
-const logger_1 = require("../utils/logger");
+const adminService_1 = require("@/services/adminService");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
 class AdminController {
 }
 exports.AdminController = AdminController;
@@ -134,6 +134,50 @@ AdminController.updateManager = (0, errorHandler_1.asyncHandler)(async (req, res
     logger_1.logger.info('Manager updated', { managerId, updatedById });
     res.status(200).json(response);
 });
+AdminController.deleteManager = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { managerId } = req.params;
+    const deletedById = req.user?.userId;
+    logger_1.logger.info('Delete manager request', { managerId, deletedById });
+    if (!deletedById) {
+        logger_1.logger.warn('Delete manager: Authentication required', { managerId });
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    if (!managerId) {
+        logger_1.logger.warn('Delete manager: Manager ID missing', { deletedById });
+        res.status(400).json({
+            success: false,
+            error: { message: 'Manager ID is required' }
+        });
+        return;
+    }
+    try {
+        await adminService_1.AdminService.deleteManager(managerId, deletedById);
+        const response = {
+            success: true,
+            message: 'Manager deleted successfully'
+        };
+        logger_1.logger.info('Manager deleted successfully via controller', { managerId, deletedById });
+        res.status(200).json(response);
+    }
+    catch (error) {
+        logger_1.logger.error('Delete manager failed in controller', { managerId, deletedById, error: error.message });
+        if (error.message === 'Manager not found') {
+            res.status(404).json({
+                success: false,
+                error: { message: 'Manager not found' }
+            });
+            return;
+        }
+        res.status(500).json({
+            success: false,
+            error: { message: error.message || 'Failed to delete manager' }
+        });
+    }
+});
 AdminController.getManagerPerformance = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { managerId } = req.params;
     const period = req.query.period || '30d';
@@ -142,6 +186,15 @@ AdminController.getManagerPerformance = (0, errorHandler_1.asyncHandler)(async (
         success: true,
         data: performance,
         message: 'Manager performance retrieved successfully'
+    };
+    res.status(200).json(response);
+});
+AdminController.getStatistics = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const stats = await adminService_1.AdminService.getStatistics();
+    const response = {
+        success: true,
+        data: stats,
+        message: 'Admin statistics retrieved successfully'
     };
     res.status(200).json(response);
 });
@@ -278,15 +331,27 @@ AdminController.getSubscriptionPlanById = (0, errorHandler_1.asyncHandler)(async
     res.status(200).json(response);
 });
 AdminController.updateSubscriptionPlan = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
-    const updateData = req.body;
-    const plan = await adminService_1.AdminService.updateSubscriptionPlan(id, updateData);
-    const response = {
-        success: true,
-        data: plan,
-        message: 'Subscription plan updated successfully'
-    };
-    res.status(200).json(response);
+    try {
+        const { id } = req.params;
+        const updateData = req.body;
+        logger_1.logger.info('📥 Controller received update request', { id, updateData });
+        const plan = await adminService_1.AdminService.updateSubscriptionPlan(id, updateData);
+        const response = {
+            success: true,
+            data: plan,
+            message: 'Subscription plan updated successfully'
+        };
+        res.status(200).json(response);
+    }
+    catch (error) {
+        logger_1.logger.error('❌ Controller error updating subscription plan', {
+            errorMessage: error?.message,
+            errorStack: error?.stack,
+            errorCode: error?.code,
+            errorName: error?.name
+        });
+        throw error;
+    }
 });
 AdminController.deleteSubscriptionPlan = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;

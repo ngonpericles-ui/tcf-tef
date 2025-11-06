@@ -12,7 +12,10 @@ const promises_1 = __importDefault(require("fs/promises"));
 class FileUploadController {
     static async uploadProfileImage(req, res) {
         try {
-            const userId = req.user.userId;
+            const userId = req.user.userId || req.user.id;
+            if (!userId) {
+                throw new errors_1.ValidationError('User ID not found in token');
+            }
             const file = req.file;
             if (!file) {
                 throw new errors_1.ValidationError('No file uploaded');
@@ -138,9 +141,13 @@ class FileUploadController {
                 });
                 uploadedFiles.push(uploadedFile);
             }
+            const filesWithAbsoluteUrls = uploadedFiles.map(file => ({
+                ...file,
+                url: file.url?.startsWith('http') ? file.url : `http://localhost:3001${file.url || file.path || ''}`
+            }));
             res.status(201).json({
                 success: true,
-                data: { files: uploadedFiles },
+                data: { files: filesWithAbsoluteUrls },
                 message: `${uploadedFiles.length} media file(s) uploaded successfully`
             });
         }

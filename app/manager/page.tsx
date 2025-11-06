@@ -90,6 +90,18 @@ export default function ManagerLoginPage() {
           // Store manager role preference
           localStorage.setItem("managerRole", selectedRole)
 
+          // Explicitly set cookies to ensure middleware reads them correctly
+          if (typeof window !== 'undefined') {
+            const maxAge = 60 * 60 * 24 * 7; // 7 days
+            document.cookie = `auth=1; path=/; max-age=${maxAge}; SameSite=Lax`;
+            document.cookie = `role=${userRole}; path=/; max-age=${maxAge}; SameSite=Lax`;
+            document.cookie = `user_id=${result.user.id}; path=/; max-age=${maxAge}; SameSite=Lax`;
+            console.log('🍪 Manager role cookie set explicitly:', userRole);
+            
+            // Give browser time to process cookies before redirecting
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
           // Show success message
           const userName = result.user.firstName && result.user.lastName
             ? `${result.user.firstName} ${result.user.lastName}`
@@ -98,11 +110,13 @@ export default function ManagerLoginPage() {
           setSuccess(`Connexion réussie! Bienvenue ${userName}`)
           setError("")
 
-          // Immediate redirect to appropriate dashboard
+          // Redirect to appropriate dashboard
           if (userRole === "ADMIN") {
-            router.push("/admin")
+            console.log('🚀 Redirecting admin to /admin dashboard')
+            router.replace("/admin")
           } else {
-            router.push("/manager/dashboard")
+            console.log('🚀 Redirecting manager to /manager/dashboard')
+            router.replace("/manager/dashboard")
           }
         } else {
           setError(t("manager.login.roleNotMatching", "Votre rôle ne correspond pas à la sélection"))

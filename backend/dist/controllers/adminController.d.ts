@@ -9,7 +9,9 @@ export declare class AdminController {
     static getManagers: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static createManager: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static updateManager: (req: Request, res: Response, next: import("express").NextFunction) => void;
+    static deleteManager: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static getManagerPerformance: (req: Request, res: Response, next: import("express").NextFunction) => void;
+    static getStatistics: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static getAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static generateReport: (req: Request, res: Response, next: import("express").NextFunction) => void;
     static exportData: (req: Request, res: Response, next: import("express").NextFunction) => void;

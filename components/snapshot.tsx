@@ -67,18 +67,18 @@ export default function Snapshot() {
       try {
         setLoading(true)
         const [dashboardResponse, achievementsResponse] = await Promise.all([
-          apiClient.get('/home/dashboard'),
-          apiClient.get('/achievements/recent')
+          apiClient.get('/home/dashboard').catch(() => ({ success: false, data: null })),
+          apiClient.get('/achievements/recent').catch(() => ({ success: false, data: [] })) // Catch ALL errors - NO MOCK DATA
         ])
         
-        if ((dashboardResponse.data as any)?.success) {
-          setDashboardData((dashboardResponse.data as any).data)
+        if (dashboardResponse.success && dashboardResponse.data) {
+          setDashboardData(dashboardResponse.data)
         }
         
-        if ((achievementsResponse.data as any)?.success) {
-          const realAchievements = (achievementsResponse.data as any).data
+        if (achievementsResponse.success && achievementsResponse.data) {
+          const realAchievements = achievementsResponse.data
           if (Array.isArray(realAchievements) && realAchievements.length > 0) {
-            // Use real achievement data from API
+            // Use real achievement data from API only
             setRecentAchievements(realAchievements.map((achievement: any) => ({
               id: achievement.id.toString(),
               title: { fr: achievement.title, en: achievement.title },
@@ -89,15 +89,12 @@ export default function Snapshot() {
               icon: achievement.icon || "🏆"
             })))
           } else {
-            // Fallback to mock data if no real achievements
-            setRecentAchievements([
-              { id: "1", title: { fr: "Premier Test", en: "First Test" }, description: { fr: "Vous avez terminé votre premier test", en: "You completed your first test" }, date: "2024-01-15", xp: 100, color: "#2ECC71", icon: "🎯" },
-              { id: "2", title: { fr: "Série de 5", en: "Series of 5" }, description: { fr: "5 tests consécutifs réussis", en: "5 consecutive tests passed" }, date: "2024-01-14", xp: 200, color: "#E74C3C", icon: "🔥" },
-              { id: "3", title: { fr: "Régularité", en: "Regularity" }, description: { fr: "Connexion quotidienne pendant 7 jours", en: "Daily connection for 7 days" }, date: "2024-01-13", xp: 150, color: "#3498DB", icon: "📅" },
-              { id: "4", title: { fr: "Perfectionniste", en: "Perfectionist" }, description: { fr: "Score parfait sur un test", en: "Perfect score on a test" }, date: "2024-01-12", xp: 300, color: "#F39C12", icon: "💯" },
-              { id: "5", title: { fr: "Explorateur", en: "Explorer" }, description: { fr: "Découverte de 3 nouvelles leçons", en: "Discovered 3 new lessons" }, date: "2024-01-11", xp: 75, color: "#9B59B6", icon: "🔍" }
-            ])
+            // No achievements - show empty state
+            setRecentAchievements([])
           }
+        } else {
+          // API failed or no data - show empty state
+          setRecentAchievements([])
         }
       } catch (err) {
         console.error('Error fetching dashboard data:', err)
@@ -110,17 +107,122 @@ export default function Snapshot() {
     fetchDashboardData()
   }, [isAuthenticated])
 
-  // Calculate weekly stats from dashboard data
-  const weeklyStats = dashboardData ? {
-    testsCompleted: Math.floor(dashboardData.weeklyProgress / 10), // Convert progress to test count
-    averageScore: Math.round(dashboardData.averageScore),
-    streak: dashboardData.studyStreak,
-    xpEarned: Math.floor(dashboardData.totalStudyTime / 60) * 10 // XP based on study time
-  } : {
-    testsCompleted: 0,
-    averageScore: 0,
-    streak: 0,
-    xpEarned: 0
+  // Calculate weekly stats from dashboard data with safe fallbacks
+  const weeklyProgress = dashboardData?.weeklyProgress ?? 0
+  const averageScore = dashboardData?.averageScore ?? 0
+  const studyStreak = dashboardData?.studyStreak ?? 0
+  const totalStudyTime = dashboardData?.totalStudyTime ?? 0
+  
+  // Calculate stats with proper number validation
+  const weeklyStats = {
+    testsCompleted: Math.floor(Math.max(0, Number(weeklyProgress) || 0) / 10),
+    averageScore: Math.round(Math.max(0, Number(averageScore) || 0)),
+    streak: Math.max(0, Number(studyStreak) || 0),
+    xpEarned: Math.floor(Math.max(0, Number(totalStudyTime) || 0) / 60) * 10
+  }
+  
+  // Ensure all values are valid numbers (not NaN)
+  const safeStats = {
+    testsCompleted: isNaN(weeklyStats.testsCompleted) ? 0 : weeklyStats.testsCompleted,
+    averageScore: isNaN(weeklyStats.averageScore) ? 0 : weeklyStats.averageScore,
+    streak: isNaN(weeklyStats.streak) ? 0 : weeklyStats.streak,
+    xpEarned: isNaN(weeklyStats.xpEarned) ? 0 : weeklyStats.xpEarned
+  }
+
+  // Simulation Count Card Component
+  const SimulationCountCard = () => {
+    const [simData, setSimData] = useState<{
+      remaining: number
+      total: number
+      tier: string
+      daysRemaining?: number
+    } | null>(null)
+    const [loadingSim, setLoadingSim] = useState(true)
+
+    useEffect(() => {
+      // Only fetch when component mounts or when authentication status changes
+      if (!isAuthenticated) {
+        setLoadingSim(false)
+        return
+      }
+
+      const fetchSimulationData = async () => {
+        try {
+          const response = await apiClient.get('/simulations/free-attempts/count')
+          if (response.success && response.data) {
+            const data = response.data
+            setSimData({
+              remaining: data.remainingSimulations === -1 ? Infinity : data.remainingSimulations || 0,
+              total: data.maxSimulations === -1 ? Infinity : data.maxSimulations || 5,
+              tier: data.subscriptionTier || 'FREE',
+              daysRemaining: data.daysRemaining
+            })
+          }
+        } catch (error) {
+          console.error('Error fetching simulation count:', error)
+        } finally {
+          setLoadingSim(false)
+        }
+      }
+
+      // Fetch immediately on mount
+      fetchSimulationData()
+      
+      // Refresh every 5 minutes (reasonable interval to avoid unnecessary API calls)
+      const refreshInterval = setInterval(() => {
+        if (isAuthenticated) {
+          fetchSimulationData()
+        }
+      }, 5 * 60 * 1000) // 5 minutes
+
+      return () => clearInterval(refreshInterval)
+    }, [isAuthenticated]) // Only depend on isAuthenticated, not on hasFetched
+
+    if (loadingSim || !simData) {
+      return (
+        <>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            ...
+          </div>
+          <div className="text-xs text-muted-foreground">{lang === "fr" ? "Simulations" : "Simulations"}</div>
+        </>
+      )
+    }
+
+    const getTierName = (tier: string) => {
+      switch (tier) {
+        case 'FREE': return lang === "fr" ? "Gratuit" : "Free"
+        case 'ESSENTIAL': return lang === "fr" ? "Essentiel" : "Essential"
+        case 'PREMIUM': return "Premium"
+        case 'PRO': return "Pro+"
+        default: return tier
+      }
+    }
+
+    const remainingText = simData.remaining === Infinity 
+      ? (lang === "fr" ? "Illimité" : "Unlimited")
+      : simData.remaining
+
+    return (
+      <>
+        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+          {remainingText} {simData.total !== Infinity && `/${simData.total}`}
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          {lang === "fr" 
+            ? `Il vous reste ${simData.remaining === Infinity ? "un nombre illimité de" : simData.remaining} simulation${simData.remaining !== 1 && simData.remaining !== Infinity ? "s" : ""}`
+            : `You have ${simData.remaining === Infinity ? "unlimited" : simData.remaining} simulation${simData.remaining !== 1 && simData.remaining !== Infinity ? "s" : ""} left`}
+        </div>
+        <div className="text-xs text-blue-500 dark:text-blue-400 mt-1 font-medium">
+          {getTierName(simData.tier)}
+        </div>
+        {simData.daysRemaining !== undefined && simData.daysRemaining > 0 && (
+          <div className="text-xs text-muted-foreground mt-1">
+            {simData.daysRemaining} {lang === "fr" ? "j restants" : "d left"}
+          </div>
+        )}
+      </>
+    )
   }
 
   const loggedIn = isAuthenticated
@@ -188,7 +290,7 @@ export default function Snapshot() {
                   <CheckCircle className="h-6 w-6 text-green-500 dark:text-green-400" />
                 </div>
                 <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {loading ? "..." : weeklyStats.testsCompleted}
+                  {loading ? "..." : safeStats.testsCompleted}
                 </div>
                 <div className="text-xs text-muted-foreground">{lang === "fr" ? "Tests complétés" : "Tests completed"}</div>
               </CardContent>
@@ -200,7 +302,7 @@ export default function Snapshot() {
                   <BarChart3 className="h-6 w-6 text-purple-500 dark:text-purple-400" />
                 </div>
                 <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                  {loading ? "..." : `${weeklyStats.averageScore}%`}
+                  {loading ? "..." : `${safeStats.averageScore}%`}
                 </div>
                 <div className="text-xs text-muted-foreground">{lang === "fr" ? "Score moyen" : "Average score"}</div>
               </CardContent>
@@ -209,12 +311,9 @@ export default function Snapshot() {
             <Card className="bg-card border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all duration-300">
               <CardContent className="p-4 text-center">
                 <div className="flex items-center justify-center mb-2">
-                  <Flame className="h-6 w-6 text-orange-500 dark:text-orange-400" />
+                  <Target className="h-6 w-6 text-blue-500 dark:text-blue-400" />
               </div>
-                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {loading ? "..." : weeklyStats.streak}
-                </div>
-                <div className="text-xs text-muted-foreground">{lang === "fr" ? "Jours de suite" : "Day streak"}</div>
+                <SimulationCountCard />
               </CardContent>
             </Card>
 
@@ -224,7 +323,7 @@ export default function Snapshot() {
                   <Star className="h-6 w-6 text-pink-500 dark:text-pink-400" />
             </div>
                 <div className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-                  {loading ? "..." : weeklyStats.xpEarned}
+                  {loading ? "..." : safeStats.xpEarned}
                 </div>
                 <div className="text-xs text-muted-foreground">{lang === "fr" ? "XP gagnés" : "XP earned"}</div>
               </CardContent>
@@ -261,17 +360,24 @@ export default function Snapshot() {
                 </div>
               ) : (
                 recentAchievements.map((achievement, index) => {
-                const Icon = achievement.icon
+                // Handle icon - can be React component or emoji string
+                const Icon = typeof achievement.icon === 'string' ? null : achievement.icon
+                const iconEmoji = typeof achievement.icon === 'string' ? achievement.icon : null
+                
                 return (
                   <div 
                     key={achievement.id} 
                     className="group flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-muted/30 to-muted/10 hover:from-muted/50 hover:to-muted/30 transition-all duration-300 hover:scale-[1.02] border border-gray-200/30 dark:border-gray-800/10"
                   >
                     <div 
-                      className="p-3 rounded-xl shadow-sm"
+                      className="p-3 rounded-xl shadow-sm flex items-center justify-center"
                       style={{ backgroundColor: `${achievement.color}20` }}
                     >
+                      {Icon ? (
                       <Icon className="h-6 w-6" style={{ color: achievement.color }} />
+                      ) : (
+                        <span className="text-2xl" style={{ color: achievement.color }}>{iconEmoji}</span>
+                      )}
                     </div>
                     <div className="flex-1">
                       <h4 className="font-semibold text-lg">
@@ -300,11 +406,11 @@ export default function Snapshot() {
                     {lang === "fr" ? "Progression cette semaine" : "Weekly progress"}
                   </div>
                   <div className="text-sm font-medium text-[#2ECC71]">
-                    {loading ? "..." : `+${dashboardData?.weeklyProgress || 0}% XP`}
+                    {loading ? "..." : `+${safeStats.testsCompleted || 0}% XP`}
                   </div>
               </div>
                 <Progress 
-                  value={loading ? 0 : (dashboardData?.weeklyProgress || 0)} 
+                  value={loading ? 0 : Math.max(0, Math.min(100, safeStats.testsCompleted || 0))} 
                   className="mt-2 h-2" 
                 />
               </div>

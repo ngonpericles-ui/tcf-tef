@@ -202,7 +202,7 @@ export class CourseController {
    * Get user's enrolled courses
    */
   static getUserEnrolledCourses = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.userId;
+    const userId = req.user?.id || req.user?.userId;
 
     if (!userId) {
       res.status(401).json({
@@ -284,6 +284,40 @@ export class CourseController {
     };
 
     res.status(200).json(response);
+  });
+
+  /**
+   * Get course statistics
+   */
+  static getCourseStatistics = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+
+    if (!userId || !userRole) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      const statistics = await CourseService.getCourseStatistics(userId, userRole);
+
+      const response: ApiResponse = {
+        success: true,
+        data: statistics,
+        message: 'Course statistics retrieved successfully'
+      };
+
+      res.status(200).json(response);
+    } catch (error) {
+      logger.error('Failed to get course statistics', { userId, error });
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to retrieve course statistics' }
+      });
+    }
   });
 
   /**

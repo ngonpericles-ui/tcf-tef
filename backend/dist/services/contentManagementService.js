@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContentManagementService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const cloudinaryService_1 = require("./cloudinaryService");
@@ -21,6 +21,7 @@ class ContentManagementService {
             }
             let fileUrl;
             let thumbnailUrl;
+            let extractedDuration = undefined;
             if (uploadData.file) {
                 const uploadResult = await cloudinaryService_1.CloudinaryService.uploadFile(uploadData.file.path, {
                     folder: `tcf-tef-platform/content/${uploadData.contentType.toLowerCase()}`,
@@ -28,20 +29,33 @@ class ContentManagementService {
                     tags: [uploadData.contentType, uploadData.level, uploadData.category]
                 });
                 fileUrl = uploadResult.secure_url;
+                if (uploadData.contentType === 'VIDEO' && uploadResult.duration) {
+                    extractedDuration = Math.round((uploadResult.duration / 60) * 10) / 10;
+                    logger_1.logger.info('Video duration extracted from Cloudinary', {
+                        durationSeconds: uploadResult.duration,
+                        durationMinutes: extractedDuration,
+                        publicId: uploadResult.public_id
+                    });
+                }
                 if (uploadData.contentType === 'VIDEO') {
                     thumbnailUrl = cloudinaryService_1.CloudinaryService.getVideoThumbnailUrl(uploadResult.public_id);
                 }
             }
             let content;
             let analysis;
+            const finalDuration = uploadData.contentType === 'VIDEO' && extractedDuration
+                ? extractedDuration
+                : (uploadData.contentType === 'TEST' || uploadData.contentType === 'CORRIGER_TCF')
+                    ? uploadData.duration
+                    : undefined;
             switch (uploadData.contentType) {
                 case 'NOTE':
                 case 'VIDEO':
-                    content = await this.createCourseContent(uploadData, userId, fileUrl, thumbnailUrl);
+                    content = await this.createCourseContent(uploadData, userId, fileUrl, thumbnailUrl, finalDuration);
                     break;
                 case 'TEST':
                 case 'CORRIGER_TCF':
-                    content = await this.createTestContent(uploadData, userId, fileUrl);
+                    content = await this.createTestContent(uploadData, userId, fileUrl, finalDuration);
                     break;
                 case 'SIMULATION':
                     content = await this.createSimulationContent(uploadData, userId, fileUrl);
@@ -64,9 +78,7 @@ class ContentManagementService {
             throw error;
         }
     }
-    static async createCourseContent(uploadData, userId, fileUrl, thumbnailUrl) {
-        const availableLevels = uploadData.availableLevels || [uploadData.level];
-        const availableTiers = uploadData.availableTiers || [uploadData.subscriptionTier];
+    static async createCourseContent(uploadData, userId, fileUrl, thumbnailUrl, duration) {
         const course = await connection_1.prisma.course.create({
             data: {
                 title: uploadData.title,
@@ -74,9 +86,7 @@ class ContentManagementService {
                 level: uploadData.level,
                 category: uploadData.category,
                 requiredTier: uploadData.subscriptionTier,
-                availableLevels: availableLevels,
-                availableTiers: availableTiers,
-                duration: uploadData.duration || 0,
+                duration: duration || 0,
                 lessons: 1,
                 tags: uploadData.tags || [],
                 thumbnail: thumbnailUrl,
@@ -88,7 +98,7 @@ class ContentManagementService {
                         description: uploadData.description,
                         content: fileUrl,
                         videoUrl: uploadData.contentType === 'VIDEO' ? fileUrl : undefined,
-                        duration: uploadData.duration || 0,
+                        duration: duration ? Math.round(duration) : 0,
                         order: 1,
                         resources: uploadData.tags || []
                     }
@@ -124,7 +134,7 @@ class ContentManagementService {
             updatedAt: course.updatedAt
         };
     }
-    static async createTestContent(uploadData, userId, fileUrl) {
+    static async createTestContent(uploadData, userId, fileUrl, duration) {
         const test = await connection_1.prisma.test.create({
             data: {
                 title: uploadData.title,
@@ -133,7 +143,7 @@ class ContentManagementService {
                 type: uploadData.category === 'CORRIGER_TCF' ? 'PRACTICE' : 'QUICK',
                 category: uploadData.category,
                 requiredTier: uploadData.subscriptionTier,
-                duration: uploadData.duration || 60,
+                duration: duration || uploadData.duration || 60,
                 questionCount: 10,
                 passingScore: uploadData.passingScore || 60,
                 tags: uploadData.tags || [],
@@ -275,23 +285,13 @@ class ContentManagementService {
                 isPublished: true
             };
             if (level) {
-                where.OR = [
-                    { level: level },
-                    { availableLevels: { has: level } }
-                ];
+                where.level = level;
             }
             if (subscriptionTier) {
                 const tierHierarchy = ['FREE', 'ESSENTIAL', 'PREMIUM', 'PRO'];
                 const userTierIndex = tierHierarchy.indexOf(subscriptionTier);
                 const allowedTiers = tierHierarchy.slice(0, userTierIndex + 1);
-                where.AND = [
-                    {
-                        OR: [
-                            { requiredTier: { in: allowedTiers } },
-                            { availableTiers: { hasSome: allowedTiers } }
-                        ]
-                    }
-                ];
+                where.requiredTier = { in: allowedTiers };
             }
             else {
                 where.requiredTier = 'FREE';
@@ -334,8 +334,6 @@ class ContentManagementService {
                     level: course.level,
                     category: course.category,
                     subscriptionTier: course.requiredTier,
-                    availableLevels: course.availableLevels,
-                    availableTiers: course.availableTiers,
                     contentType: course.lessons_data.length > 0 && course.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
                     fileUrl: course.lessons_data.length > 0 ? course.lessons_data[0].content : undefined,
                     thumbnailUrl: course.thumbnail,
@@ -587,13 +585,23 @@ class ContentManagementService {
                     }
                 }
             });
+            if (!levels || levels.length === 0) {
+                throw new errors_1.ValidationError('At least one level must be provided');
+            }
+            if (!subscriptions || subscriptions.length === 0) {
+                throw new errors_1.ValidationError('At least one subscription tier must be provided');
+            }
+            const selectedLevel = levels.includes('ALL') || levels.length === 6
+                ? 'A1'
+                : levels[0];
+            const selectedTier = subscriptions.includes('ALL') || subscriptions.length === 4
+                ? 'FREE'
+                : subscriptions[0];
             const updatedCourse = await connection_1.prisma.course.update({
                 where: { id: courseId },
                 data: {
-                    level: levels[0],
-                    requiredTier: subscriptions[0],
-                    availableLevels: levels,
-                    availableTiers: subscriptions
+                    level: selectedLevel,
+                    requiredTier: selectedTier,
                 },
                 include: {
                     lessons_data: true,
@@ -615,8 +623,6 @@ class ContentManagementService {
                 category: updatedCourse.category,
                 subscriptionTier: updatedCourse.requiredTier,
                 requiredTier: updatedCourse.requiredTier,
-                availableLevels: updatedCourse.availableLevels,
-                availableTiers: updatedCourse.availableTiers,
                 contentType: updatedCourse.lessons_data.length > 0 && updatedCourse.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
                 fileUrl: updatedCourse.lessons_data.length > 0 ? updatedCourse.lessons_data[0].content : undefined,
                 thumbnailUrl: updatedCourse.thumbnail,

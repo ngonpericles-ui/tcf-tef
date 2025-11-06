@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { useLang } from "@/components/language-provider"
 import { apiClient } from "@/lib/api-client"
-import { ChevronLeft, ChevronRight, Send, X, Clock, AlertTriangle, CheckCircle, Volume2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Send, X, Clock, AlertTriangle, CheckCircle, Volume2, Flag, ChevronDown, ChevronUp, MoreVertical, Type, Wifi, Battery } from "lucide-react"
 import UniversalContentViewer from "@/components/universal-content-viewer"
 import AudioRecorder from "@/components/audio-recorder"
 import ExamModeIndicator from "@/components/exam-mode-indicator"
@@ -24,6 +24,9 @@ interface Question {
   allowPause?: boolean
   allowRewind?: boolean
   timeLimit?: number
+  // Backend field names
+  questionText?: string
+  questionTextEn?: string
 }
 
 interface TestData {
@@ -51,6 +54,9 @@ export default function TakeTestPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [testStarted, setTestStarted] = useState(false)
   const [timeWarning, setTimeWarning] = useState(false)
+  const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set())
+  const [showTimer, setShowTimer] = useState(true)
+  const [showQuestionList, setShowQuestionList] = useState(false)
 
   useEffect(() => {
     if (!testId) return;
@@ -60,8 +66,11 @@ export default function TakeTestPage() {
         setLoading(true)
         // Fetch test details
         const testResponse = await apiClient.get(`/tests/${testId}`)
+        console.log('🔍 Test response:', testResponse)
         if ((testResponse as any).success) {
           const testData = (testResponse as any).data.test
+          console.log('🔍 Test data:', testData)
+          console.log('🔍 Test questions:', testData?.questions)
           setTest(testData)
           // Initialize timer if test has duration
           if (testData.duration) {
@@ -106,7 +115,32 @@ export default function TakeTestPage() {
   }, [timeLeft])
 
   const handleAnswerChange = (questionId: string, answer: string) => {
+    console.log('🔍 Answer changed:', { questionId, answer, currentAnswers: answers })
     setAnswers({ ...answers, [questionId]: answer })
+  }
+
+  const toggleMarkForReview = (questionId: string) => {
+    setMarkedForReview(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId)
+      } else {
+        newSet.add(questionId)
+      }
+      return newSet
+    })
+  }
+
+  const getQuestionStatus = (index: number) => {
+    const question = test?.questions[index]
+    if (!question) return 'unanswered'
+    const hasAnswer = answers[question.id]
+    const isMarked = markedForReview.has(question.id)
+    
+    if (hasAnswer && isMarked) return 'answered-marked'
+    if (hasAnswer) return 'answered'
+    if (isMarked) return 'marked'
+    return 'unanswered'
   }
 
   const startTest = () => {
@@ -132,17 +166,26 @@ export default function TakeTestPage() {
       if ((startResponse as any).success) {
         const attemptId = (startResponse as any).data.attemptId
         // Then submit the answers
+        const answersToSubmit = Object.entries(answers).map(([questionId, answer]) => ({
+          questionId,
+          answer
+        }))
+        
+        console.log('🔍 Submitting answers:', {
+          attemptId,
+          answers: answersToSubmit,
+          answersCount: answersToSubmit.length
+        })
+        
         const response = await apiClient.post(`/tests/submit`, {
           attemptId,
-          answers: Object.entries(answers).map(([questionId, answer]) => ({
-            questionId,
-            answer
-          }))
+          answers: answersToSubmit
         })
 
         if ((response as any).success) {
-          // Redirect to results page
-          router.push(`/tests/results/${testId}`)
+          // Redirect to results page using attempt ID
+          console.log('🔍 Test submitted successfully, redirecting to:', `/tests/results/${attemptId}`)
+          router.push(`/tests/results/${attemptId}`)
         }
       }
     } catch (error) {
@@ -164,6 +207,7 @@ export default function TakeTestPage() {
   }
 
   if (!test) {
+    console.log('🔍 No test data available')
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -175,6 +219,7 @@ export default function TakeTestPage() {
   }
 
   if (!test.questions || test.questions.length === 0) {
+    console.log('🔍 No questions available:', { questions: test.questions, testId: test.id })
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -190,54 +235,87 @@ export default function TakeTestPage() {
   const progress = ((currentQuestionIndex + 1) / test.questions.length) * 100
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-50 bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold">{test.title}</h1>
-            <p className="text-sm text-muted-foreground">
-              {t("Question", "Question")} {currentQuestionIndex + 1} {t("sur", "of")} {test.questions.length}
-            </p>
+    <div className="min-h-screen bg-white">
+      {/* Bluebook-Style Header */}
+      <header className="sticky top-0 z-50 bg-white border-b border-gray-200">
+        <div className="px-6 py-3">
+          {/* Top Row */}
+          <div className="flex items-center justify-between mb-3">
+            {/* Left: Section Info */}
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900">
+                  {t("Section 1, Module 1", "Section 1, Module 1")}: {test.title}
+                </h1>
+                <button className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1 mt-1">
+                  {t("Directions", "Directions")}
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
           </div>
           
-          {/* Timer and Controls */}
-          <div className="flex items-center gap-4">
-            {timeLeft !== null && testStarted && (
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
-                timeWarning ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+            {/* Center: Timer */}
+            <div className="flex flex-col items-center">
+              {timeLeft !== null && testStarted && showTimer && (
+                <>
+                  <div className={`text-2xl font-semibold ${
+                    timeWarning ? 'text-red-600' : 'text-gray-900'
               }`}>
-                <Clock className="h-4 w-4" />
-                <span className="font-mono text-sm">
                   {formatTime(timeLeft)}
-                </span>
-                {timeWarning && <AlertTriangle className="h-4 w-4" />}
               </div>
-            )}
-            
-            {!testStarted ? (
-              <Button onClick={startTest} className="bg-green-600 hover:bg-green-700">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                {t("Commencer le test", "Start Test")}
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowConfirmEnd(true)}
-                className="text-destructive hover:text-destructive"
-              >
-                <X className="h-4 w-4 mr-2" />
-                {t("Terminer", "End")}
-              </Button>
-            )}
+                  <button
+                    onClick={() => setShowTimer(false)}
+                    className="text-xs text-gray-600 hover:text-gray-900 mt-1"
+                  >
+                    {t("Hide", "Hide")}
+                  </button>
+                </>
+              )}
+              {!showTimer && (
+                <button
+                  onClick={() => setShowTimer(true)}
+                  className="text-xs text-gray-600 hover:text-gray-900"
+                >
+                  {t("Show Timer", "Show Timer")}
+                </button>
+              )}
+            </div>
+
+            {/* Right: Tools */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600">100%</span>
+              <Wifi className="h-4 w-4 text-gray-600" />
+              <Battery className="h-4 w-4 text-gray-600" />
+              <button className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1">
+                <Type className="h-4 w-4" />
+                {t("Annotate", "Annotate")}
+              </button>
+              <button className="text-gray-600 hover:text-gray-900">
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Progress Indicator - Bluebook Style with Colored Segments */}
+          <div className="flex gap-1 h-1">
+            {test.questions.map((_, index) => {
+              const status = getQuestionStatus(index)
+              let bgColor = 'bg-gray-300'
+              if (status === 'answered') bgColor = 'bg-blue-500'
+              else if (status === 'marked') bgColor = 'bg-yellow-500'
+              else if (status === 'answered-marked') bgColor = 'bg-green-500'
+              
+              return (
+                <div
+                  key={index}
+                  className={`flex-1 ${bgColor} rounded-full`}
+                  style={{ height: '4px' }}
+                />
+              )
+            })}
           </div>
         </div>
-        {/* Progress bar */}
-        <div className="h-1 bg-muted">
-          <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
-        </div>
-      </div>
+      </header>
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -283,46 +361,48 @@ export default function TakeTestPage() {
             </Card>
           </div>
         ) : (
-          /* Test Interface */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left side - Questions/PDF */}
-            <div className="lg:col-span-2">
-              <Card className="p-6 min-h-[500px] flex flex-col">
+          /* Bluebook-Style Test Interface - Split Pane Layout */
+          <div className="flex h-[calc(100vh-120px)]">
+            {/* Left Pane - Reading Passage/Text */}
+            <div className="flex-1 border-r border-gray-200 overflow-y-auto bg-white">
+              <div className="p-6">
                 {test.fileUrl && (
-                  <div className="mb-6 p-4 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground mb-2">{t("Document de référence", "Reference document")}</p>
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        {t("Passage", "Passage")}
+                      </h3>
+                      <button className="text-gray-600 hover:text-gray-900">
+                        <Type className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <iframe
                       src={test.fileUrl}
-                      className="w-full h-96 rounded border"
+                        className="w-full h-[600px]"
                       title="Test document"
                     />
+                    </div>
                   </div>
                 )}
 
-                <div className="flex-1 space-y-6">
-                  {/* Exam Mode Indicator */}
-                  <ExamModeIndicator
-                    allowPause={currentQuestion.allowPause !== false}
-                    allowRewind={currentQuestion.allowRewind !== false}
-                    timeLimit={currentQuestion.timeLimit}
-                    questionType={currentQuestion.type}
-                  />
-
+                {/* Reading Passage Text (if no PDF) */}
+                {!test.fileUrl && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        {t("Passage", "Passage")}
+                      </h3>
+                      <button className="text-gray-600 hover:text-gray-900">
+                        <Type className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="text-gray-700 leading-relaxed">
                   {/* Media Content */}
                   {(currentQuestion.audioUrl || currentQuestion.videoUrl || currentQuestion.imageUrl) && (
-                    <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="mb-6 space-y-4">
                       {currentQuestion.audioUrl && (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-full">
-                              <Volume2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-900 dark:text-white">{t("Compréhension Orale", "Listening Comprehension")}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{t("Écoutez attentivement l'audio ci-dessous", "Listen carefully to the audio below")}</p>
-                            </div>
-                          </div>
-                          <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
+                            <div className="bg-gray-50 rounded-lg p-4">
                             <UniversalContentViewer
                               url={currentQuestion.audioUrl}
                               title="Question Audio"
@@ -330,266 +410,267 @@ export default function TakeTestPage() {
                               allowDownload={false}
                               autoPlay={false}
                             />
-                          </div>
                         </div>
                       )}
                       {currentQuestion.videoUrl && (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3">
-                            <div className="p-3 bg-purple-100 dark:bg-purple-900/40 rounded-full">
-                              <Volume2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-gray-900 dark:text-white">{t("Vidéo", "Video")}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{t("Regardez la vidéo ci-dessous", "Watch the video below")}</p>
-                            </div>
-                          </div>
-                          <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
+                            <div className="bg-gray-50 rounded-lg p-4">
                             <UniversalContentViewer
                               url={currentQuestion.videoUrl}
                               title="Question Video"
                               className="w-full"
                               allowDownload={false}
                             />
-                          </div>
                         </div>
                       )}
                       {currentQuestion.imageUrl && (
-                        <div>
-                          <p className="text-sm font-semibold mb-3">{t("Image", "Image")}</p>
                           <img
                             src={currentQuestion.imageUrl}
                             alt="Question"
-                            className="max-w-full h-auto rounded"
+                              className="max-w-full h-auto rounded-lg"
                           />
+                          )}
                         </div>
                       )}
+                      
+                      {/* Question Text as Passage */}
+                      <p className="text-base leading-relaxed whitespace-pre-wrap">
+                        {currentQuestion.text || currentQuestion.questionText || ''}
+                      </p>
+                    </div>
                     </div>
                   )}
+              </div>
+            </div>
 
-                  {/* Question Text */}
-                  <h2 className="text-lg font-semibold">{currentQuestion.text}</h2>
+            {/* Right Pane - Question and Answer Choices */}
+            <div className="flex-1 overflow-y-auto bg-white">
+              <div className="p-6">
+                {/* Question Header */}
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gray-900 text-white w-8 h-8 rounded flex items-center justify-center font-semibold text-sm">
+                      {currentQuestionIndex + 1}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleMarkForReview(currentQuestion.id)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${
+                          markedForReview.has(currentQuestion.id)
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'text-gray-600 hover:bg-gray-50 border border-gray-200'
+                        }`}
+                      >
+                        <Flag className={`h-4 w-4 ${markedForReview.has(currentQuestion.id) ? 'fill-red-600 text-red-600' : ''}`} />
+                        {t("Mark for Review", "Mark for Review")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="text-gray-600 hover:text-gray-900">
+                      <Type className="h-4 w-4" />
+                    </button>
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                  </div>
+                </div>
 
-                  {/* Question Type: Multiple Choice */}
-                  {currentQuestion.type === "multiple_choice" && currentQuestion.options && (
-                    <div className="space-y-3">
-                      {currentQuestion.options.map((option, idx) => (
-                        <label key={idx} className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-muted ${
-                          answers[currentQuestion.id] === option
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
-                        }`}>
-                          <input
-                            type="radio"
-                            name={`question-${currentQuestion.id}`}
-                            value={option}
-                            checked={answers[currentQuestion.id] === option}
-                            onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                            className="mr-4 h-4 w-4 text-blue-600"
-                          />
-                          <span className="flex-1">{option}</span>
-                          {answers[currentQuestion.id] === option && (
-                            <CheckCircle className="h-5 w-5 text-blue-600" />
+                {/* Question Prompt */}
+                <div className="mb-6">
+                  <h2 className="text-base font-medium text-gray-900 mb-4">
+                    {currentQuestion.type === "multiple-choice" 
+                      ? t("Which choice completes the text with the most logical and precise word or phrase?", "Which choice completes the text with the most logical and precise word or phrase?")
+                      : currentQuestion.text || currentQuestion.questionText
+                    }
+                  </h2>
+                </div>
+
+                {/* Answer Choices */}
+                <div className="space-y-3">
+
+                  {/* Multiple Choice Options - Bluebook Style */}
+                  {currentQuestion.type === "multiple-choice" && currentQuestion.options && (
+                    <>
+                      {currentQuestion.options.map((option, idx) => {
+                        const optionLabels = ['A', 'B', 'C', 'D', 'E', 'F']
+                        const isSelected = answers[currentQuestion.id] === idx.toString()
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => handleAnswerChange(currentQuestion.id, idx.toString())}
+                            className={`w-full text-left flex items-start gap-4 p-4 rounded-lg border-2 transition-all ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-500'
+                                : 'border-gray-400'
+                            }`}>
+                              {isSelected && (
+                                <div className="w-2 h-2 rounded-full bg-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <span className="font-medium text-gray-900 mr-2">
+                                ({optionLabels[idx]})
+                              </span>
+                              <span className="text-gray-700">{option}</span>
+                    </div>
+                          </button>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {/* True/False Options */}
+                  {currentQuestion.type === "true-false" && (
+                      <div className="space-y-3">
+                      {[
+                        { value: "true", label: t("Vrai", "True"), color: "green" },
+                        { value: "false", label: t("Faux", "False"), color: "red" }
+                      ].map((option) => {
+                        const isSelected = answers[currentQuestion.id] === option.value
+                        return (
+                          <button
+                            key={option.value}
+                            onClick={() => handleAnswerChange(currentQuestion.id, option.value)}
+                            className={`w-full text-left flex items-start gap-4 p-4 rounded-lg border-2 transition-all ${
+                              isSelected
+                                ? `border-${option.color}-500 bg-${option.color}-50`
+                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                              isSelected
+                                ? `border-${option.color}-500 bg-${option.color}-500`
+                                : 'border-gray-400'
+                            }`}>
+                              {isSelected && (
+                                <div className="w-2 h-2 rounded-full bg-white" />
                           )}
-                        </label>
-                      ))}
+                      </div>
+                            <span className="font-medium text-gray-900">{option.label}</span>
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
 
-                  {/* Question Type: Short Answer / Written Expression */}
-                  {(currentQuestion.type === "short_answer" || currentQuestion.type === "expression_ecrite") && (
-                    <div className="space-y-4">
-                      <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
-                        <p className="text-sm font-semibold text-orange-900 dark:text-orange-300 mb-2">
-                          {t("✍️ Expression Écrite", "✍️ Writing")}
-                        </p>
-                        <p className="text-sm text-orange-800 dark:text-orange-400">
-                          {t("Écrivez une réponse complète et bien structurée. Vérifiez la grammaire et l'orthographe.", "Write a complete and well-structured response. Check grammar and spelling.")}
-                        </p>
-                      </div>
+                  {/* Short Answer / Written Expression */}
+                  {(currentQuestion.type === "short-answer" || currentQuestion.type === "essay") && (
+                    <div className="space-y-3">
                       <Textarea
                         placeholder={t("Écrivez votre réponse ici...", "Write your answer here...")}
                         value={answers[currentQuestion.id] || ""}
                         onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                        className="min-h-40 border-2 focus:border-orange-500 resize-none"
+                        className="min-h-48 border-2 border-gray-200 focus:border-blue-500 resize-none rounded-lg p-4"
                       />
-                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+                      <div className="flex justify-between items-center text-xs text-gray-600">
                         <div className="flex gap-4">
                           <span>{t("Mots:", "Words:")} {(answers[currentQuestion.id] || "").split(/\s+/).filter(w => w.length > 0).length}</span>
                           <span>{t("Caractères:", "Characters:")} {(answers[currentQuestion.id] || "").length}</span>
                         </div>
-                        {(answers[currentQuestion.id] || "").length > 0 && (
-                          <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                            <CheckCircle className="w-4 h-4" />
-                            <span>{t("Réponse en cours", "Response in progress")}</span>
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Question Type: Oral Expression */}
-                  {currentQuestion.type === "expression_orale" && (
-                    <div className="space-y-4">
-                      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                        <p className="text-sm font-semibold text-purple-900 dark:text-purple-300 mb-2">
-                          {t("🎤 Expression Orale", "🎤 Speaking")}
-                        </p>
-                        <p className="text-sm text-purple-800 dark:text-purple-400 mb-3">
-                          {t("Enregistrez votre réponse orale. Vous avez jusqu'à 3 minutes pour répondre.", "Record your oral response. You have up to 3 minutes to answer.")}
-                        </p>
-                        <div className="flex items-center gap-2 text-xs text-purple-700 dark:text-purple-300">
-                          <Clock className="w-4 h-4" />
-                          <span>{t("Durée maximale:", "Maximum duration:")} {currentQuestion.timeLimit ? Math.floor(currentQuestion.timeLimit / 60) : 3} {t("minutes", "minutes")}</span>
-                        </div>
-                      </div>
-                      <AudioRecorder
-                        onRecordingComplete={(blob: Blob) => {
-                          handleAnswerChange(currentQuestion.id, JSON.stringify({
-                            type: 'audio',
-                            size: blob.size,
-                            timestamp: new Date().toISOString()
-                          }))
-                        }}
-                        maxDuration={currentQuestion.timeLimit || 180}
-                      />
-                      {answers[currentQuestion.id] && (
-                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 flex items-center gap-2">
-                          <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                          <span className="text-sm text-green-700 dark:text-green-300">
-                            {t("Réponse enregistrée avec succès", "Response recorded successfully")}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Question Type: Comprehension Orale */}
-                  {currentQuestion.type === "comprehension_orale" && (
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">
-                          {t("💡 Conseil", "💡 Tip")}
-                        </p>
-                        <p className="text-sm text-blue-800 dark:text-blue-400">
-                          {t("Écoutez l'audio attentivement et répondez aux questions basées sur ce que vous avez entendu.", "Listen to the audio carefully and answer the questions based on what you heard.")}
-                        </p>
-                      </div>
-                      <Textarea
-                        placeholder={t("Écrivez votre réponse ici...", "Write your answer here...")}
-                        value={answers[currentQuestion.id] || ""}
-                        onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                        className="min-h-32 border-2 focus:border-blue-500"
-                      />
-                      <div className="text-xs text-muted-foreground">
-                        {t("Caractères:", "Characters:")} {(answers[currentQuestion.id] || "").length}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Question Type: Comprehension Ecrite */}
-                  {currentQuestion.type === "comprehension_ecrite" && (
-                    <div className="space-y-4">
-                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-                        <p className="text-sm font-semibold text-green-900 dark:text-green-300 mb-2">
-                          {t("📖 Conseil", "📖 Tip")}
-                        </p>
-                        <p className="text-sm text-green-800 dark:text-green-400">
-                          {t("Lisez le texte attentivement et répondez aux questions basées sur votre compréhension.", "Read the text carefully and answer the questions based on your understanding.")}
-                        </p>
-                      </div>
-                      {currentQuestion.options ? (
-                        <div className="space-y-3">
-                          {currentQuestion.options.map((option, idx) => (
-                            <label key={idx} className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all hover:bg-muted ${
-                              answers[currentQuestion.id] === option
-                                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                                : 'border-gray-200 dark:border-gray-700'
-                            }`}>
-                              <input
-                                type="radio"
-                                name={`question-${currentQuestion.id}`}
-                                value={option}
-                                checked={answers[currentQuestion.id] === option}
-                                onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                                className="mr-4 h-4 w-4 text-green-600"
-                              />
-                              <span className="flex-1">{option}</span>
-                              {answers[currentQuestion.id] === option && (
-                                <CheckCircle className="h-5 w-5 text-green-600" />
-                              )}
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <Textarea
-                          placeholder={t("Écrivez votre réponse ici...", "Write your answer here...")}
-                          value={answers[currentQuestion.id] || ""}
-                          onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                          className="min-h-32 border-2 focus:border-green-500"
-                        />
-                      )}
                     </div>
                   )}
                 </div>
-              </Card>
+              </div>
             </div>
 
-            {/* Right side - Answer space */}
-            <div>
-              <Card className="p-6 sticky top-24">
-                <h3 className="font-semibold mb-4">{t("Votre réponse", "Your answer")}</h3>
-                <div className="bg-muted p-4 rounded-lg min-h-32 mb-4 text-sm">
-                  {answers[currentQuestion.id] ? (
-                    <p className="whitespace-pre-wrap">{answers[currentQuestion.id]}</p>
-                  ) : (
-                    <p className="text-muted-foreground italic">{t("Aucune réponse", "No answer yet")}</p>
+          {/* Bluebook-Style Bottom Navigation Bar */}
+          {testStarted && !loading && !submitting && (
+          <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
+            <div className="px-6 py-3 flex items-center justify-between">
+              {/* Left: Question Number */}
+              <button
+                onClick={() => setShowQuestionList(!showQuestionList)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                <span className="font-semibold">
+                  {t("Question", "Question")} {currentQuestionIndex + 1} {t("of", "of")} {test.questions.length}
+                </span>
+                {showQuestionList ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
                   )}
-                </div>
+              </button>
 
-                {/* Navigation */}
-                <div className="flex gap-2 mb-4">
+              {/* Right: Navigation Buttons */}
+              <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
-                    size="sm"
                     onClick={() => setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))}
                     disabled={currentQuestionIndex === 0}
-                    className="flex-1"
+                  className="border-gray-300"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4 mr-2" />
+                  {t("Back", "Back")}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentQuestionIndex(Math.min(test.questions.length - 1, currentQuestionIndex + 1))}
-                    disabled={currentQuestionIndex === test.questions.length - 1}
-                    className="flex-1"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {currentQuestionIndex === test.questions.length - 1 && (
+                {currentQuestionIndex === test.questions.length - 1 ? (
                   <Button
                     onClick={handleSubmitTest}
                     disabled={submitting}
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     {submitting ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        {t("Envoi...", "Submitting...")}
+                        {t("Submitting...", "Submitting...")}
                       </>
                     ) : (
                       <>
                         <Send className="h-4 w-4 mr-2" />
-                        {t("Soumettre le test", "Submit test")}
+                        {t("Submit", "Submit")}
                       </>
                     )}
                   </Button>
+                ) : (
+                  <Button
+                    onClick={() => setCurrentQuestionIndex(Math.min(test.questions.length - 1, currentQuestionIndex + 1))}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {t("Next", "Next")}
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
                 )}
-              </Card>
+              </div>
             </div>
+
+            {/* Question List Dropdown */}
+            {showQuestionList && (
+              <div className="border-t border-gray-200 bg-gray-50 p-4 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-10 gap-2">
+                  {test.questions.map((q, idx) => {
+                    const status = getQuestionStatus(idx)
+                    let bgColor = 'bg-gray-200 text-gray-700'
+                    if (status === 'answered') bgColor = 'bg-blue-500 text-white'
+                    else if (status === 'marked') bgColor = 'bg-yellow-500 text-white'
+                    else if (status === 'answered-marked') bgColor = 'bg-green-500 text-white'
+                    
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => {
+                          setCurrentQuestionIndex(idx)
+                          setShowQuestionList(false)
+                        }}
+                        className={`w-10 h-10 rounded-lg font-semibold text-sm transition-all ${
+                          idx === currentQuestionIndex
+                            ? 'ring-2 ring-blue-600 ring-offset-2'
+                            : ''
+                        } ${bgColor} hover:opacity-80`}
+                      >
+                        {idx + 1}
+                      </button>
+                    )
+                  })}
+            </div>
+          </div>
+            )}
+          </footer>
+          )}
           </div>
         )}
       </div>

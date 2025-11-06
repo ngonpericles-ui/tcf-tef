@@ -55,8 +55,8 @@ export declare class HomeService {
     static getStudySessionData(userId: string): Promise<StudySessionData>;
     static startStudySession(userId: string, targetTime?: number): Promise<{
         isActive: boolean;
-        startTime: string;
-        targetTime: number;
+        startTime: any;
+        targetTime: any;
         message: string;
     }>;
     static stopStudySession(userId: string): Promise<{

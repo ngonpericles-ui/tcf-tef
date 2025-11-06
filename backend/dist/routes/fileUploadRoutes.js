@@ -25,7 +25,7 @@ const profileImageUpload = fileUploadService_1.FileUploadService.configureMulter
 });
 const courseMaterialUpload = fileUploadService_1.FileUploadService.configureMulter({
     category: 'COURSE_MATERIAL',
-    maxSize: 50 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024 * 1024,
     allowedTypes: [
         'application/pdf',
         'video/mp4',
@@ -38,7 +38,7 @@ const courseMaterialUpload = fileUploadService_1.FileUploadService.configureMult
 });
 const postMediaUpload = fileUploadService_1.FileUploadService.configureMulter({
     category: 'POST_MEDIA',
-    maxSize: 20 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024 * 1024,
     allowedTypes: [
         'image/jpeg',
         'image/png',
@@ -49,7 +49,7 @@ const postMediaUpload = fileUploadService_1.FileUploadService.configureMulter({
 });
 const documentUpload = fileUploadService_1.FileUploadService.configureMulter({
     category: 'DOCUMENT',
-    maxSize: 25 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024 * 1024,
     allowedTypes: [
         'application/pdf',
         'application/msword',

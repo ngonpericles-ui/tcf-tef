@@ -5,9 +5,9 @@ import { NotFoundError, ValidationError, ForbiddenError } from '../utils/errors'
 import { SubscriptionService } from './subscriptionService';
 import { SubscriptionPlan } from '../types';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-08-27.basil'
-});
+}) : null;
 
 export interface CreatePaymentIntentData {
   courseId: string;
@@ -38,9 +38,21 @@ export interface CreateSubscriptionData {
 
 export class PaymentService {
   /**
+   * Check if Stripe is configured
+   */
+  private static isStripeConfigured(): boolean {
+    return stripe !== null;
+  }
+
+  /**
    * Get available subscription plans
    */
   static async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    if (!this.isStripeConfigured()) {
+      logger.warn('Stripe not configured, returning empty subscription plans');
+      return [];
+    }
+
     try {
       // Use the subscription service to get the actual plans
       return await SubscriptionService.getSubscriptionPlans();
@@ -57,6 +69,10 @@ export class PaymentService {
     data: CreatePaymentIntentData,
     userId: string
   ): Promise<PaymentIntentResponse> {
+    if (!this.isStripeConfigured()) {
+      throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.');
+    }
+
     try {
       // Get course details
       const course = await prisma.course.findUnique({

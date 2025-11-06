@@ -138,24 +138,33 @@ export default function UnifiedCourseCard({ course, onUpdate }: UnifiedCourseCar
 
   const handleSave = async () => {
     if (selectedLevels.length === 0 || selectedSubscriptions.length === 0) {
-      toast.error("Please select at least one level and one subscription")
+      toast.error(t("Veuillez sélectionner au moins un niveau et un abonnement", "Please select at least one level and one subscription"))
       return
     }
 
     setSaving(true)
     try {
+      console.log('💾 Saving course:', course.id, { levels: selectedLevels, subscriptions: selectedSubscriptions })
+      
       // Update course with new levels and subscriptions
-      await apiClient.put(`/content-management/${course.id}/levels-subscriptions`, {
+      const response = await apiClient.put(`/content-management/${course.id}/levels-subscriptions`, {
         levels: selectedLevels,
         subscriptions: selectedSubscriptions
       })
       
-      toast.success("Course updated successfully")
+      console.log('✅ Save response:', response)
+      
+      if (response.success) {
+        toast.success(t("Cours mis à jour avec succès", "Course updated successfully"))
       setIsEditing(false)
-      onUpdate()
-    } catch (error) {
-      console.error("Error updating course:", error)
-      toast.error("Failed to update course")
+        onUpdate() // Refresh the content list
+      } else {
+        throw new Error(response.error?.message || 'Failed to update course')
+      }
+    } catch (error: any) {
+      console.error("❌ Error updating course:", error)
+      const errorMessage = error?.response?.data?.error?.message || error?.message || t("Échec de la mise à jour du cours", "Failed to update course")
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }

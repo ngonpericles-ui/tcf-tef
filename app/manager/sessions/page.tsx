@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -81,6 +82,27 @@ interface LiveSession {
 export default function ManagerSessionsPage({ role: propRole }: ManagerSessionsPageProps = {}) {
   const { t } = useLanguage()
   const { user, isAuthenticated, isManager, isAdmin } = useAuth()
+  const router = useRouter()
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/connexion')
+      return
+    }
+
+    if (user?.role === 'STUDENT') {
+      // Students should not access manager sections
+      router.push('/live')
+      return
+    }
+
+    if (!isManager && !isAdmin && user?.role !== 'TUTOR') {
+      // Only managers, admins, and tutors can access this page
+      router.push('/')
+      return
+    }
+  }, [isAuthenticated, isManager, isAdmin, user?.role, router])
 
 
   const [currentManager, setCurrentManager] = useState<ManagerRole | null>(null)
@@ -344,6 +366,59 @@ export default function ManagerSessionsPage({ role: propRole }: ManagerSessionsP
     setSelectedSubscriptions((prev) =>
       prev.includes(subscription) ? prev.filter((s) => s !== subscription) : [...prev, subscription],
     )
+  }
+
+  // Handle join session - Role-based redirect
+  const handleJoinSession = (session: any) => {
+    // Store session info in sessionStorage for the Agora interface
+    sessionStorage.setItem('currentSession', JSON.stringify({
+      id: session.id,
+      title: session.title,
+      description: session.description,
+      instructor: session.instructor,
+      maxParticipants: session.maxParticipants,
+      currentParticipants: session.currentParticipants,
+      duration: session.duration
+    }))
+
+    // Redirect to the new dedicated full-screen live session page
+    window.location.href = `/live-session/${session.id}`
+  }
+
+  // Handle start session
+  const handleStartSession = async (session: any) => {
+    try {
+      const response = await apiClient.put(`/live-sessions/${session.id}`, {
+        status: 'live'
+      })
+
+      if (response.success) {
+        // Reload sessions
+        const fetchLiveSessions = async () => {
+          if (!isAuthenticated || (!isManager && !isAdmin)) return
+
+          try {
+            setLoading(true)
+            const response = await apiClient.get('/live-sessions/created')
+
+            if (response.success && response.data) {
+              const sessions = Array.isArray(response.data) ? response.data :
+                              Array.isArray((response.data as any).data) ? (response.data as any).data : []
+              setLiveSessions(sessions)
+            }
+          } catch (error) {
+            console.error('Error fetching live sessions:', error)
+          } finally {
+            setLoading(false)
+          }
+        }
+        fetchLiveSessions()
+        // Join the session
+        handleJoinSession(session)
+      }
+    } catch (error) {
+      console.error('Error starting session:', error)
+    }
   }
 
   const handleCreateSession = async () => {
@@ -928,9 +1003,23 @@ export default function ManagerSessionsPage({ role: propRole }: ManagerSessionsP
                         </div>
                         <div className="flex items-center space-x-2">
                           {session.status === "scheduled" && (
-                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                            <Button 
+                              size="sm" 
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => handleStartSession(session)}
+                            >
                               <Play className="w-3 h-3 mr-1" />
                               {t("Démarrer", "Start")}
+                            </Button>
+                          )}
+                          {session.status === "live" && (
+                            <Button 
+                              size="sm" 
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => handleJoinSession(session)}
+                            >
+                              <Video className="w-3 h-3 mr-1" />
+                              {t("Rejoindre", "Join")}
                             </Button>
                           )}
                           <Button size="sm" variant="outline" className="border-gray-200 dark:border-gray-700 bg-transparent">

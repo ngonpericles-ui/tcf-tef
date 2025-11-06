@@ -321,7 +321,7 @@ export default function LiveSessions() {
                 {/* Action Buttons */}
                 <div className="flex flex-col gap-3 lg:min-w-[200px]">
                   {session.status === "live" && (
-                    <Link href={`/live/${session.id}`}>
+                    <Link href={`/live-session/${session.id}`}>
                       <Button 
                         className="w-full bg-red-500 hover:bg-red-600 text-white gap-2 animate-pulse"
                         size="lg"
@@ -359,7 +359,7 @@ export default function LiveSessions() {
                   )}
                   
                   {session.status === "scheduled" && (
-                    <Link href={`/live/${session.id}`}>
+                    <Link href={`/live-session/${session.id}`}>
                       <Button variant="outline" className="w-full gap-2" size="lg">
                         <Calendar className="h-4 w-4" />
                         {lang === "fr" ? "S'inscrire" : "Register"}
@@ -367,7 +367,7 @@ export default function LiveSessions() {
                     </Link>
                   )}
 
-                  <Link href={`/live/${session.id}/details`}>
+                  <Link href={`/live-session/${session.id}/details`}>
                     <Button variant="ghost" className="w-full text-sm">
                       {lang === "fr" ? "Voir les détails" : "View details"}
                     </Button>

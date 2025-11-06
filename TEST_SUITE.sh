@@ -19,7 +19,7 @@ TESTS_PASSED=0
 TESTS_FAILED=0
 
 # Base URLs
-FRONTEND_URL="http://localhost:3002"
+FRONTEND_URL="http://localhost:3000"
 BACKEND_URL="http://localhost:3001/api"
 
 # Helper function to test endpoint

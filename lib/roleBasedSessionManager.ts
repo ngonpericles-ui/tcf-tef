@@ -39,8 +39,8 @@ export class RoleBasedSessionManager {
     if (typeof window === 'undefined') return null
 
     try {
-      const accessToken = localStorage.getItem('accessToken')
-      const refreshToken = localStorage.getItem('refreshToken')
+      const accessToken = localStorage.getItem('access_token')
+      const refreshToken = localStorage.getItem('refresh_token')
       const userStr = localStorage.getItem('user')
 
       if (!accessToken || !refreshToken || !userStr) {
@@ -237,7 +237,7 @@ export class RoleBasedSessionManager {
   static async logout(role: string): Promise<void> {
     try {
       // Call backend logout if possible
-      const accessToken = localStorage.getItem('accessToken')
+      const accessToken = localStorage.getItem('access_token')
       if (accessToken) {
         await apiClient.post('/auth/logout', {}, {
           headers: {
@@ -285,8 +285,8 @@ export class RoleBasedSessionManager {
     if (typeof window === 'undefined') return null
 
     try {
-      const accessToken = localStorage.getItem('accessToken')
-      const refreshToken = localStorage.getItem('refreshToken')
+      const accessToken = localStorage.getItem('access_token')
+      const refreshToken = localStorage.getItem('refresh_token')
       const userStr = localStorage.getItem('user')
 
       if (!accessToken || !refreshToken || !userStr) {

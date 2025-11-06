@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocialInteractionService = exports.CommentService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 class CommentService {
@@ -525,8 +525,7 @@ class SocialInteractionService {
             const existingLike = await connection_1.prisma.like.findFirst({
                 where: {
                     userId,
-                    contentId: postId,
-                    contentType: 'POST'
+                    postId: postId
                 }
             });
             let isLiked;
@@ -541,15 +540,14 @@ class SocialInteractionService {
                 await connection_1.prisma.like.create({
                     data: {
                         userId,
-                        contentId: postId,
-                        contentType: 'POST'
+                        postId: postId
                     }
                 });
                 isLiked = true;
                 logger_1.logger.info('Post liked', { postId, userId });
             }
             const likeCount = await connection_1.prisma.like.count({
-                where: { contentId: postId, contentType: 'POST' }
+                where: { postId: postId }
             });
             return { isLiked, likeCount };
         }

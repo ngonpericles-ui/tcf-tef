@@ -35,24 +35,40 @@ var __importStar = (this && this.__importStar) || (function () {
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionController = void 0;
-const subscriptionService_1 = require("../services/subscriptionService");
-const errorHandler_1 = require("../middleware/errorHandler");
-const logger_1 = require("../utils/logger");
+const subscriptionService_1 = require("@/services/subscriptionService");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
 class SubscriptionController {
 }
 exports.SubscriptionController = SubscriptionController;
 _a = SubscriptionController;
 SubscriptionController.getSubscriptionPlans = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const plans = await subscriptionService_1.SubscriptionService.getSubscriptionPlans();
-    const response = {
-        success: true,
-        data: { plans },
-        message: 'Subscription plans retrieved successfully'
-    };
-    res.status(200).json(response);
+    try {
+        const plans = await subscriptionService_1.SubscriptionService.getSubscriptionPlans();
+        const response = {
+            success: true,
+            data: { plans },
+            message: 'Subscription plans retrieved successfully'
+        };
+        res.status(200).json(response);
+    }
+    catch (error) {
+        logger_1.logger.error('Error getting subscription plans:', error);
+        console.error('Error in getSubscriptionPlans:', {
+            message: error?.message,
+            stack: error?.stack
+        });
+        res.status(500).json({
+            success: false,
+            error: {
+                message: 'Failed to retrieve subscription plans',
+                details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+            }
+        });
+    }
 });
 SubscriptionController.createSubscription = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const subscriptionData = req.body;
     if (!userId) {
         res.status(401).json({
@@ -71,7 +87,7 @@ SubscriptionController.createSubscription = (0, errorHandler_1.asyncHandler)(asy
     res.status(201).json(response);
 });
 SubscriptionController.getUserSubscriptions = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     if (!userId) {
         res.status(401).json({
             success: false,
@@ -95,24 +111,41 @@ SubscriptionController.getUserSubscriptions = (0, errorHandler_1.asyncHandler)(a
     res.status(200).json(response);
 });
 SubscriptionController.getActiveSubscription = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
-    if (!userId) {
-        res.status(401).json({
-            success: false,
-            error: { message: 'Authentication required' }
-        });
-        return;
+    try {
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            res.status(401).json({
+                success: false,
+                error: { message: 'Authentication required' }
+            });
+            return;
+        }
+        const subscription = await subscriptionService_1.SubscriptionService.getActiveSubscription(userId);
+        const response = {
+            success: true,
+            data: subscription ? { subscription } : null,
+            message: subscription ? 'Active subscription retrieved successfully' : 'No active subscription found'
+        };
+        res.status(200).json(response);
     }
-    const subscription = await subscriptionService_1.SubscriptionService.getActiveSubscription(userId);
-    const response = {
-        success: true,
-        data: { subscription },
-        message: subscription ? 'Active subscription retrieved successfully' : 'No active subscription found'
-    };
-    res.status(200).json(response);
+    catch (error) {
+        logger_1.logger.error('Error getting active subscription:', error);
+        console.error('Error in getActiveSubscription:', {
+            message: error?.message,
+            stack: error?.stack,
+            userId: req.user?.userId || req.user?.id
+        });
+        res.status(500).json({
+            success: false,
+            error: {
+                message: 'Failed to retrieve active subscription',
+                details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+            }
+        });
+    }
 });
 SubscriptionController.cancelSubscription = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const { subscriptionId } = req.params;
     if (!userId) {
         res.status(401).json({
@@ -130,7 +163,7 @@ SubscriptionController.cancelSubscription = (0, errorHandler_1.asyncHandler)(asy
     res.status(200).json(response);
 });
 SubscriptionController.changeSubscription = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const { tier, billingCycle } = req.body;
     if (!userId) {
         res.status(401).json({
@@ -167,7 +200,7 @@ SubscriptionController.getSubscriptionAnalytics = (0, errorHandler_1.asyncHandle
         });
         return;
     }
-    const { prisma } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
+    const { prisma } = await Promise.resolve().then(() => __importStar(require('@/database/connection')));
     const [totalSubscriptions, activeSubscriptions, subscriptionsByTier, recentSubscriptions, totalRevenue] = await Promise.all([
         prisma.subscription.count(),
         prisma.subscription.count({

@@ -5,15 +5,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentService = void 0;
 const stripe_1 = __importDefault(require("stripe"));
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const subscriptionService_1 = require("./subscriptionService");
-const stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY, {
+const stripe = process.env.STRIPE_SECRET_KEY ? new stripe_1.default(process.env.STRIPE_SECRET_KEY, {
     apiVersion: '2025-08-27.basil'
-});
+}) : null;
 class PaymentService {
+    static isStripeConfigured() {
+        return stripe !== null;
+    }
     static async getSubscriptionPlans() {
+        if (!this.isStripeConfigured()) {
+            logger_1.logger.warn('Stripe not configured, returning empty subscription plans');
+            return [];
+        }
         try {
             return await subscriptionService_1.SubscriptionService.getSubscriptionPlans();
         }
@@ -23,6 +30,9 @@ class PaymentService {
         }
     }
     static async createCoursePaymentIntent(data, userId) {
+        if (!this.isStripeConfigured()) {
+            throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.');
+        }
         try {
             const course = await connection_1.prisma.course.findUnique({
                 where: { id: data.courseId },

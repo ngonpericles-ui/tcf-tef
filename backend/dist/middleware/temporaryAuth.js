@@ -9,7 +9,7 @@ const temporaryTokenService_1 = __importDefault(require("../services/temporaryTo
 const prisma = new client_1.PrismaClient();
 const temporaryAuthMiddleware = async (req, res, next) => {
     try {
-        const token = req.query.token;
+        const token = req.query.token || req.headers['x-token'] || (req.headers.authorization?.replace('Bearer ', ''));
         if (!token) {
             return next();
         }
@@ -56,7 +56,6 @@ const temporaryAuthMiddleware = async (req, res, next) => {
             exp: Math.floor(Date.now() / 1000) + 7200
         };
         console.log(`🎯 Temporary access granted for ${validation.simulationType} simulation ${validation.simulationId}`);
-        await temporaryTokenService_1.default.invalidateToken(token);
         next();
     }
     catch (error) {
@@ -113,6 +112,55 @@ const simulationAccessMiddleware = (simulationType) => {
                     return res.status(404).json({
                         success: false,
                         message: 'Simulation not found or access denied'
+                    });
+                }
+                const now = new Date();
+                let scheduledDate = null;
+                if (simulationType === 'voice') {
+                    scheduledDate = simulation.scheduledDate ? new Date(simulation.scheduledDate) : null;
+                }
+                else if (simulationType === 'immigration') {
+                    try {
+                        const personalInfo = simulation.personalInfo;
+                        const personalInfoParsed = typeof personalInfo === 'string' ? JSON.parse(personalInfo) : (personalInfo || {});
+                        if (personalInfoParsed.scheduledDate) {
+                            scheduledDate = new Date(personalInfoParsed.scheduledDate);
+                        }
+                    }
+                    catch (e) {
+                        console.warn('Failed to parse personalInfo for scheduledDate in middleware:', e);
+                    }
+                }
+                if (!scheduledDate) {
+                    const createdAt = simulation.createdAt ? new Date(simulation.createdAt) : now;
+                    scheduledDate = new Date(createdAt.getTime() + 5 * 60 * 1000);
+                }
+                const durationInSeconds = simulation.duration || 300;
+                const estimatedEndTime = new Date(scheduledDate.getTime() + durationInSeconds * 1000);
+                if (simulation.status === 'COMPLETED' || simulation.status === 'FINISHED') {
+                    const endedAt = simulationType === 'voice'
+                        ? simulation.updatedAt || simulation.completedAt || estimatedEndTime
+                        : simulation.completedAt || simulation.endedAt || estimatedEndTime;
+                    if (endedAt) {
+                        const endTime = new Date(endedAt);
+                        const timeSinceEnd = (now.getTime() - endTime.getTime()) / (1000 * 60);
+                        if (timeSinceEnd > 2) {
+                            return res.status(403).json({
+                                success: false,
+                                message: 'This simulation has ended. Access links expire 2 minutes after completion for security reasons.',
+                                code: 'SIMULATION_ENDED'
+                            });
+                        }
+                    }
+                }
+                const timeUntilStart = (scheduledDate.getTime() - now.getTime()) / (1000 * 60);
+                if (timeUntilStart > 5) {
+                    return res.status(403).json({
+                        success: false,
+                        message: `This link will be accessible 5 minutes before the simulation starts (in ${Math.ceil(timeUntilStart - 5)} minute${Math.ceil(timeUntilStart - 5) > 1 ? 's' : ''}).`,
+                        code: 'TOO_EARLY',
+                        minutesUntilAccessible: Math.ceil(timeUntilStart - 5),
+                        scheduledDate: scheduledDate.toISOString()
                     });
                 }
             }

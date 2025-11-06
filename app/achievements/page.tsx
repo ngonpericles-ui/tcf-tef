@@ -108,6 +108,8 @@ export default function AchievementsPage() {
   const [successfulTests, setSuccessfulTests] = useState<any[]>([])
   const [pointsHistory, setPointsHistory] = useState<any[]>([])
   const [aiRecommendations, setAiRecommendations] = useState<any[]>([])
+  const [achievements, setAchievements] = useState<any[]>([]) // User achievements from API
+  const [achievementProgress, setAchievementProgress] = useState<any>(null) // Achievement progress stats
 
 
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
@@ -120,9 +122,10 @@ export default function AchievementsPage() {
     try {
       setLoading(true)
 
-      // Fetch dashboard stats and level assessment data in parallel
-      const [dashboardResponse, levelHistoryResponse] = await Promise.all([
+      // Fetch dashboard stats, achievements, and level assessment data in parallel
+      const [dashboardResponse, achievementsResponse, levelHistoryResponse] = await Promise.all([
         apiClient.get('/users/dashboard'),
+        apiClient.get('/achievements'), // Fetch all achievements for the user
         apiClient.get('/simulations/level-history')
       ])
 
@@ -139,6 +142,14 @@ export default function AchievementsPage() {
         setWeaknesses(data.weaknesses || [])
         setSuccessfulTests(data.successfulTests || [])
         setPointsHistory(data.pointsHistory || [])
+      }
+
+      // Process achievements data
+      if ((achievementsResponse as any)?.success && (achievementsResponse as any)?.data) {
+        const achievementsData = (achievementsResponse as any).data
+        if (Array.isArray(achievementsData)) {
+          setAchievements(achievementsData)
+        }
       }
 
       // Process level assessment data for AI recommendations

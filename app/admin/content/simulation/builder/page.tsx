@@ -22,6 +22,8 @@ import {
 import { useLanguage } from '@/components/language-provider';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api-client';
+import axios from 'axios';
+import { UploadProgressCard } from '@/components/upload-progress-card';
 
 interface Question {
   id: string;
@@ -53,6 +55,7 @@ export default function AdminSimulationBuilderPage() {
 
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgressData, setUploadProgressData] = useState<{ fileId: string; progress: number; status: 'uploading' | 'completed' | 'error'; error?: string } | null>(null);
   const [extractionStatus, setExtractionStatus] = useState<"idle" | "uploading" | "extracting" | "complete" | "error">("idle");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [extractedQuestions, setExtractedQuestions] = useState<Question[]>([]);
@@ -122,27 +125,51 @@ export default function AdminSimulationBuilderPage() {
     setExtractionStatus("uploading")
     setUploadProgress(0)
 
+    const fileId = Math.random().toString(36).substring(2, 11)
+    setUploadProgressData({
+      fileId,
+      progress: 0,
+      status: 'uploading'
+    })
+
     try {
-      // Upload PDF to Cloudinary
+      // Upload PDF to Cloudinary with progress tracking
       const formData = new FormData()
       formData.append("file", file)
       formData.append("upload_preset", "aura_simulations")
       formData.append("folder", "simulations/pdfs")
 
-      const cloudinaryResponse = await fetch(
-        `https://api.cloudinary.com/v1_1/${(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) || 'ddhhzeewn'}/upload`,
-        {
-          method: "POST",
-          body: formData,
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME) || 'ddhhzeewn'}/upload`
+      
+      const cloudinaryResponse = await axios.post(cloudinaryUrl, formData, {
+        timeout: 0, // No timeout
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && progressEvent.total > 0) {
+            const loaded = progressEvent.loaded || 0
+            const total = progressEvent.total || 1
+            const calculatedProgress = Math.min(Math.max(0, Math.round((loaded / total) * 100)), 99)
+            
+            setUploadProgress(calculatedProgress)
+            setUploadProgressData({
+              fileId,
+              progress: calculatedProgress,
+              status: 'uploading'
+            })
+          }
         }
-      )
+      })
 
-      if (!cloudinaryResponse.ok) {
+      if (!cloudinaryResponse.data) {
         throw new Error("Failed to upload PDF")
       }
 
-      const cloudinaryData = await cloudinaryResponse.json()
-      setUploadProgress(50)
+      const cloudinaryData = cloudinaryResponse.data
+      setUploadProgress(100)
+      setUploadProgressData({
+        fileId,
+        progress: 100,
+        status: 'completed'
+      })
 
       // Extract questions using AI
       setExtractionStatus("extracting")
@@ -163,6 +190,12 @@ export default function AdminSimulationBuilderPage() {
     } catch (error) {
       console.error("Error processing PDF:", error)
       setExtractionStatus("error")
+      setUploadProgressData({
+        fileId: fileId || 'unknown',
+        progress: 0,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Upload error'
+      })
       alert(t("Erreur lors du traitement du PDF", "Error processing PDF"))
     }
   }
@@ -251,15 +284,41 @@ export default function AdminSimulationBuilderPage() {
       })
 
       if ((response as any).success && (response as any).data?.questions) {
-        const generatedQuestions = (response as any).data.questions.map((q: any, idx: number) => ({
+        const generatedQuestions = (response as any).data.questions.map((q: any, idx: number) => {
+          // Ensure options is an array for multiple-choice questions
+          let options = q.options || [];
+          if (!Array.isArray(options)) {
+            options = [];
+          }
+          // Ensure at least 4 options for multiple-choice
+          if (q.type === "multiple-choice" && options.length < 4) {
+            while (options.length < 4) {
+              options.push("");
+            }
+          }
+
+          // Map question types
+          let mappedType = "MULTIPLE_CHOICE";
+          if (q.type === "true-false") {
+            mappedType = "TRUE_FALSE";
+          } else if (q.type === "short-answer") {
+            mappedType = "FILL_BLANK";
+          } else if (q.type === "essay") {
+            mappedType = "ESSAY";
+          } else if (q.type === "MULTIPLE_CHOICE" || q.type === "TRUE_FALSE" || q.type === "FILL_BLANK" || q.type === "ESSAY") {
+            mappedType = q.type;
+          }
+
+          return {
           id: `${sectionKey}_${Date.now()}_${idx}`,
           question: q.questionText || q.question || "",
-          type: q.type || "MULTIPLE_CHOICE",
-          options: q.options || [],
-          correctAnswer: q.correctAnswer || "",
+            type: mappedType,
+            options: options,
+            correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (mappedType === "MULTIPLE_CHOICE" ? 0 : ""),
           points: q.points || 1,
           section: sectionKey
-        }))
+          };
+        })
 
         setExtractedQuestions([...extractedQuestions, ...generatedQuestions])
         alert(t(`✅ ${generatedQuestions.length} questions générées pour ${section.name}!`, `✅ ${generatedQuestions.length} questions generated for ${section.name}!`))
@@ -645,28 +704,50 @@ export default function AdminSimulationBuilderPage() {
                   />
                 </div>
 
-                {extractionStatus !== "idle" && (
+                {/* Upload Progress Card */}
+                {uploadProgressData && pdfFile && (
+                  <UploadProgressCard
+                    upload={uploadProgressData}
+                    file={{
+                      id: uploadProgressData.fileId,
+                      file: pdfFile,
+                      name: pdfFile.name,
+                      size: pdfFile.size,
+                      type: pdfFile.type
+                    }}
+                    onRemove={() => {
+                      setUploadProgressData(null)
+                      setPdfFile(null)
+                      setExtractionStatus("idle")
+                    }}
+                    onPause={() => {}}
+                    onResume={() => {}}
+                  />
+                )}
+
+                {extractionStatus === "extracting" && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span>
-                        {extractionStatus === "uploading" && t("Téléchargement...", "Uploading...")}
-                        {extractionStatus === "extracting" && t("Extraction en cours...", "Extracting...")}
-                        {extractionStatus === "complete" && (
-                          <span className="text-green-500 flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4" />
-                            {t("Extraction terminée!", "Extraction complete!")}
-                          </span>
-                        )}
-                        {extractionStatus === "error" && (
-                          <span className="text-red-500 flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4" />
-                            {t("Erreur d'extraction", "Extraction error")}
-                          </span>
-                        )}
+                      <span className="text-blue-500 flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {t("Extraction en cours...", "Extracting...")}
                       </span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <Progress value={uploadProgress} />
+                  </div>
+                )}
+
+                {extractionStatus === "complete" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-green-500 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        {t("Extraction terminée!", "Extraction complete!")}
+                      </span>
+                      <span>100%</span>
+                    </div>
+                    <Progress value={100} />
                   </div>
                 )}
               </CardContent>

@@ -36,11 +36,36 @@ function BulkMessagingPageInner() {
 
   // Mock sender info (would come from auth/session in a real app)
   useEffect(() => {
-    const roleParam = (params.get("role") || localStorage.getItem("managerRole") || "junior").toLowerCase() as Role
-    const normalized: Role = ["junior", "content", "senior", "admin"].includes(roleParam) ? roleParam : "junior"
+    // Check if user is admin first, then fall back to URL params
+    const storedRole = localStorage.getItem("managerRole")
+    const roleParam = params?.get("role")?.toLowerCase() as Role
+    
+    let normalized: Role = "junior" // default
+    
+    // Priority: admin role from localStorage > URL param > stored role > default
+    if (storedRole === "admin") {
+      normalized = "admin"
+    } else if (roleParam && ["junior", "content", "senior", "admin"].includes(roleParam)) {
+      normalized = roleParam
+    } else if (storedRole && ["junior", "content", "senior", "admin"].includes(storedRole)) {
+      normalized = storedRole as Role
+    }
+    
     setRole(normalized)
-    const name = localStorage.getItem("managerName") || (normalized === "senior" ? "Aïcha Benali" : "Marie Dubois")
-    const email = localStorage.getItem("managerEmail") || (normalized === "senior" ? "aicha@tcf-tef.com" : "marie@tcf-tef.com")
+    
+    // Set appropriate name and email based on role
+    let name, email
+    if (normalized === "admin") {
+      name = localStorage.getItem("managerName") || "Admin User"
+      email = localStorage.getItem("managerEmail") || "admin@tcf-tef.com"
+    } else if (normalized === "senior") {
+      name = localStorage.getItem("managerName") || "Aïcha Benali"
+      email = localStorage.getItem("managerEmail") || "aicha@tcf-tef.com"
+    } else {
+      name = localStorage.getItem("managerName") || "Marie Dubois"
+      email = localStorage.getItem("managerEmail") || "marie@tcf-tef.com"
+    }
+    
     setSender({ name, email, role: normalized })
   }, [params])
 
@@ -50,8 +75,9 @@ function BulkMessagingPageInner() {
 
   const roleInfo = useMemo(() => {
     switch (role) {
-      case "senior":
       case "admin":
+        return { label: t("Admin", "Admin"), color: "bg-red-500/10 text-red-400 border-red-500/20", icon: Crown }
+      case "senior":
         return { label: t("Senior Manager", "Senior Manager"), color: "bg-purple-500/10 text-purple-400 border-purple-500/20", icon: Crown }
       case "content":
         return { label: t("Content Manager", "Content Manager"), color: "bg-blue-500/10 text-blue-400 border-blue-500/20", icon: Shield }
@@ -97,7 +123,18 @@ function BulkMessagingPageInner() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Button variant="ghost" onClick={() => router.back()} className="text-muted-foreground hover:text-foreground">
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                // Navigate back to the appropriate section based on role
+                if (role === "admin") {
+                  router.push("/admin/messages")
+                } else {
+                  router.back()
+                }
+              }} 
+              className="text-muted-foreground hover:text-foreground"
+            >
               <ArrowLeft className="w-4 h-4 mr-2" />
               {t("Retour", "Back")}
             </Button>
@@ -140,6 +177,8 @@ function BulkMessagingPageInner() {
             <CardDescription className="text-muted-foreground">
               {role === "junior"
                 ? t("Limité aux niveaux A1–B1 et aux plans Free/Essential", "Limited to A1–B1 levels and Free/Essential plans")
+                : role === "admin"
+                ? t("Accès complet à tous les niveaux et abonnements", "Full access to all levels and subscriptions")
                 : t("Aucun niveau/abonnement limité", "No level/subscription limitations")}
             </CardDescription>
           </CardHeader>

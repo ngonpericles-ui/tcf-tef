@@ -4,8 +4,8 @@ import { UserRole } from '@prisma/client'
 
 const router = Router()
 
-// Get user activity data
-router.get('/activity', authenticate, authorize(UserRole.STUDENT), async (req, res) => {
+// Get user activity data - allow all authenticated users
+router.get('/activity', authenticate, async (req, res) => {
   try {
     const userId = req.user!.userId
 

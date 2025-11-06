@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 500 * 1024 * 1024, // 500MB limit
+    fileSize: 10 * 1024 * 1024 * 1024, // 10GB limit for large files and poor internet connections
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
@@ -114,6 +114,63 @@ router.post('/upload',
       });
     } catch (error) {
       next(error);
+    }
+  }
+);
+
+/**
+ * @route GET /api/content-management/test-cloudinary
+ * @desc Test Cloudinary configuration
+ * @access Private (Admin, Senior Manager)
+ */
+router.get('/test-cloudinary',
+  authenticate,
+  async (req: Request, res: Response) => {
+    try {
+      const { CloudinaryService } = await import('../services/cloudinaryService');
+      
+      // Check if Cloudinary is configured
+      if (!CloudinaryService.isConfigured()) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file.',
+            code: 'CLOUDINARY_NOT_CONFIGURED'
+          }
+        });
+      }
+
+      // Test connection
+      const connectionTest = await CloudinaryService.testConnection();
+      
+      if (connectionTest) {
+        return res.json({
+          success: true,
+          message: 'Cloudinary connection test successful',
+          data: {
+            cloudName: process.env.CLOUDINARY_CLOUD_NAME || 'parsed from CLOUDINARY_URL',
+            configured: true,
+            connectionTest: true
+          }
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: {
+            message: 'Cloudinary connection test failed. Please check your credentials.',
+            code: 'CLOUDINARY_CONNECTION_FAILED'
+          }
+        });
+      }
+    } catch (error) {
+      logger.error('Cloudinary test failed:', error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: error instanceof Error ? error.message : 'Cloudinary test failed',
+          code: 'CLOUDINARY_TEST_ERROR'
+        }
+      });
     }
   }
 );

@@ -26,7 +26,7 @@ export default function LiveSessionDetailsPage() {
               Toutes les informations de la session seront affichées ici (instructeur, niveau, horaires, ressources, description, etc.).
             </p>
             <div className="flex gap-2">
-              <Link href={`/live/${sessionId}`}>
+              <Link href={`/live-session/${sessionId}`}>
                 <Button>Rejoindre</Button>
               </Link>
               <Link href="/home">

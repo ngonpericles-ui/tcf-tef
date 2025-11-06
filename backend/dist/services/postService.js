@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PostService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const client_1 = require("@prisma/client");
+const logger_1 = require("@/utils/logger");
 class PostService {
     static async getAllPosts(pagination, filters, sort) {
         const { page, limit } = pagination;
@@ -29,34 +30,82 @@ class PostService {
         }
         const orderBy = {};
         orderBy[sort.sortBy] = sort.sortOrder;
-        const [posts, total] = await Promise.all([
-            connection_1.prisma.post.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy,
-                include: {
-                    author: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            role: true
-                        }
-                    },
-                    _count: {
-                        select: {
-                            likes: true,
-                            comments: true,
-                            shares: true
+        let posts = [];
+        let total = 0;
+        try {
+            [posts, total] = await Promise.all([
+                connection_1.prisma.post.findMany({
+                    where,
+                    skip,
+                    take: limit,
+                    orderBy,
+                    include: {
+                        author: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                role: true,
+                                profileImage: true,
+                                profilePicture: true,
+                                email: true
+                            }
+                        },
+                        _count: {
+                            select: {
+                                likes: true,
+                                comments: true,
+                                shares: true
+                            }
                         }
                     }
-                }
-            }),
-            connection_1.prisma.post.count({ where })
-        ]);
+                }).catch(async (error) => {
+                    logger_1.logger.warn('Failed to fetch posts with _count, trying without', { error: error.message });
+                    return await connection_1.prisma.post.findMany({
+                        where,
+                        skip,
+                        take: limit,
+                        orderBy,
+                        include: {
+                            author: {
+                                select: {
+                                    id: true,
+                                    firstName: true,
+                                    lastName: true,
+                                    role: true,
+                                    profileImage: true,
+                                    profilePicture: true,
+                                    email: true
+                                }
+                            }
+                        }
+                    }).then(posts => posts.map(post => ({
+                        ...post,
+                        _count: {
+                            likes: 0,
+                            comments: 0,
+                            shares: 0
+                        }
+                    })));
+                }),
+                connection_1.prisma.post.count({ where }).catch(() => 0)
+            ]);
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to fetch posts', { error: error.message });
+            posts = [];
+            total = 0;
+        }
+        const formattedPosts = posts.map(post => ({
+            ...post,
+            likes: post._count?.likes || 0,
+            comments: post._count?.comments || 0,
+            shares: post._count?.shares || 0,
+            views: post.viewCount || 0,
+            images: post.media ? [post.media] : []
+        }));
         return {
-            posts,
+            posts: formattedPosts,
             pagination: {
                 page,
                 limit,
@@ -119,8 +168,7 @@ class PostService {
             const like = await connection_1.prisma.like.findFirst({
                 where: {
                     userId,
-                    contentId: postId,
-                    contentType: 'POST'
+                    postId: postId
                 }
             });
             userLiked = !!like;
@@ -229,37 +277,40 @@ class PostService {
         });
     }
     static async toggleLike(postId, userId) {
-        const existingLike = await connection_1.prisma.like.findFirst({
-            where: {
-                userId,
-                contentId: postId,
-                contentType: 'POST'
-            }
-        });
-        let liked = false;
-        if (existingLike) {
-            await connection_1.prisma.like.delete({
-                where: { id: existingLike.id }
-            });
-            liked = false;
-        }
-        else {
-            await connection_1.prisma.like.create({
-                data: {
+        try {
+            const existingLike = await connection_1.prisma.like.findFirst({
+                where: {
                     userId,
-                    contentId: postId,
-                    contentType: 'POST'
+                    postId: postId
                 }
             });
-            liked = true;
-        }
-        const likeCount = await connection_1.prisma.like.count({
-            where: {
-                contentId: postId,
-                contentType: 'POST'
+            let liked = false;
+            if (existingLike) {
+                await connection_1.prisma.like.delete({
+                    where: { id: existingLike.id }
+                });
+                liked = false;
+                logger_1.logger.info('Post unliked', { postId, userId });
             }
-        });
-        return { liked, likeCount };
+            else {
+                await connection_1.prisma.like.create({
+                    data: {
+                        userId,
+                        postId: postId
+                    }
+                });
+                liked = true;
+                logger_1.logger.info('Post liked', { postId, userId });
+            }
+            const likeCount = await connection_1.prisma.like.count({
+                where: { postId: postId }
+            });
+            return { liked, likeCount };
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to toggle post like', { postId, userId, error: error.message });
+            throw error;
+        }
     }
     static async addComment(postId, userId, content, parentId) {
         const post = await connection_1.prisma.post.findUnique({
@@ -288,7 +339,11 @@ class PostService {
                     select: {
                         id: true,
                         firstName: true,
-                        lastName: true
+                        lastName: true,
+                        email: true,
+                        profileImage: true,
+                        profilePicture: true,
+                        role: true
                     }
                 },
                 _count: {
@@ -317,7 +372,11 @@ class PostService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true
+                            lastName: true,
+                            email: true,
+                            profileImage: true,
+                            profilePicture: true,
+                            role: true
                         }
                     },
                     replies: {
@@ -326,7 +385,11 @@ class PostService {
                                 select: {
                                     id: true,
                                     firstName: true,
-                                    lastName: true
+                                    lastName: true,
+                                    email: true,
+                                    profileImage: true,
+                                    profilePicture: true,
+                                    role: true
                                 }
                             }
                         },

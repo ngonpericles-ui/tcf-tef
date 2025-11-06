@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileUploadService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const cloudinaryService_1 = require("./cloudinaryService");
@@ -79,7 +79,7 @@ class FileUploadService {
             fileFilter,
             limits: {
                 fileSize: options.maxSize || this.MAX_FILE_SIZE,
-                files: 5
+                files: 20
             }
         });
     }
@@ -106,6 +106,8 @@ class FileUploadService {
             }
             const relativePath = path_1.default.relative(this.UPLOAD_DIR, processedPath);
             const url = `/uploads/${relativePath.replace(/\\/g, '/')}`;
+            const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+            const absoluteUrl = `${backendUrl}${url}`;
             const uploadedFile = await connection_1.prisma.file.create({
                 data: {
                     originalName: file.originalname,
@@ -114,7 +116,7 @@ class FileUploadService {
                     mimetype: file.mimetype,
                     size: file.size,
                     path: processedPath,
-                    url,
+                    url: absoluteUrl,
                     userId: userId,
                     uploadedById: userId,
                     category: options.category,
@@ -129,12 +131,12 @@ class FileUploadService {
             });
             return {
                 id: uploadedFile.id,
+                url: absoluteUrl,
+                path: url,
                 originalName: uploadedFile.originalName,
                 filename: uploadedFile.filename,
                 mimetype: uploadedFile.mimetype,
                 size: uploadedFile.size,
-                path: uploadedFile.path,
-                url: uploadedFile.url,
                 uploadedBy: uploadedFile.userId,
                 uploadedAt: uploadedFile.createdAt,
                 category: uploadedFile.category,
@@ -303,9 +305,16 @@ class FileUploadService {
             if (!file.mimetype.startsWith('image/')) {
                 throw new errors_1.ValidationError('Profile image must be an image file');
             }
+            const baseUrl = process.env.BACKEND_URL || process.env.API_URL?.replace('/api', '') || 'http://localhost:3001';
+            const absoluteUrl = file.url.startsWith('http')
+                ? file.url
+                : `${baseUrl}${file.url.startsWith('/') ? '' : '/'}${file.url}`;
             await connection_1.prisma.user.update({
                 where: { id: userId },
-                data: { profileImage: file.url }
+                data: {
+                    profileImage: absoluteUrl,
+                    profilePicture: absoluteUrl
+                }
             });
             logger_1.logger.info('Profile image updated', { userId, fileId });
         }

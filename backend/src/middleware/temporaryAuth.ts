@@ -28,8 +28,8 @@ export const temporaryAuthMiddleware = async (
   next: NextFunction
 ) => {
   try {
-    // Check if there's a temporary token in query parameters
-    const token = req.query.token as string;
+    // Check if there's a temporary token in query parameters or headers
+    const token = (req.query.token as string) || (req.headers['x-token'] as string) || (req.headers.authorization?.replace('Bearer ', ''));
     
     if (!token) {
       // No temporary token, proceed with normal authentication
@@ -92,8 +92,9 @@ export const temporaryAuthMiddleware = async (
 
     console.log(`🎯 Temporary access granted for ${validation.simulationType} simulation ${validation.simulationId}`);
 
-    // Invalidate the token (single use)
-    await TemporaryTokenService.invalidateToken(token);
+    // NE PAS invalider le token immédiatement - il reste valide pour toute la simulation
+    // Le token sera invalidé uniquement après la fin de la simulation ou expiration
+    // await TemporaryTokenService.invalidateToken(token);
 
     next();
   } catch (error) {
@@ -162,6 +163,75 @@ export const simulationAccessMiddleware = (simulationType: 'voice' | 'immigratio
           return res.status(404).json({
             success: false,
             message: 'Simulation not found or access denied'
+          });
+        }
+
+        // ACCESS CONTROL LOGIC:
+        // 1. Check if simulation is completed - if yes, deny access 2 minutes after end
+        // 2. Check if simulation is accessible (5 minutes before start)
+        const now = new Date();
+        
+        // Extract scheduledDate - for immigration simulations, it's stored in personalInfo JSON
+        let scheduledDate: Date | null = null;
+        if (simulationType === 'voice') {
+          // Voice simulations have scheduledDate as a direct field
+          scheduledDate = (simulation as any).scheduledDate ? new Date((simulation as any).scheduledDate) : null;
+        } else if (simulationType === 'immigration') {
+          // Immigration simulations store scheduledDate in personalInfo JSON
+          try {
+            const personalInfo = (simulation as any).personalInfo;
+            const personalInfoParsed = typeof personalInfo === 'string' ? JSON.parse(personalInfo) : (personalInfo || {});
+            if (personalInfoParsed.scheduledDate) {
+              scheduledDate = new Date(personalInfoParsed.scheduledDate);
+            }
+          } catch (e) {
+            console.warn('Failed to parse personalInfo for scheduledDate in middleware:', e);
+          }
+        }
+        
+        // Fallback to createdAt + 5 minutes if no scheduledDate found
+        if (!scheduledDate) {
+          const createdAt = (simulation as any).createdAt ? new Date((simulation as any).createdAt) : now;
+          scheduledDate = new Date(createdAt.getTime() + 5 * 60 * 1000); // 5 minutes after creation
+        }
+        
+        const durationInSeconds = (simulation as any).duration || 300; // 5 minutes default
+        const estimatedEndTime = new Date(scheduledDate.getTime() + durationInSeconds * 1000);
+        
+        // Check if simulation is completed
+        if ((simulation as any).status === 'COMPLETED' || (simulation as any).status === 'FINISHED') {
+          // For voice simulations, use updatedAt as the end time (since there's no endedAt field)
+          // For immigration simulations, use completedAt
+          const endedAt = simulationType === 'voice' 
+            ? (simulation as any).updatedAt || (simulation as any).completedAt || estimatedEndTime
+            : (simulation as any).completedAt || (simulation as any).endedAt || estimatedEndTime;
+          
+          if (endedAt) {
+            const endTime = new Date(endedAt);
+            const timeSinceEnd = (now.getTime() - endTime.getTime()) / (1000 * 60); // minutes since end
+            
+            // If simulation ended more than 2 minutes ago, deny access
+            if (timeSinceEnd > 2) {
+              return res.status(403).json({
+                success: false,
+                message: 'This simulation has ended. Access links expire 2 minutes after completion for security reasons.',
+                code: 'SIMULATION_ENDED'
+              });
+            }
+          }
+        }
+        
+        // Check if access is allowed (5 minutes before start)
+        const timeUntilStart = (scheduledDate.getTime() - now.getTime()) / (1000 * 60); // minutes until start
+        
+        if (timeUntilStart > 5) {
+          // Too early - deny access but return special code for waiting page
+          return res.status(403).json({
+            success: false,
+            message: `This link will be accessible 5 minutes before the simulation starts (in ${Math.ceil(timeUntilStart - 5)} minute${Math.ceil(timeUntilStart - 5) > 1 ? 's' : ''}).`,
+            code: 'TOO_EARLY',
+            minutesUntilAccessible: Math.ceil(timeUntilStart - 5),
+            scheduledDate: scheduledDate.toISOString()
           });
         }
       }

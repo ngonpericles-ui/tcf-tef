@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionService = void 0;
-const connection_1 = require("../database/connection");
-const errorHandler_1 = require("../middleware/errorHandler");
+const connection_1 = require("@/database/connection");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class LiveSessionService {
     static async createLiveSession(sessionData, createdById, creatorRole) {
         try {
@@ -97,9 +97,11 @@ class LiveSessionService {
             if (liveSession.requiredTier !== client_1.SubscriptionTier.FREE && userId) {
                 const user = await connection_1.prisma.user.findUnique({
                     where: { id: userId },
-                    select: { subscriptionTier: true }
+                    select: { subscriptionTier: true, role: true }
                 });
-                if (user && !this.hasAccessToTier(user.subscriptionTier, liveSession.requiredTier)) {
+                if (user && [client_1.UserRole.ADMIN, client_1.UserRole.SENIOR_MANAGER, client_1.UserRole.JUNIOR_MANAGER].includes(user.role)) {
+                }
+                else if (user && !this.hasAccessToTier(user.subscriptionTier, liveSession.requiredTier)) {
                     throw new errorHandler_1.AuthorizationError('Subscription upgrade required to access this session');
                 }
             }
@@ -120,7 +122,9 @@ class LiveSessionService {
         try {
             const { page = 1, limit = 10, sortBy = 'date', sortOrder = 'asc' } = pagination;
             const { search, level, category, tier, status } = filters;
-            const where = {};
+            const where = {
+                isOneOnOne: false
+            };
             if (search) {
                 where.OR = [
                     { title: { contains: search, mode: 'insensitive' } },
@@ -207,21 +211,23 @@ class LiveSessionService {
             if (!session) {
                 throw new errorHandler_1.NotFoundError('Live session not found');
             }
-            if (session.status !== client_1.LiveSessionStatus.SCHEDULED) {
+            if (session.status !== client_1.LiveSessionStatus.SCHEDULED && session.status !== client_1.LiveSessionStatus.LIVE) {
                 throw new errorHandler_1.ValidationError('Cannot register for this session');
             }
-            if (session.date <= new Date()) {
+            if (session.status === client_1.LiveSessionStatus.SCHEDULED && session.date <= new Date()) {
                 throw new errorHandler_1.ValidationError('Cannot register for past sessions');
             }
             const user = await connection_1.prisma.user.findUnique({
                 where: { id: userId },
-                select: { subscriptionTier: true }
+                select: { subscriptionTier: true, role: true }
             });
             if (!user) {
                 throw new errorHandler_1.NotFoundError('User not found');
             }
-            if (!this.hasAccessToTier(user.subscriptionTier, session.requiredTier)) {
-                throw new errorHandler_1.AuthorizationError('Subscription upgrade required to register for this session');
+            if (![client_1.UserRole.ADMIN, client_1.UserRole.SENIOR_MANAGER, client_1.UserRole.JUNIOR_MANAGER].includes(user.role)) {
+                if (!this.hasAccessToTier(user.subscriptionTier, session.requiredTier)) {
+                    throw new errorHandler_1.AuthorizationError('Subscription upgrade required to register for this session');
+                }
             }
             const existingParticipant = await connection_1.prisma.liveSessionParticipant.findUnique({
                 where: {
@@ -290,15 +296,36 @@ class LiveSessionService {
     }
     static async updateSessionStatus(sessionId, newStatus, userId, userRole) {
         try {
+            console.log('🔍 LiveSessionService.updateSessionStatus called:', {
+                sessionId,
+                newStatus,
+                userId,
+                userRole
+            });
             const existingSession = await connection_1.prisma.liveSession.findUnique({
                 where: { id: sessionId }
+            });
+            console.log('📋 Existing session found:', {
+                id: existingSession?.id,
+                status: existingSession?.status,
+                createdById: existingSession?.createdById
             });
             if (!existingSession) {
                 throw new errorHandler_1.NotFoundError('Live session not found');
             }
-            if (userRole !== client_1.UserRole.ADMIN && existingSession.createdById !== userId) {
-                throw new errorHandler_1.AuthorizationError('Access denied. You can only manage your own sessions.');
+            const isAdminOrManager = [client_1.UserRole.ADMIN, client_1.UserRole.SENIOR_MANAGER, client_1.UserRole.JUNIOR_MANAGER].includes(userRole);
+            const isCreator = existingSession.createdById === userId;
+            console.log('🔐 Authorization check:', {
+                isAdminOrManager,
+                isCreator,
+                userRole,
+                sessionCreatorId: existingSession.createdById,
+                requestingUserId: userId
+            });
+            if (!isAdminOrManager && !isCreator) {
+                throw new errorHandler_1.AuthorizationError('Access denied. Only admins, managers, or session creators can update session status.');
             }
+            console.log('🔄 Updating session status in database...');
             const updatedSession = await connection_1.prisma.liveSession.update({
                 where: { id: sessionId },
                 data: {
@@ -325,6 +352,12 @@ class LiveSessionService {
                         }
                     }
                 }
+            });
+            console.log('✅ Session status updated successfully in database:', {
+                sessionId,
+                oldStatus: existingSession.status,
+                newStatus,
+                updatedBy: userId
             });
             logger_1.logger.info('Live session status updated successfully', {
                 sessionId,

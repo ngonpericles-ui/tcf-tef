@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -8,6 +41,7 @@ const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const contentManagementService_1 = require("../services/contentManagementService");
 const auth_1 = require("../middleware/auth");
+const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const router = (0, express_1.Router)();
 const storage = multer_1.default.diskStorage({
@@ -22,7 +56,7 @@ const storage = multer_1.default.diskStorage({
 const upload = (0, multer_1.default)({
     storage,
     limits: {
-        fileSize: 500 * 1024 * 1024,
+        fileSize: 10 * 1024 * 1024 * 1024,
     },
     fileFilter: (req, file, cb) => {
         const allowedTypes = [
@@ -83,6 +117,51 @@ router.post('/upload', auth_1.authenticate, upload.single('file'), async (req, r
     }
     catch (error) {
         next(error);
+    }
+});
+router.get('/test-cloudinary', auth_1.authenticate, async (req, res) => {
+    try {
+        const { CloudinaryService } = await Promise.resolve().then(() => __importStar(require('../services/cloudinaryService')));
+        if (!CloudinaryService.isConfigured()) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file.',
+                    code: 'CLOUDINARY_NOT_CONFIGURED'
+                }
+            });
+        }
+        const connectionTest = await CloudinaryService.testConnection();
+        if (connectionTest) {
+            return res.json({
+                success: true,
+                message: 'Cloudinary connection test successful',
+                data: {
+                    cloudName: process.env.CLOUDINARY_CLOUD_NAME || 'parsed from CLOUDINARY_URL',
+                    configured: true,
+                    connectionTest: true
+                }
+            });
+        }
+        else {
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Cloudinary connection test failed. Please check your credentials.',
+                    code: 'CLOUDINARY_CONNECTION_FAILED'
+                }
+            });
+        }
+    }
+    catch (error) {
+        logger_1.logger.error('Cloudinary test failed:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: error instanceof Error ? error.message : 'Cloudinary test failed',
+                code: 'CLOUDINARY_TEST_ERROR'
+            }
+        });
     }
 });
 router.get('/courses', async (req, res, next) => {

@@ -1,4 +1,4 @@
-import { TestWithDetails, CreateTestRequest, StartTestResponse, SubmitTestRequest, PaginationParams, FilterParams } from '../types';
+import { TestWithDetails, CreateTestRequest, StartTestResponse, SubmitTestRequest, PaginationParams, FilterParams } from '@/types';
 import { UserRole } from '@prisma/client';
 export declare class TestService {
     static createTest(testData: CreateTestRequest, createdById: string, creatorRole: UserRole): Promise<TestWithDetails>;
@@ -48,12 +48,6 @@ export declare class TestService {
             options: import("@prisma/client/runtime/library").JsonValue | null;
             points: number;
             order: number;
-            imageUrl: string | null;
-            videoUrl: string | null;
-            audioUrl: string | null;
-            allowPause: boolean;
-            allowRewind: boolean;
-            timeLimit: number | null;
         }[];
     }>;
     static getTestQuestions(testId: string, userId: string): Promise<{
@@ -72,12 +66,6 @@ export declare class TestService {
         options: import("@prisma/client/runtime/library").JsonValue | null;
         points: number;
         order: number;
-        imageUrl: string | null;
-        videoUrl: string | null;
-        audioUrl: string | null;
-        allowPause: boolean;
-        allowRewind: boolean;
-        timeLimit: number | null;
     }[]>;
     static updateTestQuestion(testId: string, questionId: string, questionData: any, userId: string): Promise<{
         level: import(".prisma/client").$Enums.CourseLevel;
@@ -95,12 +83,6 @@ export declare class TestService {
         options: import("@prisma/client/runtime/library").JsonValue | null;
         points: number;
         order: number;
-        imageUrl: string | null;
-        videoUrl: string | null;
-        audioUrl: string | null;
-        allowPause: boolean;
-        allowRewind: boolean;
-        timeLimit: number | null;
     }>;
     static deleteTestQuestion(testId: string, questionId: string, userId: string): Promise<boolean>;
     private static hasAccessToTier;

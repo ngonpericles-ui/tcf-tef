@@ -81,14 +81,17 @@ export default function TestsPanel() {
       try {
         setLoading(true)
         const [testsResponse, liveSessionsResponse, statsResponse] = await Promise.all([
-          apiClient.get('/tests'),
-          apiClient.get('/live-sessions?page=1&limit=3&status=LIVE,SCHEDULED'),
-          apiClient.get('/home/dashboard')
+          apiClient.get('/tests').catch(() => ({ success: false, data: [] })), // Catch errors gracefully
+          apiClient.get('/live-sessions?page=1&limit=3&status=LIVE,SCHEDULED').catch(() => ({ success: false, data: [] })),
+          apiClient.get('/home/dashboard').catch(() => ({ success: false, data: {} }))
         ])
 
-        if ((testsResponse.data as any).success) {
-          const tests = (testsResponse.data as any).data.tests || []
-          const quickTestsData: QuickTest[] = tests.slice(0, 4).map((test: any, index: number) => ({
+        if (testsResponse.success && testsResponse.data) {
+          // Handle both array and object with tests property
+          const testsData = Array.isArray(testsResponse.data) 
+            ? testsResponse.data 
+            : (testsResponse.data as any).tests || []
+          const quickTestsData: QuickTest[] = testsData.slice(0, 4).map((test: any, index: number) => ({
             id: test.id,
             title: { fr: test.title, en: test.titleEn || test.title },
             type: test.category || 'Général',
@@ -101,17 +104,20 @@ export default function TestsPanel() {
           setQuickTests(quickTestsData)
         }
 
-        if ((liveSessionsResponse.data as any).success) {
-          setLiveSessions((liveSessionsResponse.data as any).data.sessions || [])
+        if (liveSessionsResponse.success && liveSessionsResponse.data) {
+          const sessionsData = Array.isArray(liveSessionsResponse.data)
+            ? liveSessionsResponse.data
+            : (liveSessionsResponse.data as any).sessions || []
+          setLiveSessions(sessionsData)
         }
 
-        if ((statsResponse.data as any).success) {
-          const stats = (statsResponse.data as any).data
+        if (statsResponse.success && statsResponse.data) {
+          const stats = statsResponse.data
           setTestStats({
-            dailyProgress: stats.dailyProgress || 0,
-            currentLevel: stats.currentLevel || 'A1',
-            weeklyXP: stats.weeklyXP || 0,
-            testsCompleted: stats.testsCompleted || 0
+            dailyProgress: (stats as any).dailyProgress || 0,
+            currentLevel: (stats as any).currentLevel || 'A1',
+            weeklyXP: (stats as any).weeklyXP || 0,
+            testsCompleted: (stats as any).testsCompleted || 0
           })
         }
       } catch (error) {

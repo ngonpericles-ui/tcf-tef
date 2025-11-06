@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -79,9 +80,63 @@ interface LiveSession {
   instructor: string
 }
 
+interface OneOnOneSession {
+  id: string
+  callerId: string
+  callerName: string
+  callerRole: string
+  receiverId: string
+  receiverName: string
+  receiverRole: string
+  status: "ACTIVE" | "ENDED"
+  startTime: Date
+  endTime?: Date
+  duration?: number
+  channelName: string
+}
+
 export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPageProps = {}) {
   const { t } = useLanguage()
   const { user, isAuthenticated, isManager, isAdmin } = useAuth()
+  const router = useRouter()
+
+  // Role-based access control
+  useEffect(() => {
+    // Don't redirect if we're still loading authentication
+    if (isAuthenticated === undefined) {
+      return
+    }
+
+    // Only redirect to login if we're definitely not authenticated
+    // (not just due to database connectivity issues)
+    if (isAuthenticated === false) {
+      // Check if we have a token in localStorage - if we do, it might be a database issue
+      const hasToken = typeof window !== 'undefined' && localStorage.getItem('access_token')
+      
+      if (hasToken) {
+        // We have a token but authentication failed - likely database connectivity issue
+        // Show a loading state instead of redirecting
+        console.log('Authentication failed but token exists - likely database connectivity issue')
+        return
+      }
+      
+      // No token - definitely not authenticated
+      router.push('/connexion')
+      return
+    }
+
+    if (user?.role === 'STUDENT') {
+      // Students should not access admin sections
+      router.push('/live')
+      return
+    }
+
+    if (!isAdmin && !isManager) {
+      // Only admins, managers, and tutors can access this page
+      router.push('/')
+      return
+    }
+  }, [isAuthenticated, isAdmin, isManager, user?.role, router])
 
 
   const [currentManager, setCurrentManager] = useState<ManagerRole | null>(null)
@@ -244,7 +299,36 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
     }
 
     try {
-      const sessionDateTime = new Date(`${session.date}T${session.time}`)
+      // Handle different date formats
+      let sessionDateTime: Date
+
+      if (session.scheduledDate) {
+        // If scheduledDate exists, use it directly
+        sessionDateTime = new Date(session.scheduledDate)
+      } else if (session.date) {
+        // Handle ISO date string or separate date/time
+        if (typeof session.date === 'string' && session.date.includes('T')) {
+          // ISO date string
+          sessionDateTime = new Date(session.date)
+        } else if (session.date && session.time) {
+          // Separate date and time fields
+          sessionDateTime = new Date(`${session.date}T${session.time}`)
+        } else {
+          // Just date field
+          sessionDateTime = new Date(session.date)
+        }
+      } else {
+        // Fallback to current status or scheduled
+        console.warn('Session missing date/time:', session)
+        return session.status || 'scheduled'
+      }
+
+      // Check if date is valid
+      if (isNaN(sessionDateTime.getTime())) {
+        console.warn('Invalid session date:', session)
+        return session.status || 'scheduled'
+      }
+
       const now = new Date()
       const endTime = new Date(sessionDateTime.getTime() + (session.duration || 60) * 60000)
 
@@ -256,11 +340,12 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
         return 'expired'
       }
     } catch (error) {
+      console.error('Error calculating session status:', error, session)
       return session.status || 'scheduled'
     }
   }
 
-  // Handle join session
+  // Handle join session - Role-based redirect
   const handleJoinSession = (session: any) => {
     // Store session info in sessionStorage for the Agora interface
     sessionStorage.setItem('currentSession', JSON.stringify({
@@ -273,25 +358,27 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
       duration: session.duration
     }))
 
-    // Redirect to Agora interface
-    window.location.href = `/live/${session.id}`
+    // Redirect to the new dedicated full-screen live session page
+    window.location.href = `/live-session/${session.id}`
   }
 
   // Handle start session
   const handleStartSession = async (session: any) => {
     try {
-      const response = await apiClient.put(`/live-sessions/${session.id}`, {
-        status: 'live'
+      const response = await apiClient.put(`/live-sessions/${session.id}/status`, {
+        status: 'LIVE'
       })
 
       if (response.success) {
+        toast.success('Session started successfully!')
         // Reload sessions
         loadSessions()
-        // Join the session
-        handleJoinSession(session)
+        // Redirect directly to the dedicated live session page
+        window.location.href = `/live-session/${session.id}`
       }
     } catch (error) {
       console.error('Error starting session:', error)
+      toast.error('Failed to start session')
     }
   }
 
@@ -571,7 +658,36 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
   if (!currentManager) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground">Loading...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="text-foreground">Loading...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show database connectivity error if we have a token but authentication failed
+  const hasToken = typeof window !== 'undefined' && localStorage.getItem('access_token')
+  if (hasToken && isAuthenticated === false) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="w-16 h-16 mx-auto mb-4 bg-red-500/10 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Database Connection Issue</h2>
+          <p className="text-muted-foreground mb-4">
+            Unable to connect to the database. Please check your connection and try again.
+          </p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
       </div>
     )
   }
@@ -660,7 +776,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                       <label className="text-sm font-medium text-muted-foreground">{t("Catégorie", "Category")}</label>
                       <Select
                         value={newSession.category}
-                        onValueChange={(value) => setNewSession({ ...newSession, category: value as any })}
+                        onValueChange={(value: string) => setNewSession({ ...newSession, category: value as any })}
                       >
                         <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700">
                           <SelectValue />
@@ -782,7 +898,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                       </label>
                       <Select
                         value={newSession.duration.toString()}
-                        onValueChange={(value) => setNewSession({ ...newSession, duration: Number.parseInt(value) })}
+                        onValueChange={(value: string) => setNewSession({ ...newSession, duration: Number.parseInt(value) })}
                       >
                         <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700">
                           <SelectValue />
@@ -802,7 +918,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                       </label>
                       <Select
                         value={newSession.maxParticipants.toString()}
-                        onValueChange={(value) =>
+                        onValueChange={(value: string) =>
                           setNewSession({ ...newSession, maxParticipants: Number.parseInt(value) })
                         }
                       >
@@ -900,6 +1016,60 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
             </CardContent>
           </Card>
         </div>
+
+        {/* Active Video Calls */}
+        <Card className="bg-card border-gray-200 dark:border-gray-700">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Video className="h-5 w-5 text-blue-600" />
+              {t("Appels vidéo actifs", "Active Video Calls")}
+            </CardTitle>
+            <CardDescription>
+              {t("Sessions vidéo individuelles en cours", "Ongoing one-on-one video sessions")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {oneOnOneSessions.length === 0 ? (
+              <div className="text-center py-8">
+                <Video className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  {t("Aucun appel vidéo actif", "No active video calls")}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {oneOnOneSessions.map((session) => (
+                  <div key={session.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                        <Video className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {session.callerName} → {session.receiverName}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {session.callerRole} → {session.receiverRole}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t("Démarré à", "Started at")}: {new Date(session.startTime).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        {t("Actif", "Active")}
+                      </Badge>
+                      <Button size="sm" variant="outline">
+                        {t("Voir", "View")}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Session Type Tabs - Admin has access to all session types */}
         {currentManager?.role === "admin" && (
@@ -1215,7 +1385,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                         <label className="text-sm font-medium text-muted-foreground">{t("Catégorie", "Category")}</label>
                         <Select
                           value={newOneOnOneSession.category}
-                          onValueChange={(value) => setNewOneOnOneSession({ ...newOneOnOneSession, category: value as any })}
+                          onValueChange={(value: string) => setNewOneOnOneSession({ ...newOneOnOneSession, category: value as any })}
                         >
                           <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700 text-foreground">
                             <SelectValue />
@@ -1251,7 +1421,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                         <label className="text-sm font-medium text-muted-foreground">{t("Niveau", "Level")}</label>
                         <Select
                           value={newOneOnOneSession.level}
-                          onValueChange={(value) => setNewOneOnOneSession({ ...newOneOnOneSession, level: value })}
+                          onValueChange={(value: string) => setNewOneOnOneSession({ ...newOneOnOneSession, level: value })}
                         >
                           <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700 text-foreground">
                             <SelectValue placeholder={t("Sélectionner", "Select")} />
@@ -1309,7 +1479,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
                         </label>
                         <Select
                           value={newOneOnOneSession.studentId}
-                          onValueChange={(value) => setNewOneOnOneSession({ ...newOneOnOneSession, studentId: value })}
+                          onValueChange={(value: string) => setNewOneOnOneSession({ ...newOneOnOneSession, studentId: value })}
                         >
                           <SelectTrigger className="bg-input border-gray-200 dark:border-gray-700 text-foreground">
                             <SelectValue placeholder={t("Sélectionner un étudiant", "Select a student")} />

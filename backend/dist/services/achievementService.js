@@ -1,14 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AchievementService = void 0;
-const prisma_1 = require("../lib/prisma");
-const logger_1 = require("../utils/logger");
+const prisma_1 = require("@/lib/prisma");
+const logger_1 = require("@/utils/logger");
 class AchievementService {
     static async getRecentAchievements(userId) {
         try {
             const recentAchievements = await prisma_1.prisma.userAchievement.findMany({
                 where: {
-                    userId: userId
+                    userId: userId,
+                    isUnlocked: true,
+                    unlockedAt: { not: null }
                 },
                 include: {
                     achievement: true
@@ -18,6 +20,9 @@ class AchievementService {
                 },
                 take: 5
             });
+            if (!recentAchievements || recentAchievements.length === 0) {
+                return [];
+            }
             return recentAchievements.map(ua => ({
                 id: ua.id,
                 title: ua.achievement.name,
@@ -31,8 +36,12 @@ class AchievementService {
             }));
         }
         catch (error) {
+            if (error?.code === 'P1001' || error?.message?.includes('Can\'t reach database')) {
+                logger_1.logger.warn('Database connection error, returning empty achievements array:', error.message);
+                return [];
+            }
             logger_1.logger.error('Error getting recent achievements:', error);
-            throw error;
+            return [];
         }
     }
     static async getAllAchievements(userId) {
@@ -44,9 +53,10 @@ class AchievementService {
                 include: {
                     achievement: true
                 },
-                orderBy: {
-                    unlockedAt: 'desc'
-                }
+                orderBy: [
+                    { isUnlocked: 'desc' },
+                    { unlockedAt: 'desc' }
+                ]
             });
             return userAchievements.map(ua => ({
                 id: ua.id,

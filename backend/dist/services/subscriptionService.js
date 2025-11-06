@@ -1,45 +1,44 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionService = void 0;
-const connection_1 = require("../database/connection");
-const errorHandler_1 = require("../middleware/errorHandler");
+const connection_1 = require("@/database/connection");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class SubscriptionService {
     static async getSubscriptionPlans() {
         try {
-            const dbPlans = await connection_1.prisma.subscriptionPlan.findMany({
-                where: { isActive: true },
-                orderBy: [
-                    { sortOrder: 'asc' },
-                    { createdAt: 'desc' }
-                ]
-            });
-            if (dbPlans && dbPlans.length > 0) {
-                return dbPlans;
+            try {
+                const dbPlans = await connection_1.prisma.subscriptionPlan.findMany({
+                    where: { isActive: true },
+                    orderBy: [
+                        { sortOrder: 'asc' },
+                        { createdAt: 'desc' }
+                    ]
+                });
+                if (dbPlans && dbPlans.length > 0) {
+                    return dbPlans
+                        .filter((plan) => plan.tier !== 'FREE')
+                        .map((plan) => ({
+                        id: plan.id,
+                        name: plan.name,
+                        nameEn: plan.nameEn || plan.name,
+                        description: plan.description || '',
+                        descriptionEn: plan.descriptionEn || plan.description || '',
+                        tier: plan.tier,
+                        price: plan.price,
+                        currency: plan.currency,
+                        billingCycle: plan.billingCycle,
+                        features: plan.features,
+                        limitations: plan.limitations || [],
+                        isPopular: plan.isPopular
+                    }));
+                }
+            }
+            catch (dbError) {
+                logger_1.logger.debug('Using hardcoded plans', { error: dbError?.message });
             }
             const plans = [
-                {
-                    id: 'free',
-                    name: 'Gratuit',
-                    nameEn: 'Free',
-                    description: 'Accès limité aux cours et tests de base',
-                    descriptionEn: 'Limited access to basic courses and tests',
-                    tier: client_1.SubscriptionTier.FREE,
-                    price: 0,
-                    currency: 'FCFA',
-                    billingCycle: 'monthly',
-                    features: [
-                        'Accès aux cours gratuits',
-                        'Tests de base',
-                        'Support communautaire'
-                    ],
-                    limitations: [
-                        'Pas d\'accès aux cours premium',
-                        'Pas de sessions en direct',
-                        'Support limité'
-                    ]
-                },
                 {
                     id: 'essential',
                     name: 'Essentiel',
@@ -269,7 +268,7 @@ class SubscriptionService {
                         tier: user.subscriptionTier,
                         status: 'ACTIVE',
                         startDate: new Date(),
-                        endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+                        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                         user: {
                             id: user.id,
                             firstName: user.firstName,
@@ -279,11 +278,11 @@ class SubscriptionService {
                     };
                 }
             }
-            return subscription;
+            return subscription || null;
         }
         catch (error) {
             logger_1.logger.error('Failed to get active subscription', { userId, error });
-            throw error;
+            return null;
         }
     }
     static async cancelSubscription(userId, subscriptionId) {

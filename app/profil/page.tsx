@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { useLang } from "@/components/language-provider"
-import { User, Mail, Bell, Target, Award, BarChart3, Settings, Download, Eye, Calendar, Loader2 } from "lucide-react"
+import { User, Mail, Bell, Target, Award, BarChart3, Settings, Download, Eye, Calendar, Loader2, Crown, Shield, Sparkles, X, CheckCircle2, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api-client"
@@ -56,6 +57,10 @@ export default function ProfilePage() {
     achievements: 0,
   })
   const [subscriptionHistory, setSubscriptionHistory] = useState<any[]>([])
+  const [currentSubscription, setCurrentSubscription] = useState<any>(null)
+  const [availablePlans, setAvailablePlans] = useState<any[]>([])
+  const [isSubscriptionDialogOpen, setIsSubscriptionDialogOpen] = useState(false)
+  const [isProcessingSubscription, setIsProcessingSubscription] = useState(false)
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -71,6 +76,8 @@ export default function ProfilePage() {
       fetchUserProfile()
       fetchUserStats()
       fetchSubscriptionHistory()
+      fetchCurrentSubscription()
+      fetchAvailablePlans()
     }
   }, [isAuthenticated, user])
 
@@ -143,6 +150,87 @@ export default function ProfilePage() {
     }
   }
 
+  const fetchCurrentSubscription = async () => {
+    try {
+      const response = await apiClient.get('/subscriptions/active')
+      if (response.success && response.data) {
+        const subscriptionData = response.data as any
+        setCurrentSubscription(subscriptionData.subscription)
+      } else {
+        setCurrentSubscription(null)
+      }
+    } catch (error) {
+      console.error('Error fetching current subscription:', error)
+      setCurrentSubscription(null)
+    }
+  }
+
+  const fetchAvailablePlans = async () => {
+    try {
+      const response = await apiClient.get('/subscriptions/plans')
+      if (response.success && response.data) {
+        const plansData = (response.data as any).plans || response.data
+        setAvailablePlans(Array.isArray(plansData) ? plansData : [])
+      }
+    } catch (error) {
+      console.error('Error fetching available plans:', error)
+      setAvailablePlans([])
+    }
+  }
+
+  const handleCancelSubscription = async () => {
+    if (!currentSubscription || !confirm(t("Êtes-vous sûr de vouloir annuler votre abonnement?", "Are you sure you want to cancel your subscription?"))) {
+      return
+    }
+
+    try {
+      setIsProcessingSubscription(true)
+      const response = await apiClient.delete(`/subscriptions/${currentSubscription.id}`)
+      if (response.success) {
+        toast.success(t("Abonnement annulé avec succès", "Subscription cancelled successfully"))
+        await fetchCurrentSubscription()
+        setIsSubscriptionDialogOpen(false)
+      }
+    } catch (error) {
+      console.error('Error cancelling subscription:', error)
+      toast.error(t("Erreur lors de l'annulation", "Error cancelling subscription"))
+    } finally {
+      setIsProcessingSubscription(false)
+    }
+  }
+
+  const handleUpgradeSubscription = async (tier: string) => {
+    try {
+      setIsProcessingSubscription(true)
+      const response = await apiClient.put('/subscriptions/change', { tier, billingCycle: 'monthly' })
+      if (response.success) {
+        toast.success(t("Abonnement mis à jour avec succès", "Subscription updated successfully"))
+        await fetchCurrentSubscription()
+      }
+    } catch (error) {
+      console.error('Error upgrading subscription:', error)
+      toast.error(t("Erreur lors de la mise à jour", "Error updating subscription"))
+    } finally {
+      setIsProcessingSubscription(false)
+    }
+  }
+
+  const getSubscriptionIcon = (tier: string) => {
+    const tierUpper = tier?.toUpperCase()
+    if (tierUpper === 'ESSENTIAL') return <Shield className="h-5 w-5 text-blue-500" />
+    if (tierUpper === 'PREMIUM') return <Crown className="h-5 w-5 text-yellow-500" />
+    if (tierUpper === 'PRO') return <Sparkles className="h-5 w-5 text-purple-500" />
+    return <Shield className="h-5 w-5" />
+  }
+
+  const getSubscriptionBadgeColor = (tier: string) => {
+    const tierUpper = tier?.toUpperCase()
+    if (tierUpper === 'ESSENTIAL') return "bg-blue-100 text-blue-800 border-blue-300"
+    if (tierUpper === 'PREMIUM') return "bg-yellow-100 text-yellow-800 border-yellow-300"
+    if (tierUpper === 'PRO') return "bg-purple-100 text-purple-800 border-purple-300"
+    return "bg-gray-100 text-gray-800 border-gray-300"
+  }
+
   const handleSaveProfile = async () => {
     try {
       setSaving(true)
@@ -205,7 +293,7 @@ export default function ProfilePage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-8">
           <ProfileImageUpload
             currentImage={userProfile?.profilePicture}
-            userId={user?.userId}
+            userId={user?.id}
             onImageChange={(newUrl) => {
               if (userProfile) {
                 setUserProfile({ ...userProfile, profilePicture: newUrl });
@@ -302,21 +390,136 @@ export default function ProfilePage() {
               {t("Abonnement", "Subscription")}
             </h2>
           </div>
-          <div className="flex items-center gap-2 text-sm mb-4">
-            <Badge variant="outline">{t("Aucun abonnement actif", "No active subscription")}</Badge>
-            {user && (
-              <span className="text-muted-foreground ml-2">
-                {t("Connecté en tant que", "Signed in as")} {user.email}
-              </span>
+          {currentSubscription ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                {getSubscriptionIcon(currentSubscription.tier)}
+                <div className="flex-1">
+                  <Badge className={getSubscriptionBadgeColor(currentSubscription.tier)}>
+                    {currentSubscription.tier}
+                  </Badge>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {t("Actif depuis le", "Active since")} {new Date(currentSubscription.startDate).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}
+                  </p>
+                </div>
+              </div>
+              <Dialog open={isSubscriptionDialogOpen} onOpenChange={setIsSubscriptionDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="w-full bg-gradient-to-r from-[#007BFF] to-[#8E44AD] hover:from-[#007BFF]/90 hover:to-[#8E44AD]/90 text-white">
+                    {t("Gérer l'abonnement", "Manage subscription")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>{t("Gérer votre abonnement", "Manage your subscription")}</DialogTitle>
+                    <DialogDescription>
+                      {t("Visualisez, annulez ou modifiez votre abonnement", "View, cancel or modify your subscription")}
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="space-y-6 mt-4">
+                    {/* Current Subscription */}
+                    <div className="border rounded-lg p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950">
+                      <div className="flex items-center gap-3">
+                        {getSubscriptionIcon(currentSubscription.tier)}
+                        <div>
+                          <h3 className="font-semibold text-foreground">{currentSubscription.tier}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {t("Statut", "Status")}: {currentSubscription.status}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t("Date de début", "Start date")}:</span>
+                          <span className="font-medium">{new Date(currentSubscription.startDate).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t("Date de fin", "End date")}:</span>
+                          <span className="font-medium">{new Date(currentSubscription.endDate).toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US")}</span>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleCancelSubscription}
+                        disabled={isProcessingSubscription}
+                        variant="destructive"
+                        size="sm"
+                        className="mt-3 w-full"
+                      >
+                        {isProcessingSubscription ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            {t("Annulation...", "Cancelling...")}
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-4 h-4 mr-2" />
+                            {t("Annuler l'abonnement", "Cancel subscription")}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Available Plans */}
+                    {availablePlans.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold mb-3 text-foreground">{t("Autres plans disponibles", "Other available plans")}</h3>
+                        <div className="space-y-3">
+                          {availablePlans
+                            .filter((plan: any) => plan.tier !== currentSubscription.tier)
+                            .map((plan: any) => {
+                              const tierUpper = plan.tier?.toUpperCase()
+                              const canUpgrade = 
+                                (currentSubscription.tier === 'ESSENTIAL' && ['PREMIUM', 'PRO'].includes(tierUpper)) ||
+                                (currentSubscription.tier === 'PREMIUM' && tierUpper === 'PRO')
+                              const isDowngrade = !canUpgrade && tierUpper !== currentSubscription.tier
+
+                              return (
+                                <div key={plan.id} className="border rounded-lg p-4 hover:bg-accent/50 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    {getSubscriptionIcon(plan.tier)}
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-foreground">{plan.name}</h4>
+                                      <p className="text-sm text-muted-foreground">
+                                        {plan.description || plan.descriptionEn}
+                                      </p>
+                                      {plan.price > 0 && (
+                                        <p className="text-lg font-bold text-foreground mt-2">
+                                          {plan.price.toLocaleString()} {plan.currency} / {t("mois", "month")}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <Button
+                                      onClick={() => handleUpgradeSubscription(plan.tier)}
+                                      disabled={isProcessingSubscription}
+                                      variant={isDowngrade ? "outline" : "default"}
+                                      size="sm"
+                                    >
+                                      {isDowngrade ? t("Rétrograder", "Downgrade") : t("Mettre à jour", "Upgrade")}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                        </div>
+                      </div>
             )}
           </div>
-          <div className="flex items-center gap-3">
+                </DialogContent>
+              </Dialog>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="outline">{t("Aucun abonnement actif", "No active subscription")}</Badge>
+              </div>
             <Link href="/abonnement">
-              <Button className="bg-gradient-to-r from-[#007BFF] to-[#8E44AD] hover:from-[#007BFF]/90 hover:to-[#8E44AD]/90 text-white">
-                {t("Gérer l'abonnement", "Manage subscription")}
+                <Button className="w-full bg-gradient-to-r from-[#007BFF] to-[#8E44AD] hover:from-[#007BFF]/90 hover:to-[#8E44AD]/90 text-white">
+                  {t("S'abonner maintenant", "Subscribe now")}
               </Button>
             </Link>
           </div>
+          )}
         </section>
 
         <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-card p-6 mb-6">

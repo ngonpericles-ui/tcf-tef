@@ -1,294 +1,300 @@
-import { io, Socket } from 'socket.io-client'
+import { io, Socket } from 'socket.io-client';
 
-export interface SocketMessage {
-  id: string
-  senderId: string
-  receiverId: string
-  content: string
-  timestamp: string
-  type: 'text' | 'image' | 'file'
-  metadata?: any
-}
-
-export interface OnlineUser {
-  userId: string
-  socketId: string
-  role: string
-  lastSeen: string
-}
-
-export interface TypingIndicator {
-  userId: string
-  isTyping: boolean
-  conversationId: string
-}
-
+// Socket.IO service for real-time messaging
 class SocketService {
-  private socket: Socket | null = null
-  private isConnected = false
-  private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
-  private reconnectDelay = 1000
+  private socket: Socket | null = null;
+  private isConnected = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 1000;
+  private user: any = null;
 
-  /**
-   * Initialize socket connection
-   */
-  connect(token: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      try {
-        this.socket = io((typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:3001', {
+  constructor() {
+    // Don't initialize immediately - wait for user to be available
+  }
+
+  public initializeSocket(user: any) {
+    if (!user || this.socket) {
+      return;
+    }
+
+    this.user = user;
+
+    // Initialize Socket.IO connection
+    this.socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001', {
           auth: {
-            token
+        userId: user.id,
+        userRole: user.role,
+        userName: `${user.firstName} ${user.lastName}`
           },
           transports: ['websocket', 'polling'],
           timeout: 20000,
-          forceNew: true
-        })
+      forceNew: true,
+      autoConnect: true
+    });
 
-        this.socket.on('connect', () => {
-          console.log('Socket connected:', this.socket?.id)
-          this.isConnected = true
-          this.reconnectAttempts = 0
-          resolve()
-        })
-
-        this.socket.on('disconnect', (reason) => {
-          console.log('Socket disconnected:', reason)
-          this.isConnected = false
-          this.handleReconnection()
-        })
-
-        this.socket.on('connect_error', (error) => {
-          console.error('Socket connection error:', error)
-          this.isConnected = false
-          reject(error)
-        })
-
-        // Set up event listeners
-        this.setupEventListeners()
-
-      } catch (error) {
-        console.error('Failed to initialize socket:', error)
-        reject(error)
-      }
-    })
+    this.setupEventListeners();
   }
 
-  /**
-   * Disconnect socket
-   */
-  disconnect(): void {
-    if (this.socket) {
-      this.socket.disconnect()
-      this.socket = null
-      this.isConnected = false
-    }
-  }
+  private setupEventListeners() {
+    if (!this.socket) return;
 
-  /**
-   * Check if socket is connected
-   */
-  isSocketConnected(): boolean {
-    return this.isConnected && this.socket?.connected === true
-  }
+    // Connection events
+    this.socket.on('connect', () => {
+      console.log('🔌 Socket connected:', this.socket?.id);
+      this.isConnected = true;
+      this.reconnectAttempts = 0;
+    });
 
-  /**
-   * Setup event listeners
-   */
-  private setupEventListeners(): void {
-    if (!this.socket) return
+    this.socket.on('disconnect', (reason: string) => {
+      console.log('🔌 Socket disconnected:', reason);
+      this.isConnected = false;
+      this.handleReconnect();
+    });
+
+    this.socket.on('connect_error', (error: Error) => {
+      console.error('🔌 Socket connection error:', error);
+      this.handleReconnect();
+    });
 
     // Message events
-    this.socket.on('new-message', this.handleNewMessage.bind(this))
-    this.socket.on('message-read', this.handleMessageRead.bind(this))
-    this.socket.on('typing-start', this.handleTypingStart.bind(this))
-    this.socket.on('typing-stop', this.handleTypingStop.bind(this))
+    this.socket.on('message:new', (message) => {
+      console.log('📨 New message received:', message);
+      this.handleNewMessage(message);
+    });
 
-    // Notification events
-    this.socket.on('new-notification', this.handleNewNotification.bind(this))
-    this.socket.on('notification-read', this.handleNotificationRead.bind(this))
+    this.socket.on('message:offline', (message) => {
+      console.log('📨 Offline message received:', message);
+      this.handleOfflineMessage(message);
+    });
 
-    // User presence events
-    this.socket.on('user-online', this.handleUserOnline.bind(this))
-    this.socket.on('user-offline', this.handleUserOffline.bind(this))
-    this.socket.on('online-users', this.handleOnlineUsers.bind(this))
+    this.socket.on('message:delivered', (data) => {
+      console.log('✅ Message delivered:', data);
+      this.handleMessageDelivered(data);
+    });
 
-    // Live session events
-    this.socket.on('session-started', this.handleSessionStarted.bind(this))
-    this.socket.on('session-ended', this.handleSessionEnded.bind(this))
-    this.socket.on('participant-joined', this.handleParticipantJoined.bind(this))
-    this.socket.on('participant-left', this.handleParticipantLeft.bind(this))
+    this.socket.on('message:read', (data) => {
+      console.log('👁️ Message read:', data);
+      this.handleMessageRead(data);
+    });
+
+    this.socket.on('message:status:delivered', (data) => {
+      console.log('✅ Message status delivered:', data);
+      this.handleMessageStatusDelivered(data);
+    });
+
+    this.socket.on('message:status:read', (data) => {
+      console.log('👁️ Message status read:', data);
+      this.handleMessageStatusRead(data);
+    });
+
+    // Typing events
+    this.socket.on('typing:update', (data) => {
+      console.log('⌨️ Typing update:', data);
+      this.handleTypingUpdate(data);
+    });
+
+    // Presence events
+    this.socket.on('presence:online', (data) => {
+      console.log('🟢 User online:', data);
+      this.handleUserOnline(data);
+    });
+
+    this.socket.on('presence:offline', (data) => {
+      console.log('🔴 User offline:', data);
+      this.handleUserOffline(data);
+    });
+
+    // Room events
+    this.socket.on('room:joined', (data) => {
+      console.log('🚪 Joined room:', data);
+      this.handleRoomJoined(data);
+    });
+
+    this.socket.on('room:left', (data) => {
+      console.log('🚪 Left room:', data);
+      this.handleRoomLeft(data);
+    });
   }
 
-  /**
-   * Send a message
-   */
-  sendMessage(message: Omit<SocketMessage, 'id' | 'timestamp'>): void {
-    if (!this.isSocketConnected()) {
-      console.error('Socket not connected')
-      return
+  private handleReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('🔌 Max reconnection attempts reached');
+      return;
     }
 
-    this.socket?.emit('send-message', {
-      ...message,
-      timestamp: new Date().toISOString()
-    })
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    
+    console.log(`🔌 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    
+    setTimeout(() => {
+      if (this.user) {
+        this.initializeSocket(this.user);
+      }
+    }, delay);
   }
 
-  /**
-   * Join a conversation room
-   */
-  joinConversation(conversationId: string): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('join-conversation', conversationId)
+  // Message handlers
+  private handleNewMessage(message: any) {
+    // Emit custom event for components to listen to
+    window.dispatchEvent(new CustomEvent('message:new', { detail: message }));
   }
 
-  /**
-   * Leave a conversation room
-   */
-  leaveConversation(conversationId: string): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('leave-conversation', conversationId)
+  private handleOfflineMessage(message: any) {
+    window.dispatchEvent(new CustomEvent('message:offline', { detail: message }));
   }
 
-  /**
-   * Send typing indicator
-   */
-  sendTyping(conversationId: string, isTyping: boolean): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('typing', { conversationId, isTyping })
+  private handleMessageDelivered(data: any) {
+    window.dispatchEvent(new CustomEvent('message:delivered', { detail: data }));
   }
 
-  /**
-   * Mark message as read
-   */
-  markMessageAsRead(messageId: string): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('mark-message-read', messageId)
+  private handleMessageRead(data: any) {
+    window.dispatchEvent(new CustomEvent('message:read', { detail: data }));
   }
 
-  /**
-   * Join live session room
-   */
-  joinLiveSession(sessionId: string): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('join-live-session', sessionId)
+  private handleMessageStatusDelivered(data: any) {
+    window.dispatchEvent(new CustomEvent('message:status:delivered', { detail: data }));
   }
 
-  /**
-   * Leave live session room
-   */
-  leaveLiveSession(sessionId: string): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('leave-live-session', sessionId)
+  private handleMessageStatusRead(data: any) {
+    window.dispatchEvent(new CustomEvent('message:status:read', { detail: data }));
   }
 
-  /**
-   * Send live session chat message
-   */
-  sendLiveSessionMessage(sessionId: string, message: string): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit('live-session-chat', { sessionId, message })
+  private handleTypingUpdate(data: any) {
+    window.dispatchEvent(new CustomEvent('typing:update', { detail: data }));
   }
 
-  /**
-   * Event handlers
-   */
-  private handleNewMessage(message: SocketMessage): void {
-    window.dispatchEvent(new CustomEvent('socket:new-message', { detail: message }))
+  private handleUserOnline(data: any) {
+    window.dispatchEvent(new CustomEvent('presence:online', { detail: data }));
   }
 
-  private handleMessageRead(data: { messageId: string, readBy: string }): void {
-    window.dispatchEvent(new CustomEvent('socket:message-read', { detail: data }))
+  private handleUserOffline(data: any) {
+    window.dispatchEvent(new CustomEvent('presence:offline', { detail: data }));
   }
 
-  private handleTypingStart(data: TypingIndicator): void {
-    window.dispatchEvent(new CustomEvent('socket:typing-start', { detail: data }))
+  private handleRoomJoined(data: any) {
+    window.dispatchEvent(new CustomEvent('room:joined', { detail: data }));
   }
 
-  private handleTypingStop(data: TypingIndicator): void {
-    window.dispatchEvent(new CustomEvent('socket:typing-stop', { detail: data }))
+  private handleRoomLeft(data: any) {
+    window.dispatchEvent(new CustomEvent('room:left', { detail: data }));
   }
 
-  private handleNewNotification(notification: any): void {
-    window.dispatchEvent(new CustomEvent('socket:new-notification', { detail: notification }))
+  // Public methods
+  public sendMessage(data: {
+    receiverId: string;
+    content: string;
+    type?: 'text' | 'image' | 'file' | 'audio' | 'video';
+    attachments?: string[];
+  }) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('message:send', data);
   }
 
-  private handleNotificationRead(data: { notificationId: string }): void {
-    window.dispatchEvent(new CustomEvent('socket:notification-read', { detail: data }))
+  public sendGroupMessage(data: {
+    roomId: string;
+    content: string;
+    type?: 'text' | 'image' | 'file' | 'audio' | 'video';
+    attachments?: string[];
+  }) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('message:send:group', data);
   }
 
-  private handleUserOnline(user: OnlineUser): void {
-    window.dispatchEvent(new CustomEvent('socket:user-online', { detail: user }))
+  public markAsRead(messageId: string, conversationId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('message:read', { messageId, conversationId });
   }
 
-  private handleUserOffline(user: OnlineUser): void {
-    window.dispatchEvent(new CustomEvent('socket:user-offline', { detail: user }))
+  public markAsDelivered(messageId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('message:delivered', { messageId });
   }
 
-  private handleOnlineUsers(users: OnlineUser[]): void {
-    window.dispatchEvent(new CustomEvent('socket:online-users', { detail: users }))
+  public markConversationAsRead(conversationId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('conversation:read', { conversationId });
   }
 
-  private handleSessionStarted(data: { sessionId: string }): void {
-    window.dispatchEvent(new CustomEvent('socket:session-started', { detail: data }))
+  public startTyping(roomId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('typing:start', { roomId });
   }
 
-  private handleSessionEnded(data: { sessionId: string }): void {
-    window.dispatchEvent(new CustomEvent('socket:session-ended', { detail: data }))
+  public stopTyping(roomId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('typing:stop', { roomId });
   }
 
-  private handleParticipantJoined(data: { sessionId: string, participant: any }): void {
-    window.dispatchEvent(new CustomEvent('socket:participant-joined', { detail: data }))
+  public joinRoom(roomId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('room:join', { roomId });
   }
 
-  private handleParticipantLeft(data: { sessionId: string, participant: any }): void {
-    window.dispatchEvent(new CustomEvent('socket:participant-left', { detail: data }))
+  public leaveRoom(roomId: string) {
+    if (!this.socket || !this.isConnected) {
+      console.error('🔌 Socket not connected');
+      return;
+    }
+
+    this.socket.emit('room:leave', { roomId });
   }
 
-  /**
-   * Handle reconnection
-   */
-  private handleReconnection(): void {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++
-      console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
-      
-      setTimeout(() => {
-        if (this.socket && !this.socket.connected) {
-          this.socket.connect()
-        }
-      }, this.reconnectDelay * this.reconnectAttempts)
-    } else {
-      console.error('Max reconnection attempts reached')
+  public getConnectionStatus(): boolean {
+    return this.isConnected;
+  }
+
+  public disconnect() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+      this.isConnected = false;
     }
   }
 
-  /**
-   * Add event listener
-   */
-  on(event: string, callback: (data: any) => void): void {
-    if (!this.socket) return
-    this.socket.on(event, callback)
+  // Event listener helpers
+  public addEventListener(event: string, callback: (data: any) => void) {
+    window.addEventListener(event, (e: any) => callback(e.detail));
   }
 
-  /**
-   * Remove event listener
-   */
-  off(event: string, callback?: (data: any) => void): void {
-    if (!this.socket) return
-    this.socket.off(event, callback)
-  }
-
-  /**
-   * Emit custom event
-   */
-  emit(event: string, data: any): void {
-    if (!this.isSocketConnected()) return
-    this.socket?.emit(event, data)
+  public removeEventListener(event: string, callback: (data: any) => void) {
+    window.removeEventListener(event, callback);
   }
 }
 
 // Export singleton instance
-export const socketService = new SocketService()
-export default socketService
+export const socketService = new SocketService();
+export default socketService;

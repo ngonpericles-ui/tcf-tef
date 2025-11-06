@@ -246,7 +246,7 @@ async function populateSampleData() {
     console.log('- Created sample notifications for notification system');
     console.log('- Created sample live sessions for session management');
     console.log('\n🌐 Admin pages should now show populated data!');
-    console.log('   Visit: http://localhost:3002/admin');
+    console.log('   Visit: http://localhost:3000/admin');
 
   } catch (error) {
     console.log('❌ Population failed:', error.message);

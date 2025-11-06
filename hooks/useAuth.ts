@@ -33,7 +33,7 @@ export function useAuth() {
       setError(null)
 
       // Check if we have tokens in localStorage
-      const accessToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null
+      const accessToken = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
       
       if (!accessToken) {
         setUser(null)
@@ -49,8 +49,8 @@ export function useAuth() {
       } else {
         // Token might be invalid, clear it
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('accessToken')
-          localStorage.removeItem('refreshToken')
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
         }
         setUser(null)
       }
@@ -60,8 +60,8 @@ export function useAuth() {
       
       // Clear invalid tokens
       if (typeof window !== 'undefined') {
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
       }
       setUser(null)
     } finally {
@@ -81,8 +81,8 @@ export function useAuth() {
         
         // Store tokens
         if (typeof window !== 'undefined') {
-          localStorage.setItem('accessToken', tokens.accessToken)
-          localStorage.setItem('refreshToken', tokens.refreshToken)
+          localStorage.setItem('access_token', tokens.accessToken)
+          localStorage.setItem('refresh_token', tokens.refreshToken)
         }
         
         setUser(userData)
@@ -107,7 +107,7 @@ export function useAuth() {
       setError(null)
 
       // Get current tokens
-      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null
+      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null
       
       if (refreshToken) {
         // Call appropriate logout endpoint
@@ -190,7 +190,7 @@ export function useAuth() {
     logout,
     register,
     checkAuthStatus,
-    isAuthenticated: !!user,
+    isAuthenticated: loading ? undefined : !!user,
     isAdmin: user?.role === 'ADMIN',
     isManager: user?.role === 'SENIOR_MANAGER' || user?.role === 'JUNIOR_MANAGER',
     isStudent: user ? ['USER', 'STUDENT'].includes(user.role) : false,

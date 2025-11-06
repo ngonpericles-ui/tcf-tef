@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
-const connection_1 = require("../database/connection");
-const password_1 = require("../utils/password");
-const errorHandler_1 = require("../middleware/errorHandler");
+const connection_1 = require("@/database/connection");
+const password_1 = require("@/utils/password");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class UserService {
     static async calculateUserAchievements(userId) {
         try {
@@ -404,41 +404,66 @@ class UserService {
     }
     static async calculateUserStats(userId) {
         try {
-            const [coursesCompleted, testsCompleted, totalTimeSpent, averageScore] = await Promise.all([
-                connection_1.prisma.courseEnrollment.count({
+            let coursesCompleted = 0;
+            try {
+                coursesCompleted = await connection_1.prisma.courseEnrollment.count({
                     where: {
                         userId,
                         completedAt: { not: null }
                     }
-                }),
-                connection_1.prisma.testAttempt.count({
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to count course enrollments', { userId, error: error.message });
+            }
+            let testsCompleted = 0;
+            try {
+                testsCompleted = await connection_1.prisma.testAttempt.count({
                     where: {
                         userId,
                         status: 'COMPLETED'
                     }
-                }),
-                connection_1.prisma.userProgress.aggregate({
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to count test attempts', { userId, error: error.message });
+            }
+            let totalTimeSpent = 0;
+            try {
+                const timeSpentResult = await connection_1.prisma.userProgress.aggregate({
                     where: { userId },
                     _sum: { timeSpent: true }
-                }),
-                connection_1.prisma.testAttempt.aggregate({
+                }).catch(() => null);
+                totalTimeSpent = timeSpentResult?._sum?.timeSpent || 0;
+            }
+            catch (error) {
+                logger_1.logger.warn('userProgress table not available, using default', { userId });
+                totalTimeSpent = 0;
+            }
+            let averageScore = 0;
+            try {
+                const scoreResult = await connection_1.prisma.testAttempt.aggregate({
                     where: {
                         userId,
                         status: 'COMPLETED',
                         score: { not: null }
                     },
                     _avg: { score: true }
-                })
-            ]);
+                });
+                averageScore = scoreResult._avg.score || 0;
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to calculate average score', { userId, error: error.message });
+            }
             return {
                 coursesCompleted,
                 testsCompleted,
-                totalTimeSpent: totalTimeSpent._sum.timeSpent || 0,
-                averageScore: averageScore._avg.score || 0
+                totalTimeSpent,
+                averageScore
             };
         }
         catch (error) {
-            logger_1.logger.error('Failed to calculate user stats', { userId, error });
+            logger_1.logger.error('Failed to calculate user stats', { userId, error: error.message });
             return {
                 coursesCompleted: 0,
                 testsCompleted: 0,

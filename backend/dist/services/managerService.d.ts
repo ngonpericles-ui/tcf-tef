@@ -55,8 +55,6 @@ export declare class ManagerService {
             descriptionEn: string | null;
             category: import(".prisma/client").$Enums.CourseCategory;
             requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-            availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-            availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
             duration: number;
             lessons: number;
             difficulty: number;
@@ -148,8 +146,6 @@ export declare class ManagerService {
                     descriptionEn: string | null;
                     category: import(".prisma/client").$Enums.CourseCategory;
                     requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-                    availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-                    availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
                     duration: number;
                     lessons: number;
                     difficulty: number;
@@ -241,7 +237,6 @@ export declare class ManagerService {
             role: import(".prisma/client").$Enums.UserRole;
             status: import(".prisma/client").$Enums.UserStatus;
             subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
-            currentLevel: string | null;
             profileImage: string | null;
             phone: string | null;
             dateOfBirth: Date | null;
@@ -288,7 +283,6 @@ export declare class ManagerService {
             createdAt: Date;
             updatedAt: Date;
             userId: string;
-            duration: number | null;
             completedAt: Date | null;
             timeSpent: number | null;
             score: number | null;
@@ -296,11 +290,6 @@ export declare class ManagerService {
             startedAt: Date;
             answers: import("@prisma/client/runtime/library").JsonValue | null;
             feedback: string | null;
-            correctAnswers: number | null;
-            maxScore: number | null;
-            metadata: import("@prisma/client/runtime/library").JsonValue | null;
-            percentage: number | null;
-            timeRemaining: number | null;
         })[];
         activityLog: {
             id: string;
@@ -335,8 +324,6 @@ export declare class ManagerService {
             descriptionEn: string | null;
             category: import(".prisma/client").$Enums.CourseCategory;
             requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-            availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-            availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
             duration: number;
             lessons: number;
             difficulty: number;
@@ -415,7 +402,7 @@ export declare class ManagerService {
         posts?: undefined;
         liveSessions?: undefined;
     } | {
-        courses: {
+        courses: any[] | {
             level: import(".prisma/client").$Enums.CourseLevel;
             id: string;
             createdAt: Date;
@@ -426,8 +413,6 @@ export declare class ManagerService {
             descriptionEn: string | null;
             category: import(".prisma/client").$Enums.CourseCategory;
             requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-            availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-            availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
             duration: number;
             lessons: number;
             difficulty: number;
@@ -440,7 +425,7 @@ export declare class ManagerService {
             enrolledCount: number;
             createdById: string;
         }[];
-        tests: {
+        tests: any[] | {
             level: import(".prisma/client").$Enums.CourseLevel;
             id: string;
             status: import(".prisma/client").$Enums.TestStatus;
@@ -468,7 +453,7 @@ export declare class ManagerService {
             averageScore: number;
             completionCount: number;
         }[];
-        posts: {
+        posts: any[] | {
             level: import(".prisma/client").$Enums.CourseLevel | null;
             id: string;
             status: import(".prisma/client").$Enums.PostStatus;
@@ -489,32 +474,7 @@ export declare class ManagerService {
             publishedAt: Date | null;
             viewCount: number;
         }[];
-        liveSessions: {
-            level: import(".prisma/client").$Enums.CourseLevel | null;
-            id: string;
-            status: import(".prisma/client").$Enums.LiveSessionStatus;
-            createdAt: Date;
-            updatedAt: Date;
-            title: string;
-            titleEn: string | null;
-            description: string;
-            descriptionEn: string | null;
-            category: import(".prisma/client").$Enums.CourseCategory | null;
-            requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-            duration: number;
-            image: string | null;
-            price: number;
-            tags: string[];
-            createdById: string;
-            instructor: string;
-            coInstructors: string[];
-            date: Date;
-            maxParticipants: number;
-            currency: string;
-            meetingUrl: string | null;
-            recordingUrl: string | null;
-            notifyFollowers: boolean;
-        }[];
+        liveSessions: any[];
         type?: undefined;
         content?: undefined;
     }>;
@@ -529,8 +489,6 @@ export declare class ManagerService {
         descriptionEn: string | null;
         category: import(".prisma/client").$Enums.CourseCategory;
         requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-        availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-        availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
         duration: number;
         lessons: number;
         difficulty: number;
@@ -601,8 +559,6 @@ export declare class ManagerService {
         descriptionEn: string | null;
         category: import(".prisma/client").$Enums.CourseCategory;
         requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-        availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-        availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
         duration: number;
         lessons: number;
         difficulty: number;
@@ -673,8 +629,6 @@ export declare class ManagerService {
         descriptionEn: string | null;
         category: import(".prisma/client").$Enums.CourseCategory;
         requiredTier: import(".prisma/client").$Enums.SubscriptionTier;
-        availableLevels: import(".prisma/client").$Enums.CourseLevel[];
-        availableTiers: import(".prisma/client").$Enums.SubscriptionTier[];
         duration: number;
         lessons: number;
         difficulty: number;

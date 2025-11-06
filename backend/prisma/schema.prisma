@@ -3,67 +3,94 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL")
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  directUrl    = env("DATABASE_URL")
   relationMode = "prisma"
 }
 
 model User {
-  id                      String                   @id @default(cuid())
-  email                   String                   @unique
-  passwordHash            String?
-  firstName               String
-  lastName                String
-  role                    UserRole                 @default(STUDENT)
-  status                  UserStatus               @default(ACTIVE)
-  subscriptionTier        SubscriptionTier         @default(FREE)
-  currentLevel            String?                  @default("A1")
-  profileImage            String?
-  phone                   String?
-  dateOfBirth             DateTime?
-  country                 String?
-  city                    String?
-  bio                     String?
-  preferences             Json?
-  lastLoginAt             DateTime?
-  lastActivityAt          DateTime?
-  emailVerifiedAt         DateTime?
-  socialAuthProvider      String?
-  socialAuthId            String?
-  profilePicture          String?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  aiFeedbacks             AIFeedback[]
-  chatSessions            ChatSession[]
-  comments                Comment[]                @relation("UserComments")
-  courseEnrollments       CourseEnrollment[]
-  createdCourses          Course[]                 @relation("CourseCreator")
-  levelAssessments        LevelAssessment[]
-  likes                   Like[]                   @relation("UserLikes")
-  liveSessionParticipants LiveSessionParticipant[]
-  createdLiveSessions     LiveSession[]            @relation("LiveSessionCreator")
-  receivedMessages        Message[]                @relation("ReceivedMessages")
-  sentMessages            Message[]                @relation("SentMessages")
-  payments                Payment[]
-  postLikes               PostLike[]               @relation("UserPostLikes")
-  postShares              PostShare[]              @relation("UserPostShares")
-  posts                   Post[]                   @relation("UserPosts")
-  refreshTokens           RefreshToken[]
-  studentReviewRequests   ReviewRequest[]          @relation("StudentReviewRequests")
-  tutorReviewRequests     ReviewRequest[]          @relation("TutorReviewRequests")
-  sessionReminders        SessionReminder[]
-  simulationResults       SimulationResult[]
-  studySessions           StudySession[]
-  subscriptions           Subscription[]
-  testAttempts            TestAttempt[]
-  createdTests            Test[]                   @relation("TestCreator")
-  notifications           UserNotification[]
-  progress                UserProgress[]
+  id                           String                   @id @default(cuid())
+  email                        String                   @unique
+  passwordHash                 String?
+  firstName                    String
+  lastName                     String
+  role                         UserRole                 @default(STUDENT)
+  status                       UserStatus               @default(ACTIVE)
+  subscriptionTier             SubscriptionTier         @default(FREE)
+  profileImage                 String?
+  phone                        String?
+  dateOfBirth                  DateTime?
+  country                      String?
+  city                         String?
+  bio                          String?
+  preferences                  Json?
+  lastLoginAt                  DateTime?
+  lastActivityAt               DateTime?
+  emailVerifiedAt              DateTime?
+  socialAuthProvider           String?
+  socialAuthId                 String?
+  profilePicture               String?
+  createdAt                    DateTime                 @default(now())
+  updatedAt                    DateTime                 @updatedAt
+  comments                     Comment[]                @relation("UserComments")
+  courseEnrollments            CourseEnrollment[]
+  createdCourses               Course[]                 @relation("CourseCreator")
+  likes                        Like[]                   @relation("UserLikes")
+  liveSessionParticipants      LiveSessionParticipant[]
+  createdLiveSessions          LiveSession[]            @relation("LiveSessionCreator")
+  payments                     Payment[]
+  posts                        Post[]                   @relation("UserPosts")
+  refreshTokens                RefreshToken[]
+  subscriptions                Subscription[]
+  testAttempts                 TestAttempt[]
+  createdTests                 Test[]                   @relation("TestCreator")
+  notifications                UserNotification[]
+  progress                     UserProgress[]
+  sentMessages                 Message[]                @relation("SentMessages")
+  receivedMessages             Message[]                @relation("ReceivedMessages")
+  aiFeedbacks                  AIFeedback[]             @relation("UserAIFeedback")
+  humanReviews                 AIFeedback[]             @relation("HumanReviewer")
+  chatSessions                 ChatSession[]            @relation("UserChatSessions")
+  invitedToLiveSessions        LiveSession[]            @relation("InvitedToLiveSession")
+  dailyGoals                   UserDailyGoal[]          @relation("UserDailyGoals")
+  marketplaceRequestsAsStudent MarketplaceRequest[]     @relation("StudentRequests")
+  marketplaceRequestsAsTutor   MarketplaceRequest[]     @relation("TutorRequests")
 
   @@index([createdAt])
   @@index([status, role, subscriptionTier, createdAt])
   @@map("users")
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  senderId       String
+  receiverId     String
+  subject        String?
+  content        String
+  type           String    @default("text")
+  isRead         Boolean   @default(false)
+  isDeleted      Boolean   @default(false)
+  parentId       String?
+  replyToId      String?
+  conversationId String?
+  attachments    Json?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  parent         Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  replies        Message[] @relation("MessageThread")
+  replyTo        Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  replyMessages  Message[] @relation("MessageReply")
+  receiver       User      @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender         User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, createdAt])
+  @@index([receiverId, isRead])
+  @@index([parentId])
+  @@index([replyToId])
+  @@index([conversationId])
+  @@map("messages")
 }
 
 model RefreshToken {
@@ -102,25 +129,27 @@ model SubscriptionPlan {
   id              String           @id @default(cuid())
   name            String
   nameEn          String?
-  description     String
+  description     String?
   descriptionEn   String?
   tier            SubscriptionTier
-  price           Decimal          @db.Decimal(10, 2)
+  price           Float
   currency        String           @default("FCFA")
   billingCycle    String           @default("monthly")
-  features        String[]         @default([])
-  featuresEn      String[]         @default([])
-  maxSimulations  Int?             @default(0)
-  maxLiveSessions Int?             @default(0)
-  maxCourses      Int?             @default(0)
-  maxTests        Int?             @default(0)
+  features        String[]
+  limitations     String[]
+  maxSimulations  Int? // Maximum simulations allowed per subscription (null = use default, -1 = unlimited)
+  maxLiveSessions Int? // Maximum live sessions allowed
+  maxCourses      Int? // Maximum courses allowed
+  maxTests        Int? // Maximum tests allowed
+  stripePriceId   String? // Stripe price ID for this plan
   isActive        Boolean          @default(true)
   isPopular       Boolean          @default(false)
   sortOrder       Int              @default(0)
-  stripePriceId   String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  @@unique([tier, billingCycle])
+  @@index([isActive, sortOrder])
   @@map("subscription_plans")
 }
 
@@ -133,9 +162,6 @@ model Course {
   level         CourseLevel
   category      CourseCategory
   requiredTier  SubscriptionTier   @default(FREE)
-  // NEW: Support multiple levels and subscription tiers
-  availableLevels     CourseLevel[]     @default([])
-  availableTiers      SubscriptionTier[] @default([])
   duration      Int
   lessons       Int                @default(0)
   difficulty    Int                @default(1)
@@ -199,36 +225,35 @@ model CourseEnrollment {
 }
 
 model Test {
-  id               String            @id @default(cuid())
-  title            String
-  titleEn          String?
-  description      String
-  descriptionEn    String?
-  type             TestType
-  level            CourseLevel
-  category         CourseCategory
-  requiredTier     SubscriptionTier  @default(FREE)
-  duration         Int
-  questionCount    Int
-  difficulty       Int               @default(1)
-  passingScore     Int               @default(60)
-  maxAttempts      Int?
-  tags             String[]
-  isPublished      Boolean           @default(false)
-  status           TestStatus        @default(DRAFT)
-  aiPowered        Boolean           @default(false)
-  hasAIFeedback    Boolean           @default(false)
-  isOfficial       Boolean           @default(false)
-  image            String?
-  averageScore     Float             @default(0)
-  completionCount  Int               @default(0)
-  createdById      String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  levelAssessments LevelAssessment[]
-  attempts         TestAttempt[]
-  questions        TestQuestion[]
-  createdBy        User              @relation("TestCreator", fields: [createdById], references: [id])
+  id              String           @id @default(cuid())
+  title           String
+  titleEn         String?
+  description     String
+  descriptionEn   String?
+  type            TestType
+  level           CourseLevel
+  category        CourseCategory
+  requiredTier    SubscriptionTier @default(FREE)
+  duration        Int
+  questionCount   Int
+  difficulty      Int              @default(1)
+  passingScore    Int              @default(60)
+  maxAttempts     Int?
+  tags            String[]
+  isPublished     Boolean          @default(false)
+  status          TestStatus       @default(DRAFT)
+  aiPowered       Boolean          @default(false)
+  hasAIFeedback   Boolean          @default(false)
+  isOfficial      Boolean          @default(false)
+  image           String?
+  averageScore    Float            @default(0)
+  completionCount Int              @default(0)
+  createdById     String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  attempts        TestAttempt[]
+  questions       TestQuestion[]
+  createdBy       User             @relation("TestCreator", fields: [createdById], references: [id])
 
   @@index([isPublished, createdAt])
   @@index([status, createdAt])
@@ -249,12 +274,6 @@ model TestQuestion {
   order          Int
   level          CourseLevel
   category       CourseCategory
-  audioUrl       String?
-  videoUrl       String?
-  imageUrl       String?
-  allowPause     Boolean              @default(true)
-  allowRewind    Boolean              @default(true)
-  timeLimit      Int?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   answers        TestQuestionAnswer[]
@@ -264,28 +283,21 @@ model TestQuestion {
 }
 
 model TestAttempt {
-  id               String               @id @default(cuid())
-  userId           String
-  testId           String
-  status           TestAttemptStatus    @default(IN_PROGRESS)
-  startedAt        DateTime             @default(now())
-  completedAt      DateTime?
-  score            Float?
-  timeSpent        Int?
-  answers          Json?
-  feedback         String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  correctAnswers   Int?
-  duration         Int?
-  maxScore         Float?
-  metadata         Json?
-  percentage       Int?
-  timeRemaining    Int?
-  simulationResult SimulationResult?
-  test             Test                 @relation(fields: [testId], references: [id], onDelete: Cascade)
-  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questions        TestQuestionAnswer[]
+  id          String               @id @default(cuid())
+  userId      String
+  testId      String
+  status      TestAttemptStatus    @default(IN_PROGRESS)
+  startedAt   DateTime             @default(now())
+  completedAt DateTime?
+  score       Float?
+  timeSpent   Int?
+  answers     Json?
+  feedback    String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  test        Test                 @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions   TestQuestionAnswer[]
 
   @@map("test_attempts")
 }
@@ -307,33 +319,37 @@ model TestQuestionAnswer {
 }
 
 model LiveSession {
-  id              String                   @id @default(cuid())
-  title           String
-  titleEn         String?
-  description     String
-  descriptionEn   String?
-  instructor      String
-  coInstructors   String[]
-  date            DateTime
-  duration        Int
-  maxParticipants Int
-  price           Float                    @default(0)
-  currency        String                   @default("CFA")
-  requiredTier    SubscriptionTier         @default(FREE)
-  status          LiveSessionStatus        @default(SCHEDULED)
-  meetingUrl      String?
-  recordingUrl    String?
-  image           String?
-  tags            String[]
-  level           CourseLevel?
-  category        CourseCategory?
-  notifyFollowers Boolean                  @default(true)
-  createdById     String
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  participants    LiveSessionParticipant[]
-  createdBy       User                     @relation("LiveSessionCreator", fields: [createdById], references: [id])
-  reminders       SessionReminder[]
+  id               String                   @id @default(cuid())
+  title            String
+  titleEn          String?
+  description      String
+  descriptionEn    String?
+  instructor       String
+  coInstructors    String[]
+  date             DateTime
+  duration         Int
+  maxParticipants  Int
+  price            Float                    @default(0)
+  currency         String                   @default("CFA")
+  requiredTier     SubscriptionTier         @default(FREE)
+  status           LiveSessionStatus        @default(SCHEDULED)
+  meetingUrl       String?
+  recordingUrl     String?
+  image            String?
+  tags             String[]
+  level            CourseLevel?
+  category         CourseCategory?
+  notifyFollowers  Boolean                  @default(true)
+  createdById      String
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  expiresAt        DateTime?
+  invitedStudentId String?
+  isOneOnOne       Boolean                  @default(false)
+  secureToken      String?                  @unique
+  participants     LiveSessionParticipant[]
+  createdBy        User                     @relation("LiveSessionCreator", fields: [createdById], references: [id])
+  invitedStudent   User?                    @relation("InvitedToLiveSession", fields: [invitedStudentId], references: [id], onDelete: SetNull)
 
   @@map("live_sessions")
 }
@@ -351,66 +367,6 @@ model LiveSessionParticipant {
 
   @@unique([userId, liveSessionId])
   @@map("live_session_participants")
-}
-
-model SessionReminder {
-  id           String      @id @default(cuid())
-  userId       String
-  sessionId    String
-  reminderTime Int
-  reminderDate DateTime
-  emailSent    Boolean     @default(false)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  liveSession  LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, sessionId, reminderTime])
-  @@map("session_reminders")
-}
-
-model ReviewRequest {
-  id          String              @id @default(cuid())
-  studentId   String
-  tutorId     String
-  feedbackId  String?
-  message     String
-  status      ReviewRequestStatus @default(PENDING)
-  requestType String              @default("AI_FEEDBACK_REVIEW")
-  response    String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  feedback    AIFeedback?         @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
-  student     User                @relation("StudentReviewRequests", fields: [studentId], references: [id], onDelete: Cascade)
-  tutor       User                @relation("TutorReviewRequests", fields: [tutorId], references: [id], onDelete: Cascade)
-
-  @@map("review_requests")
-}
-
-model LevelAssessment {
-  id                    String   @id @default(cuid())
-  userId                String
-  simulationId          String?
-  testLevel             String
-  score                 Float
-  totalQuestions        Int
-  correctAnswers        Int
-  timeSpent             Int
-  determinedLevel       String
-  subLevel              Float
-  confidence            Float
-  strengths             String[]
-  weaknesses            String[]
-  recommendations       String[]
-  nextLevelRequirements String[]
-  estimatedTimeToNext   String
-  detailedAnalysis      Json
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  simulation            Test?    @relation(fields: [simulationId], references: [id], onDelete: Cascade)
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("level_assessments")
 }
 
 model Notification {
@@ -587,9 +543,9 @@ model Post {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   comments    Comment[]        @relation("PostComments")
-  likes       PostLike[]
-  shares      PostShare[]
   author      User             @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  likes       Like[]           @relation("PostLikes")
+  shares      Share[]          @relation("PostShares")
 
   @@map("posts")
 }
@@ -611,38 +567,17 @@ model Comment {
 }
 
 model Like {
-  id          String   @id @default(cuid())
-  userId      String
-  createdAt   DateTime @default(now())
-  contentId   String
-  contentType LikeType
-  user        User     @relation("UserLikes", fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String?
+  commentId String?
+  createdAt DateTime @default(now())
+  user      User     @relation("UserLikes", fields: [userId], references: [id], onDelete: Cascade)
+  post      Post?    @relation("PostLikes", fields: [postId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, contentId, contentType])
+  @@unique([userId, commentId])
+  @@unique([userId, postId])
   @@map("likes")
-}
-
-model PostLike {
-  id        String   @id @default(cuid())
-  postId    String
-  userId    String
-  createdAt DateTime @default(now())
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation("UserPostLikes", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([postId, userId])
-  @@map("post_likes")
-}
-
-model PostShare {
-  id        String   @id @default(cuid())
-  postId    String
-  userId    String
-  createdAt DateTime @default(now())
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation("UserPostShares", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("post_shares")
 }
 
 model Share {
@@ -651,6 +586,7 @@ model Share {
   postId    String
   platform  String?
   createdAt DateTime @default(now())
+  post      Post     @relation("PostShares", fields: [postId], references: [id], onDelete: Cascade)
 
   @@map("shares")
 }
@@ -671,13 +607,13 @@ model AuditLog {
 }
 
 model Simulation {
-  id                   String    @id @default(cuid())
+  id                   String            @id @default(cuid())
   userId               String
   type                 String
   level                String
   status               String
   currentSection       String?
-  currentQuestionIndex Int       @default(0)
+  currentQuestionIndex Int               @default(0)
   questions            String
   answers              String
   timeRemaining        Int
@@ -685,12 +621,40 @@ model Simulation {
   score                Int?
   percentage           Float?
   levelAchieved        String?
-  createdAt            DateTime  @default(now())
+  createdAt            DateTime          @default(now())
   startedAt            DateTime?
   completedAt          DateTime?
+  levelAssessments     LevelAssessment[]
 
   @@index([createdAt])
   @@map("simulations")
+}
+
+model LevelAssessment {
+  id                    String      @id @default(cuid())
+  userId                String
+  simulationId          String?
+  testLevel             String
+  score                 Int
+  totalQuestions        Int
+  correctAnswers        Int
+  timeSpent             Int
+  determinedLevel       String
+  subLevel              Int         @default(1)
+  confidence            Float
+  strengths             String[]
+  weaknesses            String[]
+  recommendations       String[]
+  nextLevelRequirements String[]
+  estimatedTimeToNext   String?
+  detailedAnalysis      Json?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  simulation            Simulation? @relation(fields: [simulationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([determinedLevel])
+  @@map("level_assessments")
 }
 
 model ImmigrationSimulation {
@@ -707,7 +671,6 @@ model ImmigrationSimulation {
   duration             Int
   finalScore           Int?
   finalReport          String?
-  voicePreference      String    @default("france_female_1")
   createdAt            DateTime  @default(now())
   startedAt            DateTime?
   completedAt          DateTime?
@@ -788,6 +751,7 @@ model VoiceSimulation {
   id                 String                @id @default(cuid())
   userId             String
   scheduledDate      DateTime
+  voicePreference    VoiceType             @default(FEMALE)
   status             VoiceSimulationStatus @default(SCHEDULED)
   vapiSessionId      String?
   questionsData      Json?
@@ -799,11 +763,11 @@ model VoiceSimulation {
   pronunciationScore Float?
   coherenceScore     Float?
   feedback           String?
-  duration           Int                   @default(420)
+  duration           Int                   @default(300)
   notificationSent   Boolean               @default(false)
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
-  voicePreference    String                @default("france_female_1")
+  aiFeedbacks        AIFeedback[]
 
   @@map("voice_simulations")
 }
@@ -837,25 +801,6 @@ model QuestionBank {
   updatedAt          DateTime         @updatedAt
 
   @@map("question_banks")
-}
-
-model QuestionBankEntry {
-  id            String   @id @default(cuid())
-  content       String
-  contentType   String
-  level         String
-  tags          String[]
-  isActive      Boolean  @default(true)
-  contentId     String?
-  extractedText String?
-  aiAnalysis    Json?
-  documentUrl   String?
-  documentType  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([contentId])
-  @@map("question_bank_entries")
 }
 
 model Certificate {
@@ -972,137 +917,112 @@ model blacklisted_tokens {
   @@index([userId, expiresAt])
 }
 
-model SimulationResult {
-  id              String       @id @default(cuid())
-  userId          String
-  testAttemptId   String       @unique
-  simulationTitle String
-  totalScore      Int
-  maxScore        Int
-  percentage      Int
-  grade           String
-  level           String
-  timeSpent       Int
-  completedAt     DateTime     @default(now())
-  sections        Json
-  overallFeedback String
-  strengths       Json
-  weaknesses      Json
-  recommendations Json
-  certificateUrl  String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  aiFeedbacks     AIFeedback[]
-  testAttempt     TestAttempt  @relation(fields: [testAttemptId], references: [id], onDelete: Cascade)
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, completedAt])
-  @@index([percentage])
-  @@map("simulation_results")
-}
-
-model AIFeedback {
-  id                 String            @id @default(cuid())
-  userId             String
-  simulationResultId String?
-  submissionType     String
-  submissionContent  String?
-  submissionFileUrl  String?
-  aiScore            Int
-  maxScore           Int               @default(100)
-  aiConfidence       Float
-  overallFeedback    String
-  strengths          Json
-  weaknesses         Json
-  recommendations    Json
-  detailedAnalysis   Json
-  status             String            @default("AI_COMPLETED")
-  humanReviewerId    String?
-  humanReviewerName  String?
-  humanFeedback      String?
-  humanScore         Int?
-  humanReviewDate    DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  simulationResult   SimulationResult? @relation(fields: [simulationResultId], references: [id])
-  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewRequests     ReviewRequest[]
-
-  @@index([userId, createdAt])
-  @@index([status])
-  @@map("ai_feedbacks")
-}
-
-model Message {
-  id          String    @id @default(cuid())
-  senderId    String
-  receiverId  String
-  subject     String?
-  content     String
-  isRead      Boolean   @default(false)
-  parentId    String?
-  attachments Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  parent      Message?  @relation("MessageThread", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  replies     Message[] @relation("MessageThread")
-  receiver    User      @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
-  sender      User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-
-  @@index([senderId, createdAt])
-  @@index([receiverId, isRead])
-  @@index([parentId])
-  @@map("messages")
-}
-
-model StudySession {
-  id         String    @id @default(cuid())
-  userId     String
-  startTime  DateTime
-  endTime    DateTime?
-  duration   Int?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  targetTime Int?
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, startTime])
-  @@index([startTime])
-  @@map("study_sessions")
-}
-
 model ChatSession {
   id        String        @id @default(cuid())
   userId    String
   title     String?
+  context   Json?
   isActive  Boolean       @default(true)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+  user      User          @relation("UserChatSessions", fields: [userId], references: [id], onDelete: Cascade)
   messages  ChatMessage[]
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([userId, isActive])
   @@map("chat_sessions")
 }
 
 model ChatMessage {
   id         String      @id @default(cuid())
   sessionId  String
-  role       String
+  role       MessageRole
   content    String
-  sources    Json?
-  confidence Float?
   metadata   Json?
   createdAt  DateTime    @default(now())
+  confidence Float?
+  sources    String[]
   session    ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
   @@map("chat_messages")
 }
 
-enum LikeType {
-  POST
-  COMMENT
+model AIFeedback {
+  id                String           @id @default(cuid())
+  userId            String
+  voiceSimulationId String?
+  submissionType    String
+  submissionContent String?
+  submissionFileUrl String?
+  aiScore           Float?
+  aiConfidence      Float?
+  overallFeedback   String?
+  strengths         String[]
+  weaknesses        String[]
+  recommendations   String[]
+  status            FeedbackStatus   @default(AI_COMPLETED)
+  humanReviewerId   String?
+  humanReviewerName String?
+  humanScore        Float?
+  humanFeedback     String?
+  humanReviewDate   DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  user              User             @relation("UserAIFeedback", fields: [userId], references: [id], onDelete: Cascade)
+  voiceSimulation   VoiceSimulation? @relation(fields: [voiceSimulationId], references: [id], onDelete: SetNull)
+  humanReviewer     User?            @relation("HumanReviewer", fields: [humanReviewerId], references: [id], onDelete: SetNull)
+
+  @@index([humanReviewerId, status])
+  @@index([status, createdAt])
+  @@index([userId, status])
+  @@map("ai_feedbacks")
+}
+
+model Challenge {
+  id            String    @id @default(cuid())
+  titleFr       String
+  titleEn       String
+  descriptionFr String
+  descriptionEn String
+  rewardFr      String
+  rewardEn      String
+  difficulty    String
+  duration      String
+  xpReward      Int       @default(50)
+  badgeReward   String?
+  category      String
+  isActive      Boolean   @default(true)
+  isDaily       Boolean   @default(false)
+  availableDate DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([isActive, isDaily, category])
+  @@index([availableDate])
+  @@map("challenges")
+}
+
+model UserDailyGoal {
+  id           String    @id @default(cuid())
+  userId       String
+  title        String
+  description  String?
+  targetValue  Int
+  currentValue Int       @default(0)
+  unit         String    @default("minutes")
+  xpReward     Int       @default(50)
+  isCompleted  Boolean   @default(false)
+  completedAt  DateTime?
+  targetDate   DateTime
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+  user         User      @relation("UserDailyGoals", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetDate])
+  @@index([userId, targetDate, isCompleted])
+  @@index([targetDate])
+  @@map("user_daily_goals")
 }
 
 enum UserRole {
@@ -1117,6 +1037,8 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
   PENDING
+  ONLINE
+  OFFLINE
 }
 
 enum SubscriptionTier {
@@ -1269,10 +1191,67 @@ enum ApprovalStatus {
   CANCELLED
 }
 
-enum ReviewRequestStatus {
+enum FeedbackStatus {
+  AI_COMPLETED
+  PENDING_HUMAN
+  HUMAN_COMPLETED
+  CANCELLED
+}
+
+enum MarketplaceRequestStatus {
   PENDING
   ACCEPTED
-  REJECTED
+  DECLINED
   COMPLETED
   CANCELLED
+}
+
+enum MarketplaceRequestType {
+  SESSION
+  MESSAGE
+  EXPERTISE
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model MarketplaceRequest {
+  id            String                   @id @default(cuid())
+  studentId     String
+  tutorId       String
+  requestType   MarketplaceRequestType
+  subject       String
+  description   String
+  urgency       UrgencyLevel             @default(MEDIUM)
+  status        MarketplaceRequestStatus @default(PENDING)
+  requestedDate DateTime?
+  completedDate DateTime?
+  feedbackId    String? // Link to AIFeedback if requestType is EXPERTISE
+  response      String? // Tutor's response/notes
+  metadata      Json? // Additional data (e.g., session details, message thread)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  student User @relation("StudentRequests", fields: [studentId], references: [id], onDelete: Cascade)
+  tutor   User @relation("TutorRequests", fields: [tutorId], references: [id], onDelete: Cascade)
+
+  @@index([tutorId, status])
+  @@index([studentId, status])
+  @@index([status, createdAt])
+  @@index([requestType, status])
+  @@map("marketplace_requests")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum VoiceType {
+  MALE
+  FEMALE
 }

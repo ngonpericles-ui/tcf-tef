@@ -23,6 +23,7 @@ export interface CreateSubscriptionData {
     paymentMethodId: string;
 }
 export declare class PaymentService {
+    private static isStripeConfigured;
     static getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
     static createCoursePaymentIntent(data: CreatePaymentIntentData, userId: string): Promise<PaymentIntentResponse>;
     static createSubscriptionPaymentIntent(tier: string, billingCycle: string, userId: string): Promise<{

@@ -48,7 +48,7 @@ export class AiChatService {
       await prisma.chatMessage.create({
         data: {
           sessionId: session.id,
-          role: 'user',
+          role: 'USER',
           content: message,
           metadata: { context }
         }
@@ -69,7 +69,7 @@ export class AiChatService {
       await prisma.chatMessage.create({
         data: {
           sessionId: session.id,
-          role: 'assistant',
+          role: 'ASSISTANT',
           content: aiResponse.message,
           sources: aiResponse.sources,
           confidence: aiResponse.confidence,

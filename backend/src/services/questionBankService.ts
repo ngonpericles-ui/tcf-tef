@@ -427,11 +427,11 @@ class QuestionBankService {
   // Search questions by keywords
   async searchQuestions(query: string, limit: number = 5): Promise<any[]> {
     try {
-      const questions = await prisma.questionBankEntry.findMany({
+      const questions = await prisma.questionBank.findMany({
         where: {
           OR: [
-            { content: { contains: query, mode: 'insensitive' } },
-            { extractedText: { contains: query, mode: 'insensitive' } },
+            { title: { contains: query, mode: 'insensitive' } },
+            { description: { contains: query, mode: 'insensitive' } },
             { level: { contains: query, mode: 'insensitive' } }
           ],
           isActive: true

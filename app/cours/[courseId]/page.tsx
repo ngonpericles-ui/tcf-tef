@@ -36,11 +36,25 @@ import {
   Lightbulb,
   Bookmark,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  Bot,
+  User,
+  Copy,
+  CheckCircle2,
+  Zap,
+  FileText,
+  HelpCircle,
+  X,
+  CheckCircle,
+  ChevronRight,
+  ChevronDown,
+  ExternalLink,
+  Globe
 } from "lucide-react"
 import { useLang } from "@/components/language-provider"
 import { apiClient } from "@/lib/api-client"
 import { type Course } from "@/components/course-data"
+import { toast } from "sonner"
 
 export default function CourseMediaPage() {
   const params = useParams()
@@ -67,6 +81,7 @@ export default function CourseMediaPage() {
   // ALL STATE DECLARATIONS MUST BE BEFORE ANY CONDITIONAL RETURNS
   const [course, setCourse] = useState<Course | null>(null)
   const [loading, setLoading] = useState(true)
+  const [videoLoading, setVideoLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentLesson, setCurrentLesson] = useState<any>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -89,92 +104,39 @@ export default function CourseMediaPage() {
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [transcription, setTranscription] = useState<string>("")
   const [showTranscription, setShowTranscription] = useState(false)
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['main']))
+  const [showNotes, setShowNotes] = useState(false)
 
-  // NOW WE CAN DO CONDITIONAL RETURNS
-  // Add loading state check
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center text-gray-900">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <h1 className="text-2xl font-bold mb-4 text-gray-900">Chargement du cours...</h1>
-          <p className="text-gray-600">Veuillez patienter pendant que nous chargeons le contenu.</p>
-        </div>
-      </div>
-    )
-  }
+  // Removed early returns - they violate React rules of hooks
+  // Loading/error checks are now at the end of the component
+  // Removed early return for !course - violates React rules of hooks
 
-  // Add error state check
-  if (error) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center text-gray-900">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-600 text-2xl">⚠️</span>
-          </div>
-          <h1 className="text-2xl font-bold mb-4 text-gray-900">Erreur de chargement</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <div className="flex gap-4 justify-center">
-            <Button onClick={() => window.location.reload()} className="bg-blue-600 hover:bg-blue-700 text-white">
-              Réessayer
-            </Button>
-            <Button onClick={() => router.push('/cours')} className="bg-gray-600 hover:bg-gray-700 text-white">
-              Retour aux cours
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Add course not found check
-  if (!course) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center text-gray-900">
-          <h1 className="text-2xl font-bold mb-4 text-gray-900">Cours non trouvé</h1>
-          <p className="text-gray-600 mb-6">Le cours demandé n'existe pas ou a été supprimé.</p>
-          <Button onClick={() => router.push('/cours')} className="bg-red-600 hover:bg-red-700 text-white">
-            Retour aux cours
-          </Button>
-        </div>
-      </div>
-    )
-  }
-  
   const videoRef = useRef<HTMLVideoElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
 
+  // Format time display helper
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00'
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
   // Fetch transcription for video
   const fetchTranscription = async (videoUrl: string) => {
-    if (!isAuthenticated) {
-      console.log('❌ Cannot fetch transcription: not authenticated')
-      setTranscription(t("Veuillez vous connecter pour utiliser la transcription.", "Please log in to use transcription."))
-      return
-    }
-    
+    // Always try to fetch transcription - the backend will handle authentication
+    // Don't block on frontend authentication check
     try {
       console.log('🎤 Fetching transcription for video:', videoUrl)
+      console.log('🔑 User authenticated:', isAuthenticated, 'User:', user)
       
-      // Create better context for transcription
-      const transcriptionContext = `
-        Vidéo: ${videoUrl}
-        Leçon: ${currentLesson?.title || ''}
-        Cours: ${course?.title || ''}
-        Type: Vidéo éducative de français
-        Niveau: ${course?.level || 'A1'}
-        Durée: ${course?.duration || '60 minutes'}
-        
-        Cette vidéo fait partie d'une leçon de français sur le thème "${currentLesson?.title || ''}".
-        Le contenu est adapté pour l'apprentissage du français et couvre les aspects linguistiques,
-        culturels et pédagogiques nécessaires à la maîtrise de la langue.
-      `
-      
-      // Call the backend transcription API
+      // Call the backend transcription API with video URL
+      // Backend will handle authentication properly
       const response = await apiClient.generateTranscription(
-        transcriptionContext,
+        videoUrl, // Use actual video URL, not context
         currentLesson?.title || '',
         course?.title || ''
       )
@@ -186,15 +148,32 @@ export default function CourseMediaPage() {
         setTranscription(transcriptionText)
         console.log('✅ Transcription received:', transcriptionText)
       } else {
-        throw new Error('Transcription service returned unsuccessful response')
+        // If transcription fails, show helpful message but don't block
+        const errorMsg = (response as any).error?.message || 'Transcription service returned unsuccessful response'
+        console.warn('⚠️ Transcription failed:', errorMsg)
+        setTranscription(t(
+          "La transcription n'est pas disponible pour le moment. Veuillez réessayer plus tard.",
+          "Transcription is not available at the moment. Please try again later."
+        ))
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error fetching transcription:', error)
-      // Show error message instead of mock transcription
+      // Show helpful error message
+      const errorMsg = error?.response?.data?.error?.message || error?.message || 'Unknown error'
+      console.error('❌ Transcription error details:', errorMsg)
+      
+      // Don't show authentication error if user is authenticated
+      if (errorMsg.includes('authenticated') || errorMsg.includes('authentication')) {
+        setTranscription(t(
+          "Erreur d'authentification. Veuillez vous reconnecter.",
+          "Authentication error. Please log in again."
+        ))
+      } else {
       setTranscription(t(
         "Erreur lors du chargement de la transcription. Veuillez réessayer.",
         "Error loading transcription. Please try again."
       ))
+      }
     }
   }
 
@@ -227,7 +206,17 @@ export default function CourseMediaPage() {
             level: courseData.level,
             requiredTier: (courseData.requiredTier || courseData.subscriptionTier || 'FREE').toLowerCase() as 'free' | 'essential' | 'premium' | 'pro',
             type: courseData.category?.toLowerCase() || 'grammar',
-            duration: courseData.duration ? `${courseData.duration} min` : '0 min',
+            // Duration is stored in minutes, format it properly
+            duration: courseData.duration ? (() => {
+              const durationMinutes = typeof courseData.duration === 'number' ? courseData.duration : parseInt(courseData.duration) || 0;
+              // If duration is suspiciously large (likely in seconds), convert it
+              if (durationMinutes > 1000) {
+                // Likely stored in seconds, convert to minutes
+                const actualMinutes = Math.round(durationMinutes / 60);
+                return `${actualMinutes} min`;
+              }
+              return `${durationMinutes} min`;
+            })() : '0 min',
             lessons: courseData.lessons || 1,
             progress: 0,
             image: courseData.image || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&h=450&fit=crop&q=80",
@@ -262,6 +251,7 @@ export default function CourseMediaPage() {
           console.log('📚 Content URL:', selectedLesson?.content)
 
           setCurrentLesson(selectedLesson)
+          setSelectedLessonId(selectedLesson.id)
 
           // Fetch transcription if available
           if (videoLesson?.videoUrl) {
@@ -374,6 +364,7 @@ export default function CourseMediaPage() {
     if (!video || !currentLesson) return
 
     setSelectedResolution(resolution)
+    setVideoLoading(true)
     
     if (resolution === 'auto') {
       video.src = currentLesson.videoUrl
@@ -384,8 +375,16 @@ export default function CourseMediaPage() {
       }
     }
     
-    // Reload the video with new source
+    // Reload the video with new source and wait for metadata
     video.load()
+    
+    // Wait for metadata to update duration
+    video.addEventListener('loadedmetadata', () => {
+      if (video) {
+        setTotalDuration(video.duration)
+        setVideoLoading(false)
+      }
+    }, { once: true })
   }
 
   // AI Features
@@ -596,53 +595,66 @@ export default function CourseMediaPage() {
     )
   }
 
+  // Group lessons for navigation sidebar
+  const groupedLessons = course?.lessonsData?.reduce((acc: any, lesson: any) => {
+    const section = 'Course Content'
+    if (!acc[section]) {
+      acc[section] = []
+    }
+    acc[section].push(lesson)
+    return acc
+  }, {}) || {}
+
+  // Handle lesson selection
+  const handleLessonSelect = (lesson: any) => {
+    setCurrentLesson(lesson)
+    setSelectedLessonId(lesson.id)
+    if (lesson.videoUrl) {
+      fetchTranscription(lesson.videoUrl)
+    }
+  }
+
   return (
-    <div 
-      className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900"
-      onContextMenu={(e) => e.preventDefault()}
-      onDragStart={(e) => e.preventDefault()}
-      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
-    >
-      {/* Netflix-Style Header */}
-      <div className="bg-gradient-to-b from-black/90 via-black/50 to-transparent backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+    <div className="min-h-screen bg-white dark:bg-gray-900 flex flex-col">
+      {/* Coursera-Style Header */}
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50 shadow-sm">
+        <div className="px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={() => router.push('/cours')}
-                className="text-white hover:bg-white/20 transition-all duration-200 rounded-full p-2"
+                className="text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                {t("Retour", "Back")}
               </Button>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center shadow-lg">
-                  <BookOpen className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-semibold text-white truncate max-w-md">
-                    {lang === "fr" ? (course.title || course.titleEn) : (course.titleEn || course.title)}
-                  </h1>
-                  <p className="text-sm text-white/80 truncate max-w-md">{currentLesson.title}</p>
-                </div>
+              {/* Breadcrumbs */}
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <span className="hover:text-gray-900 dark:hover:text-white cursor-pointer">{t("Cours", "Courses")}</span>
+                <ChevronRight className="h-4 w-4" />
+                <span className="text-gray-900 dark:text-white font-medium">{course?.title || ''}</span>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Badge className="bg-red-600 text-white border-0 text-xs font-medium px-2 py-1">
-                  {course.level}
-                </Badge>
-                <span className="text-white/80 text-sm">{course.duration}</span>
-              </div>
               <Button
-                variant="outline"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowNotes(!showNotes)}
+                className="text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <Bookmark className="h-4 w-4 mr-2" />
+                {t("Notes", "Notes")}
+              </Button>
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={() => setShowAiPanel(!showAiPanel)}
-                className={`transition-all duration-200 rounded-full px-4 py-2 ${
+                className={`transition-all ${
                   showAiPanel 
-                    ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
-                    : 'bg-white/10 border-white/30 text-white hover:bg-white/20'
+                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' 
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}
               >
                 <Brain className="h-4 w-4 mr-2" />
@@ -651,25 +663,151 @@ export default function CourseMediaPage() {
             </div>
           </div>
         </div>
+      </header>
+
+      {/* Coursera-Style Three Column Layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar - Course Navigation (Coursera Style) */}
+        <aside className="w-80 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto flex-shrink-0">
+          <div className="p-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              {t("Navigation du cours", "Course Navigation")}
+            </h2>
+            
+            {/* Course Introduction */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                {course?.title || ''}
+              </h3>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-          {/* Main Video Player - Netflix/YouTube Style */}
-          <div className="xl:col-span-3 min-w-0">
-            <div className="relative group">
-              <div
-                className="relative bg-black rounded-2xl overflow-hidden shadow-2xl aspect-video w-full"
+            {/* Lessons List */}
+            <nav className="space-y-1">
+              {Object.entries(groupedLessons).map(([section, lessons]: [string, any]) => (
+                <div key={section} className="mb-4">
+                  <button
+                    onClick={() => {
+                      const newExpanded = new Set(expandedSections)
+                      if (newExpanded.has(section)) {
+                        newExpanded.delete(section)
+                      } else {
+                        newExpanded.add(section)
+                      }
+                      setExpandedSections(newExpanded)
+                    }}
+                    className="flex items-center justify-between w-full text-left text-sm font-semibold text-gray-900 dark:text-white mb-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  >
+                    <span>{section}</span>
+                    {expandedSections.has(section) ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                  
+                  {expandedSections.has(section) && (
+                    <div className="ml-4 space-y-1">
+                      {lessons.map((lesson: any, index: number) => (
+                        <button
+                          key={lesson.id}
+                          onClick={() => handleLessonSelect(lesson)}
+                          className={`w-full text-left flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                            selectedLessonId === lesson.id
+                              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          }`}
+                        >
+                          <div className="flex-shrink-0">
+                            {lesson.videoUrl ? (
+                              <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              </div>
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                                <FileText className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium mb-0.5 text-gray-500 dark:text-gray-400">
+                              {lesson.videoUrl ? t("Vidéo", "Video") : t("Lecture", "Reading")}
+                            </div>
+                            <div className="text-sm font-medium truncate">{lesson.title}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {lesson.duration ? formatTime(lesson.duration * 60) : '0 min'}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        {/* Center Column - Video Player (Coursera Style) */}
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+          <div className="max-w-5xl mx-auto p-6">
+            {/* Lesson Title */}
+            <div className="mb-4">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                {currentLesson?.title || course?.title || ''}
+              </h1>
+            </div>
+
+            {/* Video Player - Coursera Style */}
+            <div className="mb-6">
+              <div className="relative bg-black rounded-lg overflow-hidden shadow-lg aspect-video w-full">
+                <div
+                  className="relative w-full h-full"
                 onMouseEnter={() => setShowControls(true)}
                 onMouseLeave={() => setShowControls(false)}
               >
                   {currentLesson.videoUrl && currentLesson.videoUrl.trim() !== '' ? (
-                    <UniversalContentViewer
-                      url={currentLesson.videoUrl}
-                      title={currentLesson.title}
-                      className="w-full h-full"
-                      allowDownload={false}
-                    />
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={currentLesson.videoUrl}
+                        className="w-full h-full object-contain bg-black"
+                        onLoadedMetadata={() => {
+                          const video = videoRef.current
+                          if (video) {
+                            setTotalDuration(video.duration)
+                            detectAvailableResolutions()
+                            setVideoLoading(false)
+                          }
+                        }}
+                        onTimeUpdate={() => {
+                          const video = videoRef.current
+                          if (video) {
+                            setCurrentTime(video.currentTime)
+                          }
+                        }}
+                        onPlay={() => setIsPlaying(true)}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={() => setIsPlaying(false)}
+                        onWaiting={() => setVideoLoading(true)}
+                        onCanPlay={() => setVideoLoading(false)}
+                        onError={(e) => {
+                          console.error('Video error:', e)
+                          setError('Failed to load video')
+                          setVideoLoading(false)
+                        }}
+                        playsInline
+                        preload="metadata"
+                        crossOrigin="anonymous"
+                      />
+                      {videoLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                          <div className="text-center">
+                            <Loader2 className="h-12 w-12 animate-spin text-white mx-auto mb-4" />
+                            <p className="text-white text-sm">{t("Chargement de la vidéo...", "Loading video...")}</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   ) : currentLesson.content ? (
                     <UniversalContentViewer
                       url={currentLesson.content}
@@ -693,49 +831,35 @@ export default function CourseMediaPage() {
                     </div>
                   )}
 
-                {/* Netflix/YouTube Style Controls */}
-                {currentLesson.videoUrl && currentLesson.videoUrl.trim() !== '' && showControls && (
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30 flex flex-col justify-between p-6 transition-opacity duration-300">
-                    {/* Top Controls */}
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                        <Badge className="bg-red-600 text-white border-0">
-                          {course.level}
-                        </Badge>
-                        <span className="text-white/80 text-sm">{course.duration}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="text-white hover:bg-white/20 transition-all"
-                          onClick={toggleFullscreen}
-                        >
-                          {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Center Play Button */}
-                    <div className="flex items-center justify-center">
+                {/* Coursera-Style Video Controls */}
+                {currentLesson.videoUrl && currentLesson.videoUrl.trim() !== '' && (
+                  <>
+                    {/* Center Play Button (when paused) */}
+                    {!isPlaying && (
+                      <div className="absolute inset-0 flex items-center justify-center">
                       <Button
                         size="lg"
                         variant="ghost"
-                        className="text-white hover:bg-white/20 h-20 w-20 rounded-full transition-all duration-200 hover:scale-110"
+                          className="text-white hover:bg-white/10 h-16 w-16 rounded-full bg-black/50 backdrop-blur-sm"
                         onClick={togglePlay}
                       >
-                        {isPlaying ? <Pause className="h-10 w-10" /> : <Play className="h-10 w-10 ml-1" />}
+                          <Play className="h-8 w-8 ml-1" />
                       </Button>
                     </div>
+                    )}
 
                     {/* Bottom Controls */}
-                    <div className="space-y-4">
+                    {showControls && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
                       {/* Progress Bar */}
+                        <div className="px-4 py-2">
                       <div className="flex items-center gap-3">
-                        <span className="text-white text-sm font-mono">
-                          {Math.floor(currentTime / 60)}:{(currentTime % 60).toFixed(0).padStart(2, '0')}
+                            <span className="text-white text-sm font-medium">
+                              {formatTime(currentTime)}
                         </span>
-                        <div className="flex-1 bg-white/20 rounded-full h-1 cursor-pointer group" onClick={(e) => {
+                            <div 
+                              className="flex-1 bg-gray-600 rounded-full h-1 cursor-pointer group relative" 
+                              onClick={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect()
                           const x = e.clientX - rect.left
                           const percentage = x / rect.width
@@ -744,32 +868,38 @@ export default function CourseMediaPage() {
                             videoRef.current.currentTime = newTime
                             setCurrentTime(newTime)
                           }
-                        }}>
+                              }}
+                            >
                           <div 
-                            className="bg-white rounded-full h-1 transition-all duration-200 group-hover:h-2"
-                            style={{ width: `${(currentTime / totalDuration) * 100}%` }}
+                                className="bg-blue-500 rounded-full h-1 transition-all duration-200 group-hover:h-2"
+                                style={{ width: `${totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0}%` }}
                           />
                         </div>
-                        <span className="text-white text-sm font-mono">
-                          {Math.floor(totalDuration / 60)}:{(totalDuration % 60).toFixed(0).padStart(2, '0')}
+                            <span className="text-white text-sm font-medium">
+                              {formatTime(totalDuration)}
                         </span>
+                          </div>
                       </div>
 
-                      {/* Control Buttons */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 transition-all">
-                            <SkipBack className="w-4 h-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 transition-all" onClick={togglePlay}>
-                            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                          </Button>
-                          <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 transition-all">
-                            <SkipForward className="w-4 h-4" />
+                        {/* Control Bar */}
+                        <div className="px-4 py-3 flex items-center justify-between bg-black/70">
+                          <div className="flex items-center gap-3">
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="text-white hover:bg-white/10 h-8 w-8 p-0"
+                              onClick={togglePlay}
+                            >
+                              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                           </Button>
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 transition-all" onClick={toggleMute}>
-                              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="text-white hover:bg-white/10 h-8 w-8 p-0"
+                                onClick={toggleMute}
+                              >
+                                {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                             </Button>
                             <input
                               type="range"
@@ -778,23 +908,20 @@ export default function CourseMediaPage() {
                               step="0.1"
                               value={volume}
                               onChange={(e) => changeVolume(Number(e.target.value))}
-                              className="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+                                className="w-16 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
                               style={{
-                                background: `linear-gradient(to right, #ef4444 0%, #ef4444 ${volume * 100}%, rgba(255,255,255,0.2) ${volume * 100}%, rgba(255,255,255,0.2) 100%)`,
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${volume * 100}%, #4b5563 ${volume * 100}%, #4b5563 100%)`,
                                 WebkitAppearance: 'none',
                                 outline: 'none'
                               }}
                             />
-                            <span className="text-white text-xs font-mono w-8">
-                              {Math.round(volume * 100)}%
-                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
                           <select 
                             value={playbackRate} 
                             onChange={(e) => changePlaybackRate(Number(e.target.value))}
-                            className="bg-black/50 text-white text-sm border border-white/20 rounded-lg px-3 py-1 backdrop-blur-sm"
+                              className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1"
                           >
                             <option value={0.5}>0.5x</option>
                             <option value={0.75}>0.75x</option>
@@ -807,55 +934,129 @@ export default function CourseMediaPage() {
                             <select 
                               value={selectedResolution} 
                               onChange={(e) => changeResolution(e.target.value)}
-                              className="bg-black/50 text-white text-sm border border-white/20 rounded-lg px-3 py-1 backdrop-blur-sm"
+                                className="bg-gray-800 text-white text-xs border border-gray-600 rounded px-2 py-1"
                             >
                               {availableResolutions.map((res) => (
                                 <option key={res.value} value={res.value}>{res.label}</option>
                               ))}
                             </select>
                           )}
-                          <Button size="sm" variant="ghost" className="text-white hover:bg-white/20 transition-all">
-                            <Settings className="w-4 h-4" />
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="text-white hover:bg-white/10 h-8 w-8 p-0"
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="text-white hover:bg-white/10 h-8 w-8 p-0"
+                              onClick={toggleFullscreen}
+                            >
+                              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                      </div>
+                    )}
+                  </>
                 )}
+                </div>
               </div>
             </div>
 
-            {/* Course Information - Spotify/Netflix Style */}
-            <div className="mt-8 space-y-6">
+            {/* Action Buttons - Coursera Style */}
+            {currentLesson.videoUrl && currentLesson.videoUrl.trim() !== '' && (
+              <div className="mb-6 flex items-center gap-3">
+                <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
+                  <Bookmark className="h-4 w-4 mr-2" />
+                  {t("Enregistrer une note", "Save Note")}
+                </Button>
+                <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  {t("Discuter", "Discuss")}
+                </Button>
+                <Button variant="outline" size="sm" className="border-gray-300 dark:border-gray-600">
+                  <Download className="h-4 w-4 mr-2" />
+                  {t("Télécharger", "Download")}
+                </Button>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button variant="ghost" size="sm" className="text-gray-600 dark:text-gray-300">
+                    <ThumbsUp className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-gray-600 dark:text-gray-300">
+                    <ThumbsDown className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-gray-600 dark:text-gray-300">
+                    <Bookmark className="h-4 w-4" />
+                  </Button>
+                    </div>
+                  </div>
+                )}
+
+            {/* Transcript Section - Coursera Style */}
+            {currentLesson.videoUrl && currentLesson.videoUrl.trim() !== '' && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {t("Transcription", "Transcript")}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <select className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-800">
+                      <option>{t("Français", "French")}</option>
+                      <option>{t("Anglais", "English")}</option>
+                    </select>
+                    <Button variant="ghost" size="sm" className="text-blue-600 dark:text-blue-400">
+                      {t("Aider à traduire", "Help Us Translate")}
+                    </Button>
+              </div>
+            </div>
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-64 overflow-y-auto">
+                  {transcription ? (
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
+                      {transcription}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                      {t("Transcription en cours de génération...", "Transcription is being generated...")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Course Information - Coursera Style */}
+            <div className="space-y-4">
               {/* Course Title & Description */}
               <div className="space-y-4">
-                <h2 className="text-3xl font-bold text-white">
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
                   {lang === "fr" ? (course.title || course.titleEn) : (course.titleEn || course.title)}
                 </h2>
-                <p className="text-white/80 text-lg leading-relaxed">
+                <p className="text-gray-600 dark:text-gray-300 text-lg leading-relaxed">
                   {lang === "fr" ? (course.description || course.descriptionEn) : (course.descriptionEn || course.description)}
                 </p>
               </div>
 
-              {/* Course Stats - Netflix Style */}
+              {/* Course Stats - Clean Style */}
               <div className="flex items-center gap-8">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center">
                     {[...Array(5)].map((_, i) => (
-                      <Star key={i} className={`h-4 w-4 ${i < Math.floor(course.rating || 0) ? 'text-yellow-400 fill-current' : 'text-white/30'}`} />
+                      <Star key={i} className={`h-4 w-4 ${i < Math.floor(course.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300 dark:text-gray-600'}`} />
                     ))}
                   </div>
-                  <span className="text-white/80 text-sm">{(course.rating || 0).toFixed(1)}/5</span>
+                  <span className="text-gray-600 dark:text-gray-300 text-sm">{(course.rating || 0).toFixed(1)}/5</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/80">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <Clock className="h-4 w-4" />
                   <span>{course.duration}</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/80">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <Users className="h-4 w-4" />
                   <span>{course.enrolledCount} {t("étudiants", "students")}</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/80">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
                   <BookOpen className="h-4 w-4" />
                   <span>{course.lessons} {t("leçons", "lessons")}</span>
                 </div>
@@ -864,7 +1065,7 @@ export default function CourseMediaPage() {
               {/* Course Tags */}
               <div className="flex flex-wrap gap-2">
                 {course.tags.map((tag, index) => (
-                  <Badge key={index} variant="secondary" className="bg-white/10 text-white border-white/20 hover:bg-white/20 transition-all">
+                  <Badge key={index} variant="secondary" className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all">
                     {tag}
                   </Badge>
                 ))}
@@ -874,7 +1075,7 @@ export default function CourseMediaPage() {
               {currentLesson.videoUrl && currentLesson.videoUrl.trim() !== '' && (
                 <div className="mt-8">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                       <BookOpen className="h-5 w-5" />
                       {t("Transcription", "Transcription")}
                     </h3>
@@ -882,20 +1083,20 @@ export default function CourseMediaPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setShowTranscription(!showTranscription)}
-                      className="bg-white/10 border-white/20 text-white hover:bg-white/20 transition-all"
+                      className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
                     >
                       {showTranscription ? t("Masquer", "Hide") : t("Afficher", "Show")}
                     </Button>
                   </div>
                   
                   {showTranscription && (
-                    <div className="bg-white/5 backdrop-blur-md rounded-xl border border-white/10 p-6">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
                       {transcription ? (
                         <div className="space-y-4">
-                          <p className="text-white/90 leading-relaxed whitespace-pre-line">
+                          <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
                             {transcription}
                           </p>
-                          <div className="flex items-center gap-2 text-white/60 text-sm">
+                          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm">
                             <Clock className="h-4 w-4" />
                             <span>{t("Transcription automatique", "Auto-generated transcription")}</span>
                           </div>
@@ -905,7 +1106,7 @@ export default function CourseMediaPage() {
                           <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
                             <BookOpen className="h-6 w-6 text-white" />
                           </div>
-                          <p className="text-white/80">{t("Transcription en cours de génération...", "Transcription is being generated...")}</p>
+                          <p className="text-gray-600 dark:text-gray-400">{t("Transcription en cours de génération...", "Transcription is being generated...")}</p>
                         </div>
                       )}
                     </div>
@@ -914,150 +1115,374 @@ export default function CourseMediaPage() {
               )}
             </div>
           </div>
+        </main>
 
-          {/* AI Panel - Modern Design */}
+        {/* Right Sidebar - Notes/AI Panel (Coursera Style) */}
           {showAiPanel && (
-            <div className="xl:col-span-1 min-w-[320px] max-w-[400px]">
-              <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-6 h-fit sticky top-24">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                    <Brain className="h-5 w-5 text-white" />
+          <aside className="w-80 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-y-auto flex-shrink-0">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {t("Notes", "Notes")}
+                </h2>
+                <Button variant="ghost" size="sm" className="text-blue-600 dark:text-blue-400">
+                  {t("Toutes les notes", "All notes")}
+                  <ExternalLink className="h-3 w-3 ml-1" />
+                </Button>
                   </div>
-                  <h3 className="text-lg font-semibold text-white">{t("Assistant IA", "AI Assistant")}</h3>
+              
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                    <Bookmark className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {t("Enregistrer une note", "Save Note")}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {t("Cliquez sur le bouton pour capturer une capture d'écran.", "Click the button to capture a screenshot.")}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                    <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {t("Ajouter vos propres notes", "Add your own notes")}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {t("Vous pouvez également surligner et enregistrer des lignes de la transcription ci-dessous.", "You can also highlight and save lines from the transcript below.")}
+                    </p>
+                  </div>
+                </div>
                 </div>
 
-                <Tabs defaultValue="chat" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-3 bg-white/10 border-white/20">
-                    <TabsTrigger value="chat" className="text-white data-[state=active]:bg-white/20">{t("Chat", "Chat")}</TabsTrigger>
-                    <TabsTrigger value="notes" className="text-white data-[state=active]:bg-white/20">{t("Notes", "Notes")}</TabsTrigger>
-                    <TabsTrigger value="questions" className="text-white data-[state=active]:bg-white/20">{t("Questions", "Questions")}</TabsTrigger>
-                  </TabsList>
+              {/* AI Assistant Section */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                    <Bot className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">{t("Assistant IA", "AI Assistant")}</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t("Votre assistant d'apprentissage", "Your learning assistant")}</p>
+                  </div>
+                </div>
+                
+                <div className="bg-[#343541] rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg h-[calc(100vh-400px)] flex flex-col">
+                {/* ChatGPT Style Header */}
+                <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                      <Bot className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-white">{t("Assistant IA", "AI Assistant")}</h3>
+                      <p className="text-xs text-gray-400">{t("Votre assistant d'apprentissage", "Your learning assistant")}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAiPanel(false)}
+                    className="text-gray-400 hover:text-white hover:bg-gray-700"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
 
-                  <TabsContent value="chat" className="space-y-4">
-                    <div className="h-80 overflow-y-auto space-y-3 pr-2">
+                {/* Tabs - ChatGPT Style */}
+                <Tabs defaultValue="chat" className="flex-1 flex flex-col">
+                  <div className="px-4 pt-4 border-b border-gray-700">
+                    <TabsList className="grid w-full grid-cols-3 bg-gray-800/50 p-1 rounded-lg">
+                      <TabsTrigger 
+                        value="chat" 
+                        className="text-gray-300 data-[state=active]:bg-gray-700 data-[state=active]:text-white text-xs font-medium"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                        {t("Chat", "Chat")}
+                      </TabsTrigger>
+                      <TabsTrigger 
+                        value="notes" 
+                        className="text-gray-300 data-[state=active]:bg-gray-700 data-[state=active]:text-white text-xs font-medium"
+                      >
+                        <FileText className="h-3.5 w-3.5 mr-1.5" />
+                        {t("Notes", "Notes")}
+                      </TabsTrigger>
+                      <TabsTrigger 
+                        value="questions" 
+                        className="text-gray-300 data-[state=active]:bg-gray-700 data-[state=active]:text-white text-xs font-medium"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5 mr-1.5" />
+                        {t("Questions", "Questions")}
+                      </TabsTrigger>
+                  </TabsList>
+                  </div>
+
+                  {/* Chat Tab - ChatGPT Style */}
+                  <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0 mt-0">
+                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                      {aiChat.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mb-4">
+                            <Bot className="h-8 w-8 text-white" />
+                          </div>
+                          <h4 className="text-lg font-semibold text-white mb-2">{t("Démarrez une conversation", "Start a conversation")}</h4>
+                          <p className="text-sm text-gray-400 mb-6 max-w-sm">
+                            {t("Posez des questions sur le cours, demandez des explications ou obtenez de l'aide.", "Ask questions about the course, request explanations, or get help.")}
+                          </p>
+                          <div className="grid grid-cols-1 gap-2 w-full max-w-sm">
+                            {[
+                              t("Expliquez ce concept", "Explain this concept"),
+                              t("Résumez cette leçon", "Summarize this lesson"),
+                              t("Donnez des exemples", "Give examples"),
+                              t("Quelle est la signification?", "What is the meaning?")
+                            ].map((suggestion, idx) => (
+                              <Button
+                                key={idx}
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setChatInput(suggestion)
+                                  setTimeout(() => sendAiChat(), 100)
+                                }}
+                                className="justify-start text-left text-gray-300 border-gray-600 hover:bg-gray-700 hover:text-white text-xs h-auto py-2 px-3"
+                              >
+                                <Zap className="h-3 w-3 mr-2 flex-shrink-0" />
+                                <span className="truncate">{suggestion}</span>
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
                       {aiChat.map((message, index) => (
                         <div
                           key={index}
-                          className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                              className={`flex gap-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
+                              {message.type === 'ai' && (
+                                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <Bot className="h-4 w-4 text-white" />
+                                </div>
+                              )}
                           <div
-                            className={`max-w-[85%] p-3 rounded-2xl ${
+                                className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                               message.type === 'user'
-                                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
-                                : 'bg-white/10 text-white backdrop-blur-sm'
+                                    ? 'bg-gray-700 text-white'
+                                    : 'bg-gray-800 text-gray-100'
                             }`}
                           >
-                            <p className="text-sm">{message.message}</p>
-                            <p className="text-xs opacity-70 mt-1">
-                              {message.timestamp.toLocaleTimeString()}
-                            </p>
+                                <div className="flex items-start gap-2">
+                                  {message.type === 'user' && (
+                                    <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                      <User className="h-3.5 w-3.5 text-white" />
                           </div>
+                                  )}
+                                  <div className="flex-1">
+                                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.message}</p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(message.message)
+                                          toast.success(t("Copié!", "Copied!"))
+                                        }}
+                                        className="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1"
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                        {t("Copier", "Copy")}
+                                      </button>
+                                      <span className="text-xs text-gray-500">
+                                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              {message.type === 'user' && (
+                                <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <User className="h-4 w-4 text-white" />
+                                </div>
+                              )}
                         </div>
                       ))}
                       {isAiLoading && (
-                        <div className="flex justify-start">
-                          <div className="bg-white/10 backdrop-blur-sm p-3 rounded-2xl">
+                            <div className="flex gap-4">
+                              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                <Bot className="h-4 w-4 text-white" />
+                              </div>
+                              <div className="bg-gray-800 rounded-2xl px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin text-white" />
-                              <span className="text-sm text-white">{t("L'IA réfléchit...", "AI is thinking...")}</span>
+                                  <div className="flex gap-1">
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                  </div>
+                                  <span className="text-xs text-gray-400 ml-2">{t("L'IA écrit...", "AI is typing...")}</span>
                             </div>
                           </div>
                         </div>
+                          )}
+                        </>
                       )}
                       <div ref={chatEndRef} />
                     </div>
+                    
+                    {/* Input Area - ChatGPT Style */}
+                    <div className="border-t border-gray-700 p-4">
                     <div className="flex gap-2">
+                        <div className="flex-1 relative">
                       <Input
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        placeholder={t("Posez une question...", "Ask a question...")}
-                        onKeyPress={(e) => e.key === 'Enter' && sendAiChat()}
+                            placeholder={t("Message...", "Message...")}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                sendAiChat()
+                              }
+                            }}
                         disabled={isAiLoading}
-                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                            className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-gray-500 focus:ring-gray-500 pr-10"
                       />
+                          {chatInput.trim() && (
                       <Button 
-                        onClick={sendAiChat} 
-                        disabled={!chatInput.trim() || isAiLoading}
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => sendAiChat()}
+                              disabled={isAiLoading}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white hover:bg-gray-600 h-7 w-7 p-0"
                       >
-                        <Send className="h-4 w-4" />
+                              <Send className="h-3.5 w-3.5" />
                       </Button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        {t("L'IA peut faire des erreurs. Vérifiez les informations importantes.", "AI can make mistakes. Check important info.")}
+                      </p>
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="notes" className="space-y-4">
-                    <div className="h-80 overflow-y-auto">
+                  {/* Notes Tab - ChatGPT Style */}
+                  <TabsContent value="notes" className="flex-1 flex flex-col p-0 m-0 mt-0">
+                    <div className="flex-1 overflow-y-auto px-4 py-4">
                       {aiNotes.length > 0 ? (
                         <div className="space-y-3">
                           {aiNotes.map((note, index) => (
-                            <div key={index} className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
+                            <div key={index} className="bg-gray-800 rounded-xl p-4 border border-gray-700 hover:border-gray-600 transition-colors">
                               <div className="flex items-start gap-3">
-                                <div className="w-6 h-6 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                  <span className="text-xs font-bold text-white">{index + 1}</span>
+                                <div className="w-7 h-7 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                  <Lightbulb className="h-4 w-4 text-white" />
                                 </div>
-                                <p className="text-sm text-white leading-relaxed">{note}</p>
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs font-medium text-gray-400">{t("Note", "Note")} {index + 1}</span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(note)
+                                        toast.success(t("Copié!", "Copied!"))
+                                      }}
+                                      className="text-gray-500 hover:text-gray-300"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                  <p className="text-sm text-gray-100 leading-relaxed">{note}</p>
+                                </div>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-12">
-                          <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Lightbulb className="h-8 w-8 text-white" />
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                          <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mb-4">
+                            <Lightbulb className="h-10 w-10 text-white" />
                           </div>
-                          <p className="text-white/80 mb-4">{t("Générez des notes automatiques", "Generate automatic notes")}</p>
+                          <h4 className="text-lg font-semibold text-white mb-2">{t("Générer des notes automatiques", "Generate automatic notes")}</h4>
+                          <p className="text-sm text-gray-400 mb-6 max-w-sm">
+                            {t("L'IA analysera le contenu et créera des notes structurées pour vous.", "AI will analyze the content and create structured notes for you.")}
+                          </p>
                           <Button 
                             onClick={generateAiNotes} 
                             disabled={isAiLoading}
                             className="bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white border-0"
                           >
                             {isAiLoading ? (
+                              <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                {t("Génération...", "Generating...")}
+                              </>
                             ) : (
+                              <>
                               <Sparkles className="h-4 w-4 mr-2" />
+                                {t("Générer des notes", "Generate notes")}
+                              </>
                             )}
-                            {t("Générer", "Generate")}
                           </Button>
                         </div>
                       )}
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="questions" className="space-y-4">
-                    <div className="h-80 overflow-y-auto">
+                  {/* Questions Tab - ChatGPT Style */}
+                  <TabsContent value="questions" className="flex-1 flex flex-col p-0 m-0 mt-0">
+                    <div className="flex-1 overflow-y-auto px-4 py-4">
                       {aiQuestions.length > 0 ? (
                         <div className="space-y-3">
                           {aiQuestions.map((question, index) => (
-                            <div key={index} className="bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10">
+                            <div key={index} className="bg-gray-800 rounded-xl p-4 border border-gray-700 hover:border-gray-600 transition-colors">
                               <div className="flex items-start gap-3">
-                                <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                  <span className="text-xs font-bold text-white">?</span>
+                                <div className="w-7 h-7 bg-gradient-to-br from-green-400 to-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                  <HelpCircle className="h-4 w-4 text-white" />
                                 </div>
-                                <div>
-                                  <p className="text-sm font-medium text-white mb-1">{t("Question", "Question")} {index + 1}</p>
-                                  <p className="text-sm text-white/80 leading-relaxed">{question}</p>
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs font-medium text-gray-400">{t("Question", "Question")} {index + 1}</span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(question)
+                                        toast.success(t("Copié!", "Copied!"))
+                                      }}
+                                      className="text-gray-500 hover:text-gray-300"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                  <p className="text-sm text-gray-100 leading-relaxed font-medium">{question}</p>
                                 </div>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-12">
-                          <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <MessageSquare className="h-8 w-8 text-white" />
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                          <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center mb-4">
+                            <HelpCircle className="h-10 w-10 text-white" />
                           </div>
-                          <p className="text-white/80 mb-4">{t("Générez des questions de révision", "Generate review questions")}</p>
+                          <h4 className="text-lg font-semibold text-white mb-2">{t("Générer des questions de révision", "Generate review questions")}</h4>
+                          <p className="text-sm text-gray-400 mb-6 max-w-sm">
+                            {t("L'IA créera des questions pour tester votre compréhension du cours.", "AI will create questions to test your understanding of the course.")}
+                          </p>
                           <Button 
                             onClick={generateAiQuestions} 
                             disabled={isAiLoading}
                             className="bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white border-0"
                           >
                             {isAiLoading ? (
+                              <>
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                {t("Génération...", "Generating...")}
+                              </>
                             ) : (
+                              <>
                               <Sparkles className="h-4 w-4 mr-2" />
+                                {t("Générer des questions", "Generate questions")}
+                              </>
                             )}
-                            {t("Générer", "Generate")}
                           </Button>
                         </div>
                       )}
@@ -1066,8 +1491,9 @@ export default function CourseMediaPage() {
                 </Tabs>
               </div>
             </div>
+          </div>
+          </aside>
           )}
-        </div>
       </div>
     </div>
   )

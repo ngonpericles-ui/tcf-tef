@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const pdf_parse_1 = __importDefault(require("pdf-parse"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
@@ -320,11 +320,11 @@ class QuestionBankService {
     }
     async searchQuestions(query, limit = 5) {
         try {
-            const questions = await connection_1.prisma.questionBankEntry.findMany({
+            const questions = await connection_1.prisma.questionBank.findMany({
                 where: {
                     OR: [
-                        { content: { contains: query, mode: 'insensitive' } },
-                        { extractedText: { contains: query, mode: 'insensitive' } },
+                        { title: { contains: query, mode: 'insensitive' } },
+                        { description: { contains: query, mode: 'insensitive' } },
                         { level: { contains: query, mode: 'insensitive' } }
                     ],
                     isActive: true

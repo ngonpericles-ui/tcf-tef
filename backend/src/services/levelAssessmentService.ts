@@ -307,8 +307,10 @@ Respond in JSON format with enhanced confidence:
         include: {
           simulation: {
             select: {
-              title: true,
-              type: true
+              id: true,
+              type: true,
+              level: true,
+              status: true
             }
           }
         },

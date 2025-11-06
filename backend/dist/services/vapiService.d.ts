@@ -11,9 +11,22 @@ interface VoiceOption {
     id: string;
     name: string;
     gender: 'MALE' | 'FEMALE';
-    accent: 'FRANCE' | 'QUEBEC';
+    accent: 'FRANCE' | 'QUEBEC' | 'BELGIUM';
     description: string;
     voiceId: string;
+    quality?: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+interface VapiTool {
+    type: 'function';
+    function: {
+        name: string;
+        description: string;
+        parameters: {
+            type: 'object';
+            properties: Record<string, any>;
+            required?: string[];
+        };
+    };
 }
 interface VapiAssistant {
     id?: string;
@@ -27,6 +40,7 @@ interface VapiAssistant {
         }>;
         temperature?: number;
         maxTokens?: number;
+        tools?: VapiTool[];
     };
     voice: VoiceSettings;
     firstMessage?: string;
@@ -41,6 +55,8 @@ interface VapiAssistant {
     backchannelingEnabled?: boolean;
     backgroundDenoisingEnabled?: boolean;
     modelOutputInMessagesEnabled?: boolean;
+    serverUrl?: string;
+    serverUrlSecret?: string;
 }
 interface VapiCall {
     id?: string;
@@ -86,14 +102,35 @@ declare class VapiService {
     getPublicKey(): string;
     getVoiceOptions(): VoiceOption[];
     getVoiceById(voiceId: string): VoiceOption | undefined;
-    createFrenchAssistant(voiceId: string, questions: any[], language?: Language): Promise<VapiAssistant>;
+    createFrenchAssistant(voiceId: string, progressiveQuestions: {
+        personalInfo: any[];
+        byLevel: {
+            A1: any[];
+            A2: any[];
+            B1: any[];
+            B2: any[];
+        };
+        byCategory: Record<string, any[]>;
+    }, language?: Language): Promise<VapiAssistant>;
     createImmigrationAssistant(voiceId: string, country: string, immigrationType: string, questions: any[], language?: Language): Promise<VapiAssistant>;
     startVoiceSimulation(simulationId: string, assistantId: string, language?: Language): Promise<VapiCall>;
     getCallAnalysis(callId: string): Promise<VapiCall>;
     endCall(callId: string): Promise<void>;
     processCallResults(callId: string, simulationId: string): Promise<any>;
+    private generateDetailedFeedback;
     private analyzeTranscript;
+    getProgressiveQuestions(): Promise<{
+        personalInfo: any[];
+        byLevel: {
+            A1: any[];
+            A2: any[];
+            B1: any[];
+            B2: any[];
+        };
+        byCategory: Record<string, any[]>;
+    }>;
     getRandomQuestions(level?: string, count?: number): Promise<any[]>;
+    private getDefaultProgressiveQuestions;
     private getDefaultQuestions;
 }
 declare const _default: VapiService;

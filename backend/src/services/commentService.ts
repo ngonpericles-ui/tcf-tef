@@ -675,8 +675,7 @@ export class SocialInteractionService {
       const existingLike = await prisma.like.findFirst({
         where: {
           userId,
-          contentId: postId,
-          contentType: 'POST'
+          postId: postId
         }
       });
 
@@ -694,8 +693,7 @@ export class SocialInteractionService {
         await prisma.like.create({
           data: {
             userId,
-            contentId: postId,
-            contentType: 'POST'
+            postId: postId
           }
         });
         isLiked = true;
@@ -704,7 +702,7 @@ export class SocialInteractionService {
 
       // Get updated like count
       const likeCount = await prisma.like.count({
-        where: { contentId: postId, contentType: 'POST' }
+        where: { postId: postId }
       });
 
       return { isLiked, likeCount };

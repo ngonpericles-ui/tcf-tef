@@ -11,7 +11,11 @@ export class FileUploadController {
    */
   static async uploadProfileImage(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user!.userId;
+      // Handle both userId and id from JWT payload
+      const userId = req.user!.userId || (req.user as any).id;
+      if (!userId) {
+        throw new ValidationError('User ID not found in token');
+      }
       const file = req.file;
 
       if (!file) {
@@ -168,9 +172,15 @@ export class FileUploadController {
         uploadedFiles.push(uploadedFile);
       }
 
+      // Ensure all URLs are absolute
+      const filesWithAbsoluteUrls = uploadedFiles.map(file => ({
+        ...file,
+        url: file.url?.startsWith('http') ? file.url : `http://localhost:3001${file.url || file.path || ''}`
+      }));
+
       res.status(201).json({
         success: true,
-        data: { files: uploadedFiles },
+        data: { files: filesWithAbsoluteUrls },
         message: `${uploadedFiles.length} media file(s) uploaded successfully`
       });
     } catch (error) {

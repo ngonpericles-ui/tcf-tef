@@ -173,22 +173,52 @@ export class NotificationService {
         };
       }
 
-      // Get total count
-      const total = await prisma.userNotification.count({ where });
+      // Get total count with retry logic
+      let total = 0;
+      let unreadCount = 0;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-      // Get unread count
-      const unreadCount = await prisma.userNotification.count({
-        where: {
-          userId,
-          status: NotificationStatus.UNREAD,
-          notification: {
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gte: new Date() } }
-            ]
+      while (retryCount < maxRetries) {
+        try {
+          total = await prisma.userNotification.count({ where });
+          
+          unreadCount = await prisma.userNotification.count({
+            where: {
+              userId,
+              status: NotificationStatus.UNREAD,
+              notification: {
+                OR: [
+                  { expiresAt: null },
+                  { expiresAt: { gte: new Date() } }
+                ]
+              }
+            }
+          });
+          break; // Success, exit retry loop
+        } catch (dbError: any) {
+          retryCount++;
+          console.log(`Database connection attempt ${retryCount} failed for notifications:`, dbError.message);
+          
+          if (retryCount >= maxRetries) {
+            // If all retries failed, return fallback counts
+            console.log('All database retry attempts failed for notifications, returning fallback');
+            return {
+              notifications: [],
+              pagination: {
+                page: 1,
+                limit: 10,
+                total: 0,
+                totalPages: 0
+              },
+              unreadCount: 0
+            };
           }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
         }
-      });
+      }
 
       // Get notifications
       const userNotifications = await prisma.userNotification.findMany({

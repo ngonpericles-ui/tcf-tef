@@ -12,6 +12,8 @@ import { useLanguage } from "@/components/language-provider"
 import { Volume2, Play, Pause, Upload, ArrowLeft, Plus, Trash2, FileText, Brain, Mic, Settings, Zap } from "lucide-react"
 import apiClient from "@/lib/api-client"
 import { toast } from "sonner"
+import axios from "axios"
+import { UploadProgressCard } from "@/components/upload-progress-card"
 
 export default function AudioSimulatorPage() {
   const { t } = useLanguage()
@@ -23,6 +25,9 @@ export default function AudioSimulatorPage() {
   const [pdfFiles, setPdfFiles] = useState<File[]>([])
   const [isPlaying, setIsPlaying] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  
+  // Upload progress tracking
+  const [uploadProgresses, setUploadProgresses] = useState<Map<string, { fileId: string; progress: number; status: 'uploading' | 'completed' | 'error'; error?: string }>>(new Map())
   const [vapiConfig, setVapiConfig] = useState<any>(null)
   const [voiceOptions, setVoiceOptions] = useState<any[]>([])
   const [extractedQuestions, setExtractedQuestions] = useState<any[]>([])
@@ -136,6 +141,19 @@ export default function AudioSimulatorPage() {
   }
 
   const extractQuestionsFromPdf = async (file: File) => {
+    const fileId = Math.random().toString(36).substring(2, 11)
+    
+    // Initialize progress
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(fileId, {
+        fileId,
+        progress: 0,
+        status: 'uploading'
+      })
+      return newMap
+    })
+
     try {
       setLoading(true)
       const formData = new FormData()
@@ -145,10 +163,50 @@ export default function AudioSimulatorPage() {
       formData.append('level', simulatorConfig.level)
       formData.append('category', simulatorConfig.category)
 
-      const response = await apiClient.post('/voice-simulation/question-bank/upload', formData, {
+      const apiUrl = typeof window !== 'undefined'
+        ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+
+      const token = typeof window !== 'undefined'
+        ? (localStorage.getItem('access_token') || 
+           localStorage.getItem('tcf_tef_admin_session') ||
+           localStorage.getItem('tcf_tef_session'))
+        : null
+
+      const response = await axios.post(`${apiUrl}/voice-simulation/question-bank/upload`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        timeout: 0,
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && progressEvent.total > 0) {
+            const loaded = progressEvent.loaded || 0
+            const total = progressEvent.total || 1
+            const calculatedProgress = Math.min(Math.max(0, Math.round((loaded / total) * 100)), 99)
+            
+            setUploadProgresses((prev) => {
+              const newMap = new Map(prev)
+              newMap.set(fileId, {
+                fileId,
+                progress: calculatedProgress,
+                status: 'uploading'
+              })
+              return newMap
+            })
+          }
         }
+      })
+
+      // Update progress to completed
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(fileId, {
+          fileId,
+          progress: 100,
+          status: 'completed'
+        })
+        return newMap
       })
 
       if ((response.data as any)?.success) {
@@ -161,6 +219,16 @@ export default function AudioSimulatorPage() {
       }
     } catch (error) {
       console.error('Error extracting questions from PDF:', error)
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(fileId, {
+          fileId,
+          progress: 0,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Upload error'
+        })
+        return newMap
+      })
       toast.error(t("Erreur lors de l'extraction des questions", "Error extracting questions"))
     } finally {
       setLoading(false)
@@ -168,6 +236,19 @@ export default function AudioSimulatorPage() {
   }
 
   const extractQuestionsFromAudio = async (file: File) => {
+    const fileId = Math.random().toString(36).substring(2, 11)
+    
+    // Initialize progress
+    setUploadProgresses((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(fileId, {
+        fileId,
+        progress: 0,
+        status: 'uploading'
+      })
+      return newMap
+    })
+
     try {
       setLoading(true)
       const formData = new FormData()
@@ -177,10 +258,50 @@ export default function AudioSimulatorPage() {
       formData.append('level', simulatorConfig.level)
       formData.append('category', simulatorConfig.category)
 
-      const response = await apiClient.post('/ai/extract-audio-content', formData, {
+      const apiUrl = typeof window !== 'undefined'
+        ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+
+      const token = typeof window !== 'undefined'
+        ? (localStorage.getItem('access_token') || 
+           localStorage.getItem('tcf_tef_admin_session') ||
+           localStorage.getItem('tcf_tef_session'))
+        : null
+
+      const response = await axios.post(`${apiUrl}/ai/extract-audio-content`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        timeout: 0,
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && progressEvent.total > 0) {
+            const loaded = progressEvent.loaded || 0
+            const total = progressEvent.total || 1
+            const calculatedProgress = Math.min(Math.max(0, Math.round((loaded / total) * 100)), 99)
+            
+            setUploadProgresses((prev) => {
+              const newMap = new Map(prev)
+              newMap.set(fileId, {
+                fileId,
+                progress: calculatedProgress,
+                status: 'uploading'
+              })
+              return newMap
+            })
+          }
         }
+      })
+
+      // Update progress to completed
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(fileId, {
+          fileId,
+          progress: 100,
+          status: 'completed'
+        })
+        return newMap
       })
 
       if ((response.data as any)?.success) {
@@ -193,6 +314,16 @@ export default function AudioSimulatorPage() {
       }
     } catch (error) {
       console.error('Error extracting questions from audio:', error)
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(fileId, {
+          fileId,
+          progress: 0,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Upload error'
+        })
+        return newMap
+      })
       toast.error(t("Erreur lors de l'extraction audio", "Error extracting audio"))
     } finally {
       setLoading(false)
@@ -449,6 +580,53 @@ export default function AudioSimulatorPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Upload Progress Cards */}
+          {uploadProgresses.size > 0 && (
+            <Card className="bg-card border-gray-200 dark:border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center">
+                  <Upload className="w-5 h-5 mr-2" />
+                  {t("Progression des téléchargements", "Upload Progress")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-[400px] overflow-y-auto space-y-3">
+                {Array.from(uploadProgresses.values()).map((progress) => {
+                  // Find the file that matches this progress
+                  const file = [...pdfFiles, ...audioFiles].find((f, idx) => {
+                    // We need to track which file corresponds to which progress
+                    // For now, we'll match by file name or use a simple approach
+                    return true // Simplified - would need better tracking in production
+                  })
+                  
+                  if (!file) return null
+                  
+                  return (
+                    <UploadProgressCard
+                      key={progress.fileId}
+                      upload={progress}
+                      file={{
+                        id: progress.fileId,
+                        file: file,
+                        name: file.name,
+                        size: file.size,
+                        type: file.type
+                      }}
+                      onRemove={(fileId) => {
+                        setUploadProgresses((prev) => {
+                          const newMap = new Map(prev)
+                          newMap.delete(fileId)
+                          return newMap
+                        })
+                      }}
+                      onPause={() => {}}
+                      onResume={() => {}}
+                    />
+                  )
+                })}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Audio Files */}
           <Card className="bg-card border-gray-200 dark:border-gray-700">

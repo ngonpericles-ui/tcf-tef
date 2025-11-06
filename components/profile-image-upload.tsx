@@ -60,17 +60,44 @@ export default function ProfileImageUpload({
         formData.append('userId', userId)
       }
 
-      const response = await apiClient.post('/files/upload', formData, {
+      // Use unified upload endpoint for all users (admin/manager/student)
+      const response = await apiClient.post('/users/upload-profile-image', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 60000 // 60 seconds for file uploads
       })
 
-      if (response.success && response.data?.url) {
-        onImageChange?.(response.data.url)
+      // Handle response structure: {success: true, data: {file: {url: "..."}}}
+      const fileData = (response as any)?.data?.file || (response as any)?.file
+      const imageUrl = fileData?.url || (response as any)?.data?.url
+      
+      // Normalize to absolute backend URL
+      let finalImageUrl = imageUrl
+      if (imageUrl && !imageUrl.startsWith('http')) {
+        if (imageUrl.startsWith('/uploads')) {
+          finalImageUrl = `http://localhost:3001${imageUrl}`
+        } else if (imageUrl.startsWith('/')) {
+          finalImageUrl = `http://localhost:3001${imageUrl}`
+        } else {
+          finalImageUrl = `http://localhost:3001/uploads/${imageUrl}`
+        }
+      }
+
+      if (response.success && finalImageUrl) {
+        // Also save to backend profile permanently
+        try {
+          await apiClient.put('/users/profile', {
+            profileImage: finalImageUrl
+          })
+        } catch (saveError) {
+          console.warn('Failed to save profile image URL:', saveError)
+        }
+        
+        onImageChange?.(finalImageUrl)
         toast.success(t("Image de profil mise à jour", "Profile image updated"))
       } else {
-        throw new Error(response.error?.message || 'Upload failed')
+        throw new Error((response as any)?.error?.message || 'Upload failed')
       }
     } catch (error: any) {
       console.error('Upload error:', error)
@@ -99,7 +126,9 @@ export default function ProfileImageUpload({
     <div className={`flex flex-col items-center space-y-4 ${className}`}>
       <div className="relative">
         <Avatar className="h-24 w-24">
-          <AvatarImage src={displayImage || ''} alt="Profile" />
+          {displayImage ? (
+            <AvatarImage src={displayImage} alt="Profile" />
+          ) : null}
           <AvatarFallback className="text-lg">
             <User className="h-8 w-8" />
           </AvatarFallback>

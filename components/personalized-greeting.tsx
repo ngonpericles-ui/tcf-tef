@@ -134,11 +134,12 @@ export default function PersonalizedGreeting() {
   console.log('Dashboard Data:', dashboardData)
 
   const formatTime = (time: Date) => {
+    // Use user's local timezone consistently to avoid fluctuation
     return time.toLocaleTimeString(lang === "fr" ? "fr-FR" : "en-US", {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: lang !== "fr"
+      hour12: false // Use 24-hour format for consistency
     })
   }
 
@@ -246,14 +247,14 @@ export default function PersonalizedGreeting() {
                 <h2 className="font-semibold">{lang === "fr" ? "Heure actuelle" : "Current Time"}</h2>
               </div>
               
-              {/* Digital Clock */}
+              {/* Digital Clock - Always use local time to avoid fluctuation */}
               <div className="font-mono text-3xl md:text-4xl font-bold text-[#2ECC71] tracking-wider">
-                {dashboardData?.regionalTime?.time || formatTime(currentTime)}
+                {formatTime(currentTime)}
               </div>
               
               {/* Date */}
               <div className="text-sm text-muted-foreground capitalize">
-                {dashboardData?.regionalTime?.date || formatDate(currentTime)}
+                {formatDate(currentTime)}
               </div>
 
               {/* Study Time Indicator */}

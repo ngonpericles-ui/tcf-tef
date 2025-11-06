@@ -32,8 +32,10 @@ export declare class LevelAssessmentService {
     private static fallbackLevelAnalysis;
     static getLevelHistory(userId: string): Promise<({
         simulation: {
-            title: string;
-            type: import(".prisma/client").$Enums.TestType;
+            level: string;
+            id: string;
+            status: string;
+            type: string;
         };
     } & {
         id: string;
@@ -42,19 +44,19 @@ export declare class LevelAssessmentService {
         userId: string;
         timeSpent: number;
         score: number;
-        correctAnswers: number;
         simulationId: string | null;
         confidence: number;
         strengths: string[];
         weaknesses: string[];
         recommendations: string[];
-        detailedAnalysis: import("@prisma/client/runtime/library").JsonValue;
         testLevel: string;
         totalQuestions: number;
+        correctAnswers: number;
         determinedLevel: string;
         subLevel: number;
         nextLevelRequirements: string[];
-        estimatedTimeToNext: string;
+        estimatedTimeToNext: string | null;
+        detailedAnalysis: import("@prisma/client/runtime/library").JsonValue | null;
     })[]>;
     static getCurrentLevel(userId: string): Promise<string>;
 }

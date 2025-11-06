@@ -15,13 +15,13 @@ export declare class AiChatService {
     static getChatHistory(userId: string, limit?: number): Promise<({
         messages: {
             id: string;
-            role: string;
+            role: import(".prisma/client").$Enums.MessageRole;
             createdAt: Date;
             metadata: import("@prisma/client/runtime/library").JsonValue | null;
             content: string;
             confidence: number | null;
             sessionId: string;
-            sources: import("@prisma/client/runtime/library").JsonValue | null;
+            sources: string[];
         }[];
     } & {
         id: string;
@@ -29,18 +29,19 @@ export declare class AiChatService {
         updatedAt: Date;
         userId: string;
         title: string | null;
+        context: import("@prisma/client/runtime/library").JsonValue | null;
         isActive: boolean;
     })[]>;
     static getChatSession(chatId: string, userId: string): Promise<{
         messages: {
             id: string;
-            role: string;
+            role: import(".prisma/client").$Enums.MessageRole;
             createdAt: Date;
             metadata: import("@prisma/client/runtime/library").JsonValue | null;
             content: string;
             confidence: number | null;
             sessionId: string;
-            sources: import("@prisma/client/runtime/library").JsonValue | null;
+            sources: string[];
         }[];
     } & {
         id: string;
@@ -48,6 +49,7 @@ export declare class AiChatService {
         updatedAt: Date;
         userId: string;
         title: string | null;
+        context: import("@prisma/client/runtime/library").JsonValue | null;
         isActive: boolean;
     }>;
     static deleteChatSession(chatId: string, userId: string): Promise<{

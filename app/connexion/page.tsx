@@ -105,6 +105,7 @@ export default function LoginPage() {
             console.log('⚠️ Student login page: Non-student role detected:', userData.role)
             // Don't redirect, just show error message
             setError(t("Cette page est réservée aux étudiants. Veuillez utiliser la page de connexion appropriée.", "This page is for students only. Please use the appropriate login page."))
+            setIsLoading(false) // Stop the loading state
             return
           }
 

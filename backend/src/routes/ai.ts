@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/database/connection';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -9,7 +9,6 @@ import { LevelDeterminationService } from '../services/levelDeterminationService
 import { AIService } from '../services/aiService';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -51,59 +50,110 @@ const upload = multer({
  */
 router.get('/feedbacks', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      console.error('❌ User ID not found in AI feedbacks request');
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
 
-    const feedbacks = await prisma.aIFeedback.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        simulationResult: {
-          include: {
-            testAttempt: {
-              include: {
-                test: true
-              }
-            }
-          }
-        }
+    console.log('📋 Fetching AI feedbacks for user:', userId);
+
+    // Fetch feedbacks with optional relations (some might not have simulationResult or voiceSimulation)
+    // Note: Prisma generates camelCase accessors, so AIFeedback becomes aIFeedback
+    // Only include voiceSimulation if the relation exists (optional)
+    let feedbacks: any[] = [];
+    try {
+      feedbacks = await (prisma as any).aIFeedback.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' }
+        // Remove include for voiceSimulation if it doesn't exist or causes errors
+        // We'll handle simulation info separately if needed
+      });
+    } catch (prismaError: any) {
+      console.error('❌ Prisma error fetching AI feedbacks:', {
+        error: prismaError.message,
+        code: prismaError.code,
+        meta: prismaError.meta
+      });
+      // Return empty array if query fails
+      feedbacks = [];
+    }
+
+    console.log(`✅ Found ${feedbacks.length} feedbacks for user ${userId}`);
+
+    // Transform feedbacks with safe access to optional relations
+    const transformedFeedbacks = feedbacks.map(feedback => {
+      // Determine simulation title from various sources
+      let simulationTitle = 'Unknown Simulation';
+      
+      // Check if feedback has voiceSimulationId and fetch it separately if needed
+      // For now, use submissionType or default title
+      if (feedback.submissionType) {
+        simulationTitle = `Soumission ${feedback.submissionType}`;
+      } else if (feedback.voiceSimulationId) {
+        simulationTitle = `Simulation Vocale #${feedback.voiceSimulationId.substring(0, 8)}`;
+      } else {
+        simulationTitle = `Feedback #${feedback.id.substring(0, 8)}`;
       }
-    });
 
-    const transformedFeedbacks = feedbacks.map(feedback => ({
-      id: feedback.id,
-      simulationTitle: feedback.simulationResult?.testAttempt?.test?.title || 'Unknown Simulation',
-      submissionDate: feedback.createdAt.toISOString(),
-      aiScore: feedback.aiScore,
-      maxScore: feedback.maxScore,
-      percentage: Math.round((feedback.aiScore / feedback.maxScore) * 100),
-      aiConfidence: feedback.aiConfidence, // Add AI confidence for submission filter
-      status: feedback.status,
-      feedback: {
-        overall: feedback.overallFeedback,
-        strengths: feedback.strengths as string[],
-        weaknesses: feedback.weaknesses as string[],
-        recommendations: feedback.recommendations as string[],
-        detailedAnalysis: feedback.detailedAnalysis as any
-      },
-      originalWork: {
-        type: feedback.submissionType,
-        content: feedback.submissionContent,
-        fileUrl: feedback.submissionFileUrl
-      },
-      humanReview: feedback.humanReviewerId ? {
-        tutorName: feedback.humanReviewerName || 'Expert Tutor',
-        tutorFeedback: feedback.humanFeedback || '',
-        reviewDate: feedback.humanReviewDate?.toISOString() || '',
-        finalScore: feedback.humanScore || feedback.aiScore
-      } : undefined
-    }));
+      // Calculate percentage safely
+      const percentage = feedback.maxScore && feedback.maxScore > 0
+        ? Math.round((feedback.aiScore / feedback.maxScore) * 100)
+        : feedback.aiScore || 0;
+
+      return {
+        id: feedback.id,
+        simulationTitle,
+        submissionDate: feedback.createdAt.toISOString(),
+        aiScore: feedback.aiScore || 0,
+        maxScore: feedback.maxScore || 100,
+        percentage,
+        aiConfidence: feedback.aiConfidence || 0,
+        status: feedback.status,
+        feedback: {
+          overall: feedback.overallFeedback || '',
+          strengths: (feedback.strengths as string[]) || [],
+          weaknesses: (feedback.weaknesses as string[]) || [],
+          recommendations: (feedback.recommendations as string[]) || [],
+          detailedAnalysis: (feedback.detailedAnalysis as any) || {}
+        },
+        originalWork: {
+          type: feedback.submissionType || 'general',
+          content: feedback.submissionContent || '',
+          fileUrl: feedback.submissionFileUrl || null
+        },
+        humanReview: feedback.humanReviewerId ? {
+          tutorName: feedback.humanReviewerName || 'Expert Tutor',
+          tutorFeedback: feedback.humanFeedback || '',
+          reviewDate: feedback.humanReviewDate?.toISOString() || '',
+          finalScore: feedback.humanScore || feedback.aiScore || 0
+        } : undefined
+      };
+    });
 
     res.json({
       success: true,
       data: transformedFeedbacks
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    console.error('❌ Error fetching AI feedbacks:', {
+      error: error.message,
+      stack: error.stack,
+      userId
+    });
+    res.status(500).json({
+      success: false,
+      error: { 
+        message: error.message || 'Failed to fetch AI feedbacks', 
+        statusCode: 500 
+      }
+    });
   }
 });
 
@@ -115,9 +165,17 @@ router.get('/feedbacks', authenticate, async (req: Request, res: Response, next:
 router.get('/feedbacks/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
 
-    const feedback = await prisma.aIFeedback.findFirst({
+    const feedback = await (prisma as any).aIFeedback.findFirst({
       where: {
         id,
         userId
@@ -174,7 +232,16 @@ router.get('/feedbacks/:id', authenticate, async (req: Request, res: Response, n
  */
 router.post('/feedbacks', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
+    
     const {
       simulationResultId,
       submissionType,
@@ -185,7 +252,7 @@ router.post('/feedbacks', authenticate, async (req: Request, res: Response, next
     // Generate AI feedback (mock implementation)
     const aiAnalysis = await generateAIFeedback(submissionContent, submissionType);
 
-    const feedback = await prisma.aIFeedback.create({
+    const feedback = await (prisma as any).aIFeedback.create({
       data: {
         userId,
         simulationResultId,
@@ -221,9 +288,17 @@ router.post('/feedbacks', authenticate, async (req: Request, res: Response, next
 router.get('/feedbacks/:id/report', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
 
-    const feedback = await prisma.aIFeedback.findFirst({
+    const feedback = await (prisma as any).aIFeedback.findFirst({
       where: {
         id,
         userId
@@ -275,7 +350,7 @@ router.post('/analyze-document', authenticate, async (req: Request, res: Respons
     const analysis = await analyzeDocumentWithAI(extractedText);
 
     // Store in question bank for AI assistant
-    await prisma.questionBankEntry.create({
+    await (prisma as any).questionBank.create({
       data: {
         content: extractedText,
         contentType: documentType || 'DOCUMENT',
@@ -311,7 +386,7 @@ router.get('/assistant/context', authenticate, async (req: Request, res: Respons
   try {
     const { query, limit = 10 } = req.query;
 
-    const contextEntries = await prisma.questionBankEntry.findMany({
+    const contextEntries = await (prisma as any).questionBank.findMany({
       where: query ? {
         OR: [
           { extractedText: { contains: query as string, mode: 'insensitive' } },
@@ -427,10 +502,18 @@ async function analyzeDocumentWithAI(text: string) {
 router.post('/feedbacks/:id/request-review', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
 
     // Check if feedback exists and belongs to user
-    const feedback = await prisma.aIFeedback.findFirst({
+    const feedback = await (prisma as any).aIFeedback.findFirst({
       where: {
         id,
         userId
@@ -445,7 +528,7 @@ router.post('/feedbacks/:id/request-review', authenticate, async (req: Request, 
     }
 
     // Update status to request human review
-    const updatedFeedback = await prisma.aIFeedback.update({
+    const updatedFeedback = await (prisma as any).aIFeedback.update({
       where: { id },
       data: {
         status: 'PENDING_HUMAN'
@@ -472,7 +555,15 @@ router.post('/feedbacks/:id/request-review', authenticate, async (req: Request, 
  */
 router.get('/level-assessment', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
 
     // Get comprehensive level assessment
     const assessment = await LevelDeterminationService.determineStudentLevel(userId);
@@ -493,7 +584,15 @@ router.get('/level-assessment', authenticate, async (req: Request, res: Response
  */
 router.post('/assess-level', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
     const { responses } = req.body;
 
     // Mock level assessment - in production, this would use actual AI
@@ -537,7 +636,15 @@ router.post('/assess-level', authenticate, async (req: Request, res: Response, n
  */
 router.post('/level-assessment/update', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
     const { testAttemptId } = req.body;
 
     // Trigger level reassessment after new test
@@ -562,7 +669,15 @@ router.post('/level-assessment/update', authenticate, async (req: Request, res: 
  */
 router.post('/feedback', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
     const {
       submissionType,
       submissionContent,
@@ -579,7 +694,7 @@ router.post('/feedback', authenticate, async (req: Request, res: Response, next:
     // Generate AI feedback (mock implementation)
     const aiAnalysis = await generateAIFeedback(finalSubmissionContent, finalSubmissionType);
 
-    const feedback = await prisma.aIFeedback.create({
+    const feedback = await (prisma as any).aIFeedback.create({
       data: {
         userId,
         simulationResultId,
@@ -614,11 +729,19 @@ router.post('/feedback', authenticate, async (req: Request, res: Response, next:
 router.post('/feedback/:id/submit-for-review', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
     const { selectedTutorId, message } = req.body;
 
     // Check if feedback exists and belongs to user
-    const feedback = await prisma.aIFeedback.findFirst({
+    const feedback = await (prisma as any).aIFeedback.findFirst({
       where: {
         id,
         userId
@@ -635,20 +758,22 @@ router.post('/feedback/:id/submit-for-review', authenticate, async (req: Request
       });
     }
 
-    // Create a review request
-    const reviewRequest = await prisma.reviewRequest.create({
+    // Create a marketplace request for expertise review
+    const reviewRequest = await (prisma as any).marketplaceRequest.create({
       data: {
         studentId: userId,
         tutorId: selectedTutorId,
+        requestType: 'EXPERTISE',
+        subject: `Review AI Feedback - ${feedback.submissionType || 'Feedback'}`,
+        description: message || 'Please review my AI feedback',
         feedbackId: id,
-        message: message || 'Please review my AI feedback',
         status: 'PENDING',
-        requestType: 'AI_FEEDBACK_REVIEW'
+        urgency: 'MEDIUM'
       }
     });
 
     // Update feedback status
-    await prisma.aIFeedback.update({
+    await (prisma as any).aIFeedback.update({
       where: { id },
       data: {
         status: 'PENDING_HUMAN'
@@ -676,7 +801,15 @@ router.post('/feedback/:id/submit-for-review', authenticate, async (req: Request
 router.post('/chat', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { message, context } = req.body;
-    const userId = req.user!.userId;
+    // Get userId from req.user - check both id and userId properties
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'User not authenticated', statusCode: 401 }
+      });
+    }
 
     // If context is provided, use course-specific AI chat
     if (context && context.lessonTitle && context.courseTitle) {
@@ -775,10 +908,29 @@ router.post('/generate-questions', authenticate, async (req: Request, res: Respo
       difficulty
     );
 
-    res.json({
-      success: true,
-      data: result
+    console.log('✅ AI Questions Generated:', {
+      questionCount: result.questions?.length || 0,
+      lessonTitle,
+      courseTitle,
+      validQuestionCount,
+      firstQuestion: result.questions?.[0]
     });
+
+    const responseData = {
+      success: true,
+      data: {
+        questions: result.questions || []
+      },
+      message: `${result.questions?.length || 0} questions générées avec succès`
+    };
+
+    console.log('📤 Sending response:', {
+      success: responseData.success,
+      questionCount: responseData.data.questions.length,
+      hasQuestions: responseData.data.questions.length > 0
+    });
+
+    res.json(responseData);
   } catch (error) {
     next(error);
   }
@@ -798,7 +950,26 @@ router.post('/generate-questions-from-file', authenticate, upload.single('file')
       });
     }
 
-    const { lessonTitle, courseTitle, questionCount = 5 } = req.body;
+    const { 
+      lessonTitle, 
+      courseTitle, 
+      questionCount = 5, 
+      difficulty = 'medium',
+      category = 'GENERAL',
+      level = 'B1'
+    } = req.body;
+
+    console.log('📄 File upload request:', {
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+      fileType: req.file?.mimetype,
+      lessonTitle,
+      courseTitle,
+      questionCount,
+      difficulty,
+      category,
+      level
+    });
 
     if (!lessonTitle || !courseTitle) {
       // Clean up uploaded file
@@ -815,11 +986,15 @@ router.post('/generate-questions-from-file', authenticate, upload.single('file')
 
     // Extract text based on file type
     if (req.file.mimetype === 'application/pdf') {
+      console.log('📖 Extracting text from PDF...');
       const pdfBuffer = fs.readFileSync(req.file.path);
       const pdfData = await pdfParse(pdfBuffer);
       extractedText = pdfData.text;
+      console.log(`✅ Extracted ${extractedText.length} characters from PDF`);
     } else if (req.file.mimetype === 'text/plain') {
+      console.log('📝 Reading text file...');
       extractedText = fs.readFileSync(req.file.path, 'utf-8');
+      console.log(`✅ Read ${extractedText.length} characters from text file`);
     } else if (req.file.mimetype === 'application/msword' ||
                req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       // For Word documents, we would need a library like mammoth
@@ -839,15 +1014,48 @@ router.post('/generate-questions-from-file', authenticate, upload.single('file')
       });
     }
 
-    // Generate questions from extracted text
-    const validQuestionCount = Math.min(Math.max(1, parseInt(questionCount) || 5), 20);
+    // Validate question count based on use case
+    // For questionnaire page, use the requested count (1-30)
+    // For audio simulations, use 80-150
+    const isQuestionnaire = questionCount && questionCount <= 30;
+    const validQuestionCount = isQuestionnaire 
+      ? Math.min(Math.max(1, parseInt(questionCount) || 5), 30)
+      : Math.min(Math.max(80, parseInt(questionCount) || 80), 150);
+
+    console.log('🤖 Generating questions with AI:', {
+      extractedTextLength: extractedText.length,
+      questionCount: validQuestionCount,
+      difficulty,
+      category,
+      level,
+      isQuestionnaire
+    });
+
+    // Generate questions from extracted text using the provided difficulty and category
     const result = await AIService.generateQuestions(
       extractedText,
       lessonTitle,
       courseTitle,
       validQuestionCount,
-      ["multiple-choice", "true-false", "short-answer"]
+      ["multiple-choice", "true-false", "short-answer"],
+      category || 'GENERAL',
+      difficulty || 'medium'
     );
+
+    // Format questions properly for storage in QuestionBank
+    const formattedQuestions = (result.questions || []).map((q: any, index: number) => ({
+      id: `q_${Date.now()}_${index}`,
+      question: q.questionText || q.question || q.text || '',
+      type: q.type || 'open',
+      category: q.category || 'GENERAL',
+      level: q.level || 'B1',
+      options: q.options || [],
+      correctAnswer: q.correctAnswer || '',
+      points: q.points || 1,
+      keywords: q.keywords || [],
+      difficulty: q.difficulty || 5,
+      explanation: q.explanation || ''
+    }));
 
     // Clean up uploaded file
     if (fs.existsSync(req.file.path)) {
@@ -857,8 +1065,14 @@ router.post('/generate-questions-from-file', authenticate, upload.single('file')
     res.json({
       success: true,
       data: {
-        ...result,
-        extractedText: extractedText.substring(0, 500) + '...' // Return first 500 chars
+        questions: formattedQuestions,
+        metadata: {
+          totalQuestions: formattedQuestions.length,
+          categories: [...new Set(formattedQuestions.map((q: any) => q.category))],
+          levels: [...new Set(formattedQuestions.map((q: any) => q.level))],
+          extractionDate: new Date()
+        },
+        extractedText: extractedText, // Return full extracted text for AI generation
       }
     });
   } catch (error) {

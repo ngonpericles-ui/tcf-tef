@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+require('dotenv').config();
 
 class GeminiApiManager {
   constructor() {
@@ -79,7 +80,7 @@ class GeminiApiManager {
       try {
         const client = this.getClient();
         const model = client.getGenerativeModel({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-2.0-flash-exp',
           generationConfig: {
             maxOutputTokens: 2048,
             temperature: 0.7,

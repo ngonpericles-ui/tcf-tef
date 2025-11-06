@@ -1,18 +1,11 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentController = void 0;
 const paymentService_1 = require("../services/paymentService");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const client_1 = require("@prisma/client");
-const stripe_1 = __importDefault(require("stripe"));
 const prisma = new client_1.PrismaClient();
-const stripe = new stripe_1.default(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2025-08-27.basil'
-});
 class PaymentController {
     static async getSubscriptionPlans(req, res) {
         try {

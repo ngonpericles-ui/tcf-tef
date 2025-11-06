@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TeacherService = void 0;
-const prisma_1 = require("../lib/prisma");
-const logger_1 = require("../utils/logger");
+const prisma_1 = require("@/lib/prisma");
+const logger_1 = require("@/utils/logger");
 class TeacherService {
     static async getAvailableTeachers(userId, filters) {
         try {

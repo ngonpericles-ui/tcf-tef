@@ -60,8 +60,8 @@ export declare class AdminService {
             userId: string;
             paymentMethod: string;
             type: string | null;
-            metadata: import("@prisma/client/runtime/library").JsonValue | null;
             currency: string;
+            metadata: import("@prisma/client/runtime/library").JsonValue | null;
             subscriptionId: string | null;
             amount: number;
             transactionId: string | null;
@@ -242,7 +242,6 @@ export declare class AdminService {
             role: import(".prisma/client").$Enums.UserRole;
             status: import(".prisma/client").$Enums.UserStatus;
             subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
-            currentLevel: string | null;
             profileImage: string | null;
             phone: string | null;
             dateOfBirth: Date | null;
@@ -289,7 +288,6 @@ export declare class AdminService {
             createdAt: Date;
             updatedAt: Date;
             userId: string;
-            duration: number | null;
             completedAt: Date | null;
             timeSpent: number | null;
             score: number | null;
@@ -297,11 +295,6 @@ export declare class AdminService {
             startedAt: Date;
             answers: import("@prisma/client/runtime/library").JsonValue | null;
             feedback: string | null;
-            correctAnswers: number | null;
-            maxScore: number | null;
-            metadata: import("@prisma/client/runtime/library").JsonValue | null;
-            percentage: number | null;
-            timeRemaining: number | null;
         })[];
         activityLog: {
             id: string;
@@ -330,6 +323,7 @@ export declare class AdminService {
         lastName: string;
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
+        phone: string;
         lastLoginAt: Date;
         createdAt: Date;
         _count: {
@@ -348,7 +342,6 @@ export declare class AdminService {
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
-        currentLevel: string | null;
         profileImage: string | null;
         phone: string | null;
         dateOfBirth: Date | null;
@@ -374,7 +367,6 @@ export declare class AdminService {
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
-        currentLevel: string | null;
         profileImage: string | null;
         phone: string | null;
         dateOfBirth: Date | null;
@@ -390,6 +382,9 @@ export declare class AdminService {
         profilePicture: string | null;
         createdAt: Date;
         updatedAt: Date;
+    }>;
+    static deleteManager(managerId: string, deletedById: string): Promise<{
+        success: boolean;
     }>;
     static getManagerPerformance(managerId: string, period: string): Promise<{
         contentCreated: {
@@ -418,17 +413,17 @@ export declare class AdminService {
         conversionRate: number;
         churnRate: number;
         payments: {
-            id: string;
-            amount: number;
-            currency: string;
-            status: string;
-            method: string;
-            customerEmail: string;
+            id: any;
+            amount: any;
+            currency: any;
+            status: any;
+            method: any;
+            customerEmail: any;
             customerName: string;
-            createdAt: string;
-            subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
-            country: string;
-            paymentProvider: string;
+            createdAt: any;
+            subscriptionTier: any;
+            country: any;
+            paymentProvider: any;
         }[];
         revenueByPeriod: {
             date: string;
@@ -440,22 +435,20 @@ export declare class AdminService {
             percentage: number;
         }[];
         subscriptionDistribution: {
-            tier: import(".prisma/client").$Enums.SubscriptionTier;
-            count: number;
+            tier: any;
+            count: any;
             revenue: number;
         }[];
         geographicDistribution: {
-            country: string;
-            count: number;
+            country: any;
+            count: any;
             revenue: number;
         }[];
         userStats: {
             totalUsers: number;
             newUsers: number;
             activeUsers: number;
-            subscriptionDistribution: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.UserGroupByOutputType, "subscriptionTier"[]> & {
-                _count: number;
-            })[];
+            subscriptionDistribution: any[];
         };
         timeframe: string;
         category: string;
@@ -544,122 +537,89 @@ export declare class AdminService {
             sessions: number;
         };
     }>;
-    static getReviewRequests(userId: string, userRole: string): Promise<({
-        feedback: {
-            id: string;
-            createdAt: Date;
-            maxScore: number;
-            submissionType: string;
-            aiScore: number;
-            aiConfidence: number;
-            overallFeedback: string;
-            strengths: import("@prisma/client/runtime/library").JsonValue;
-            weaknesses: import("@prisma/client/runtime/library").JsonValue;
-            recommendations: import("@prisma/client/runtime/library").JsonValue;
-        };
-        student: {
-            email: string;
-            id: string;
-            firstName: string;
-            lastName: string;
-            profileImage: string;
-        };
-        tutor: {
-            email: string;
-            id: string;
-            firstName: string;
-            lastName: string;
-        };
-    } & {
-        message: string;
-        id: string;
-        status: import(".prisma/client").$Enums.ReviewRequestStatus;
-        createdAt: Date;
-        updatedAt: Date;
-        response: string | null;
-        studentId: string;
-        tutorId: string;
-        feedbackId: string | null;
-        requestType: string;
-    })[]>;
+    static getReviewRequests(userId: string, userRole: string): Promise<any>;
     static handleReviewRequest(requestId: string, action: string, data: {
         tutorId: string;
         response?: string;
         humanFeedback?: string;
         humanScore?: number;
-    }): Promise<{
-        feedback: {
-            id: string;
-            status: string;
-            createdAt: Date;
-            updatedAt: Date;
-            userId: string;
-            maxScore: number;
-            simulationResultId: string | null;
-            submissionType: string;
-            submissionContent: string | null;
-            submissionFileUrl: string | null;
-            aiScore: number;
-            aiConfidence: number;
-            overallFeedback: string;
-            strengths: import("@prisma/client/runtime/library").JsonValue;
-            weaknesses: import("@prisma/client/runtime/library").JsonValue;
-            recommendations: import("@prisma/client/runtime/library").JsonValue;
-            detailedAnalysis: import("@prisma/client/runtime/library").JsonValue;
-            humanReviewerId: string | null;
-            humanReviewerName: string | null;
-            humanFeedback: string | null;
-            humanScore: number | null;
-            humanReviewDate: Date | null;
-        };
-        student: {
-            email: string;
-            id: string;
-            passwordHash: string | null;
-            firstName: string;
-            lastName: string;
-            role: import(".prisma/client").$Enums.UserRole;
-            status: import(".prisma/client").$Enums.UserStatus;
-            subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
-            currentLevel: string | null;
-            profileImage: string | null;
-            phone: string | null;
-            dateOfBirth: Date | null;
-            country: string | null;
-            city: string | null;
-            bio: string | null;
-            preferences: import("@prisma/client/runtime/library").JsonValue | null;
-            lastLoginAt: Date | null;
-            lastActivityAt: Date | null;
-            emailVerifiedAt: Date | null;
-            socialAuthProvider: string | null;
-            socialAuthId: string | null;
-            profilePicture: string | null;
-            createdAt: Date;
-            updatedAt: Date;
-        };
-    } & {
-        message: string;
+    }): Promise<any>;
+    static createSubscriptionPlan(planData: any): Promise<{
+        name: string;
         id: string;
-        status: import(".prisma/client").$Enums.ReviewRequestStatus;
         createdAt: Date;
         updatedAt: Date;
-        response: string | null;
-        studentId: string;
-        tutorId: string;
-        feedbackId: string | null;
-        requestType: string;
+        tier: import(".prisma/client").$Enums.SubscriptionTier;
+        billingCycle: string;
+        description: string | null;
+        descriptionEn: string | null;
+        price: number;
+        currency: string;
+        sortOrder: number;
+        nameEn: string | null;
+        isActive: boolean;
+        features: string[];
+        limitations: string[];
+        maxSimulations: number | null;
+        maxLiveSessions: number | null;
+        maxCourses: number | null;
+        maxTests: number | null;
+        stripePriceId: string | null;
+        isPopular: boolean;
     }>;
-    static createSubscriptionPlan(planData: any): Promise<any>;
-    static getSubscriptionPlans(): Promise<any>;
-    static getSubscriptionPlanById(id: string): Promise<any>;
-    static updateSubscriptionPlan(id: string, updateData: any): Promise<any>;
+    static getSubscriptionPlans(): Promise<import("../types").SubscriptionPlan[]>;
+    static getSubscriptionPlanById(id: string): Promise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        tier: import(".prisma/client").$Enums.SubscriptionTier;
+        billingCycle: string;
+        description: string | null;
+        descriptionEn: string | null;
+        price: number;
+        currency: string;
+        sortOrder: number;
+        nameEn: string | null;
+        isActive: boolean;
+        features: string[];
+        limitations: string[];
+        maxSimulations: number | null;
+        maxLiveSessions: number | null;
+        maxCourses: number | null;
+        maxTests: number | null;
+        stripePriceId: string | null;
+        isPopular: boolean;
+    }>;
+    static updateSubscriptionPlan(id: string, updateData: any): Promise<{
+        name: string;
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        tier: import(".prisma/client").$Enums.SubscriptionTier;
+        billingCycle: string;
+        description: string | null;
+        descriptionEn: string | null;
+        price: number;
+        currency: string;
+        sortOrder: number;
+        nameEn: string | null;
+        isActive: boolean;
+        features: string[];
+        limitations: string[];
+        maxSimulations: number | null;
+        maxLiveSessions: number | null;
+        maxCourses: number | null;
+        maxTests: number | null;
+        stripePriceId: string | null;
+        isPopular: boolean;
+    }>;
     static deleteSubscriptionPlan(id: string): Promise<void>;
     static getSubscriptionAnalytics(): Promise<{
-        totalSubscriptions: any;
-        activeSubscriptions: any;
-        totalRevenue: any;
-        plansCount: any;
+        totalSubscriptions: number;
+        activeSubscriptions: number;
+        totalRevenue: number;
+        plansCount: number;
         monthlyGrowth: number;
         churnRate: number;
     }>;
@@ -672,10 +632,10 @@ export declare class AdminService {
             userId: string;
             duration: number;
             feedback: string | null;
-            voicePreference: string;
+            voicePreference: import(".prisma/client").$Enums.VoiceType;
             scheduledDate: Date;
-            vapiSessionId: string | null;
             questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+            vapiSessionId: string | null;
             resultsData: import("@prisma/client/runtime/library").JsonValue | null;
             overallScore: number | null;
             fluencyScore: number | null;
@@ -700,10 +660,10 @@ export declare class AdminService {
         userId: string;
         duration: number;
         feedback: string | null;
-        voicePreference: string;
+        voicePreference: import(".prisma/client").$Enums.VoiceType;
         scheduledDate: Date;
-        vapiSessionId: string | null;
         questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+        vapiSessionId: string | null;
         resultsData: import("@prisma/client/runtime/library").JsonValue | null;
         overallScore: number | null;
         fluencyScore: number | null;
@@ -721,10 +681,10 @@ export declare class AdminService {
         userId: string;
         duration: number;
         feedback: string | null;
-        voicePreference: string;
+        voicePreference: import(".prisma/client").$Enums.VoiceType;
         scheduledDate: Date;
-        vapiSessionId: string | null;
         questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+        vapiSessionId: string | null;
         resultsData: import("@prisma/client/runtime/library").JsonValue | null;
         overallScore: number | null;
         fluencyScore: number | null;
@@ -742,10 +702,10 @@ export declare class AdminService {
         userId: string;
         duration: number;
         feedback: string | null;
-        voicePreference: string;
+        voicePreference: import(".prisma/client").$Enums.VoiceType;
         scheduledDate: Date;
-        vapiSessionId: string | null;
         questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+        vapiSessionId: string | null;
         resultsData: import("@prisma/client/runtime/library").JsonValue | null;
         overallScore: number | null;
         fluencyScore: number | null;
@@ -769,7 +729,6 @@ export declare class AdminService {
             startedAt: Date | null;
             questions: string;
             immigrationType: string;
-            voicePreference: string;
             personalInfo: string;
             responses: string;
             currentQuestionIndex: number;
@@ -795,7 +754,6 @@ export declare class AdminService {
         startedAt: Date | null;
         questions: string;
         immigrationType: string;
-        voicePreference: string;
         personalInfo: string;
         responses: string;
         currentQuestionIndex: number;
@@ -814,7 +772,6 @@ export declare class AdminService {
         startedAt: Date | null;
         questions: string;
         immigrationType: string;
-        voicePreference: string;
         personalInfo: string;
         responses: string;
         currentQuestionIndex: number;
@@ -833,7 +790,6 @@ export declare class AdminService {
         startedAt: Date | null;
         questions: string;
         immigrationType: string;
-        voicePreference: string;
         personalInfo: string;
         responses: string;
         currentQuestionIndex: number;
@@ -841,6 +797,12 @@ export declare class AdminService {
         finalReport: string | null;
     }>;
     static deleteImmigrationSimulation(id: string): Promise<void>;
+    static getStatistics(): Promise<{
+        totalUsers: number;
+        activeManagers: number;
+        contentCreated: number;
+        monthlyGrowth: number;
+    }>;
 }
 export {};
 //# sourceMappingURL=adminService.d.ts.map

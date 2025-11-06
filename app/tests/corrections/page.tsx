@@ -38,13 +38,16 @@ export default function TestCorrectionsPage() {
     const fetchCorrections = async () => {
       try {
         setLoading(true)
-        const response = await apiClient.get('/content-management/management')
+        console.log('🔍 Fetching test corrections...')
+        const response = await apiClient.get('/content-management/tests?type=corrections')
+        console.log('🔍 Test corrections response:', response)
         if (response.success && response.data) {
           const content = (response.data as any).content
+          console.log('🔍 Test corrections content:', content)
           setTests(Array.isArray(content) ? content : [])
         }
       } catch (error) {
-        console.error('Error fetching test corrections:', error)
+        console.error('❌ Error fetching test corrections:', error)
         setTests([])
       } finally {
         setLoading(false)

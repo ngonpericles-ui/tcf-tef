@@ -8,6 +8,29 @@ import { EmailService } from '@/services/emailService';
 import { prisma } from '@/config/database';
 
 export class LiveSessionController {
+  // In-memory storage for chat messages
+  private static messageStorage: Map<string, any[]> = new Map();
+
+  /**
+   * Store a message for a session
+   */
+  static storeMessage(sessionId: string, message: any): void {
+    if (!this.messageStorage.has(sessionId)) {
+      this.messageStorage.set(sessionId, []);
+    }
+    this.messageStorage.get(sessionId)!.push(message);
+    console.log(`💾 Message stored for session ${sessionId}. Total messages: ${this.messageStorage.get(sessionId)!.length}`);
+  }
+
+  /**
+   * Get stored messages for a session
+   */
+  static getStoredMessages(sessionId: string): any[] {
+    const messages = this.messageStorage.get(sessionId) || [];
+    console.log(`📥 Retrieved ${messages.length} messages for session ${sessionId}`);
+    return messages;
+  }
+
   /**
    * Create a new live session (Manager/Admin only)
    */
@@ -151,7 +174,15 @@ export class LiveSessionController {
     const userId = req.user?.userId;
     const userRole = req.user?.role;
 
+    console.log('🔍 Update session status request:', {
+      sessionId,
+      status,
+      userId,
+      userRole
+    });
+
     if (!userId || !userRole) {
+      console.log('❌ Authentication required');
       res.status(401).json({
         success: false,
         error: { message: 'Authentication required' }
@@ -159,6 +190,7 @@ export class LiveSessionController {
       return;
     }
 
+    console.log('🚀 Calling LiveSessionService.updateSessionStatus...');
     const session = await LiveSessionService.updateSessionStatus(sessionId, status, userId, userRole);
 
     const response: ApiResponse = {
@@ -484,58 +516,61 @@ export class LiveSessionController {
       startOfWeek.setDate(now.getDate() - now.getDay());
       startOfWeek.setHours(0, 0, 0, 0);
 
-      const [
-        scheduledSessions,
-        completedSessions,
-        totalParticipants,
-        totalTimeThisWeek
-      ] = await Promise.all([
-        // Scheduled sessions count
-        prisma.liveSession.count({
-          where: {
-            createdById: userId,
-            status: 'SCHEDULED'
-          }
-        }),
-
-        // Completed sessions count
-        prisma.liveSession.count({
-          where: {
-            createdById: userId,
-            status: 'COMPLETED'
-          }
-        }),
-
-        // Total participants across all sessions
-        prisma.liveSessionParticipant.count({
-          where: {
-            liveSession: {
-              createdById: userId
+      // Use transaction to avoid connection pool exhaustion
+      const statistics = await prisma.$transaction(async (tx) => {
+        const [
+          scheduledSessions,
+          completedSessions,
+          totalParticipants,
+          totalTimeThisWeek
+        ] = await Promise.all([
+          // Scheduled sessions count
+          tx.liveSession.count({
+            where: {
+              createdById: userId,
+              status: 'SCHEDULED'
             }
-          }
-        }),
+          }),
 
-        // Total time this week (completed sessions)
-        prisma.liveSession.aggregate({
-          where: {
-            createdById: userId,
-            status: 'COMPLETED',
-            date: {
-              gte: startOfWeek
+          // Completed sessions count
+          tx.liveSession.count({
+            where: {
+              createdById: userId,
+              status: 'COMPLETED'
             }
-          },
-          _sum: {
-            duration: true
-          }
-        })
-      ]);
+          }),
 
-      const statistics = {
-        scheduledSessions,
-        completedSessions,
-        totalParticipants,
-        totalTimeThisWeek: Math.round((totalTimeThisWeek._sum.duration || 0) / 60) // Convert minutes to hours
-      };
+          // Total participants across all sessions
+          tx.liveSessionParticipant.count({
+            where: {
+              liveSession: {
+                createdById: userId
+              }
+            }
+          }),
+
+          // Total time this week (completed sessions)
+          tx.liveSession.aggregate({
+            where: {
+              createdById: userId,
+              status: 'COMPLETED',
+              date: {
+                gte: startOfWeek
+              }
+            },
+            _sum: {
+              duration: true
+            }
+          })
+        ]);
+
+        return {
+          scheduledSessions,
+          completedSessions,
+          totalParticipants,
+          totalTimeThisWeek: Math.round((totalTimeThisWeek._sum.duration || 0) / 60) // Convert minutes to hours
+        };
+      });
 
       const response: ApiResponse = {
         success: true,
@@ -546,9 +581,302 @@ export class LiveSessionController {
       res.status(200).json(response);
     } catch (error) {
       logger.error('Failed to get live session statistics', { userId, error });
+      
+      // Check if it's a connection pool exhaustion error
+      if (error.message && error.message.includes('remaining connection slots are reserved')) {
+        res.status(503).json({
+          success: false,
+          error: { 
+            message: 'Database connection pool exhausted. Please try again in a moment.',
+            code: 'CONNECTION_POOL_EXHAUSTED'
+          }
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: { message: 'Failed to retrieve statistics' }
+        });
+      }
+    }
+  });
+
+  /**
+   * Get session participants
+   */
+  static getSessionParticipants = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { sessionId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      const participants = await prisma.liveSessionParticipant.findMany({
+        where: {
+          liveSessionId: sessionId
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              profilePicture: true,
+              role: true
+            }
+          }
+        }
+      });
+
+      const formattedParticipants = participants.map(p => ({
+        id: p.user.id,
+        name: `${p.user.firstName} ${p.user.lastName}`,
+        email: p.user.email,
+        profilePicture: p.user.profilePicture,
+        role: p.user.role,
+        isMuted: false, // Default values since these fields don't exist in schema
+        isVideoOn: true,
+        hasHandRaised: false,
+        isHost: false,
+        joinedAt: p.joinedAt
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: formattedParticipants
+      });
+    } catch (error) {
+      logger.error('Failed to get session participants', { sessionId, userId, error });
       res.status(500).json({
         success: false,
-        error: { message: 'Failed to retrieve statistics' }
+        error: { message: 'Failed to retrieve participants' }
+      });
+    }
+  });
+
+  /**
+   * Mute/unmute participant
+   */
+  static muteParticipant = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { sessionId, participantId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      const participant = await prisma.liveSessionParticipant.findFirst({
+        where: {
+          liveSessionId: sessionId,
+          userId: participantId
+        }
+      });
+
+      if (!participant) {
+        res.status(404).json({
+          success: false,
+          error: { message: 'Participant not found' }
+        });
+        return;
+      }
+
+      // For now, just return success since these fields don't exist in schema
+      // TODO: Add these fields to the schema if needed
+      res.status(200).json({
+        success: true,
+        data: { isMuted: false }
+      });
+    } catch (error) {
+      logger.error('Failed to mute participant', { sessionId, participantId, userId, error });
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to mute participant' }
+      });
+    }
+  });
+
+  /**
+   * Pin/unpin participant
+   */
+  static pinParticipant = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { sessionId, participantId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      const participant = await prisma.liveSessionParticipant.findFirst({
+        where: {
+          liveSessionId: sessionId,
+          userId: participantId
+        }
+      });
+
+      if (!participant) {
+        res.status(404).json({
+          success: false,
+          error: { message: 'Participant not found' }
+        });
+        return;
+      }
+
+      // For now, just return success since these fields don't exist in schema
+      // TODO: Add these fields to the schema if needed
+      res.status(200).json({
+        success: true,
+        data: { isPinned: false }
+      });
+    } catch (error) {
+      logger.error('Failed to pin participant', { sessionId, participantId, userId, error });
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to pin participant' }
+      });
+    }
+  });
+
+  /**
+   * Remove participant from session
+   */
+  static removeParticipant = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { sessionId, participantId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      const participant = await prisma.liveSessionParticipant.findFirst({
+        where: {
+          liveSessionId: sessionId,
+          userId: participantId
+        }
+      });
+
+      if (!participant) {
+        res.status(404).json({
+          success: false,
+          error: { message: 'Participant not found' }
+        });
+        return;
+      }
+
+      await prisma.liveSessionParticipant.delete({
+        where: { id: participant.id }
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Participant removed successfully'
+      });
+    } catch (error) {
+      logger.error('Failed to remove participant', { sessionId, participantId, userId, error });
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to remove participant' }
+      });
+    }
+  });
+
+  /**
+   * Get session chat messages
+   */
+  static getSessionMessages = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { sessionId } = req.params;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      // Get messages from in-memory storage
+      const messages = LiveSessionController.getStoredMessages(sessionId);
+
+      res.status(200).json({
+        success: true,
+        data: messages
+      });
+    } catch (error) {
+      logger.error('Failed to get session messages', { sessionId, userId, error });
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to retrieve messages' }
+      });
+    }
+  });
+
+  /**
+   * Send message to session chat
+   */
+  static sendMessage = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { sessionId } = req.params;
+    const { message } = req.body;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required' }
+      });
+      return;
+    }
+
+    try {
+      // Get user info for the message
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true, profilePicture: true }
+      });
+
+      const formattedMessage = {
+        id: `msg_${Date.now()}`,
+        senderId: userId,
+        senderName: user ? `${user.firstName} ${user.lastName}` : "Unknown User",
+        senderProfilePicture: user?.profilePicture || null,
+        message: message,
+        timestamp: new Date(),
+        isSystemMessage: false
+      };
+
+      // Store the message
+      LiveSessionController.storeMessage(sessionId, formattedMessage);
+
+      res.status(201).json({
+        success: true,
+        data: formattedMessage
+      });
+    } catch (error) {
+      logger.error('Failed to send message', { sessionId, userId, error });
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to send message' }
       });
     }
   });

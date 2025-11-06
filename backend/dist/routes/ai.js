@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const client_1 = require("@prisma/client");
+const connection_1 = require("@/database/connection");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -13,7 +13,6 @@ const auth_1 = require("../middleware/auth");
 const levelDeterminationService_1 = require("../services/levelDeterminationService");
 const aiService_1 = require("../services/aiService");
 const router = express_1.default.Router();
-const prisma = new client_1.PrismaClient();
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = 'uploads/ai-files/';
@@ -47,64 +46,106 @@ const upload = (0, multer_1.default)({
 });
 router.get('/feedbacks', auth_1.authenticate, async (req, res, next) => {
     try {
-        const userId = req.user.userId;
-        const feedbacks = await prisma.aIFeedback.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' },
-            include: {
-                simulationResult: {
-                    include: {
-                        testAttempt: {
-                            include: {
-                                test: true
-                            }
-                        }
-                    }
-                }
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            console.error('❌ User ID not found in AI feedbacks request');
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
+        console.log('📋 Fetching AI feedbacks for user:', userId);
+        let feedbacks = [];
+        try {
+            feedbacks = await connection_1.prisma.aIFeedback.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' }
+            });
+        }
+        catch (prismaError) {
+            console.error('❌ Prisma error fetching AI feedbacks:', {
+                error: prismaError.message,
+                code: prismaError.code,
+                meta: prismaError.meta
+            });
+            feedbacks = [];
+        }
+        console.log(`✅ Found ${feedbacks.length} feedbacks for user ${userId}`);
+        const transformedFeedbacks = feedbacks.map(feedback => {
+            let simulationTitle = 'Unknown Simulation';
+            if (feedback.submissionType) {
+                simulationTitle = `Soumission ${feedback.submissionType}`;
             }
+            else if (feedback.voiceSimulationId) {
+                simulationTitle = `Simulation Vocale #${feedback.voiceSimulationId.substring(0, 8)}`;
+            }
+            else {
+                simulationTitle = `Feedback #${feedback.id.substring(0, 8)}`;
+            }
+            const percentage = feedback.maxScore && feedback.maxScore > 0
+                ? Math.round((feedback.aiScore / feedback.maxScore) * 100)
+                : feedback.aiScore || 0;
+            return {
+                id: feedback.id,
+                simulationTitle,
+                submissionDate: feedback.createdAt.toISOString(),
+                aiScore: feedback.aiScore || 0,
+                maxScore: feedback.maxScore || 100,
+                percentage,
+                aiConfidence: feedback.aiConfidence || 0,
+                status: feedback.status,
+                feedback: {
+                    overall: feedback.overallFeedback || '',
+                    strengths: feedback.strengths || [],
+                    weaknesses: feedback.weaknesses || [],
+                    recommendations: feedback.recommendations || [],
+                    detailedAnalysis: feedback.detailedAnalysis || {}
+                },
+                originalWork: {
+                    type: feedback.submissionType || 'general',
+                    content: feedback.submissionContent || '',
+                    fileUrl: feedback.submissionFileUrl || null
+                },
+                humanReview: feedback.humanReviewerId ? {
+                    tutorName: feedback.humanReviewerName || 'Expert Tutor',
+                    tutorFeedback: feedback.humanFeedback || '',
+                    reviewDate: feedback.humanReviewDate?.toISOString() || '',
+                    finalScore: feedback.humanScore || feedback.aiScore || 0
+                } : undefined
+            };
         });
-        const transformedFeedbacks = feedbacks.map(feedback => ({
-            id: feedback.id,
-            simulationTitle: feedback.simulationResult?.testAttempt?.test?.title || 'Unknown Simulation',
-            submissionDate: feedback.createdAt.toISOString(),
-            aiScore: feedback.aiScore,
-            maxScore: feedback.maxScore,
-            percentage: Math.round((feedback.aiScore / feedback.maxScore) * 100),
-            aiConfidence: feedback.aiConfidence,
-            status: feedback.status,
-            feedback: {
-                overall: feedback.overallFeedback,
-                strengths: feedback.strengths,
-                weaknesses: feedback.weaknesses,
-                recommendations: feedback.recommendations,
-                detailedAnalysis: feedback.detailedAnalysis
-            },
-            originalWork: {
-                type: feedback.submissionType,
-                content: feedback.submissionContent,
-                fileUrl: feedback.submissionFileUrl
-            },
-            humanReview: feedback.humanReviewerId ? {
-                tutorName: feedback.humanReviewerName || 'Expert Tutor',
-                tutorFeedback: feedback.humanFeedback || '',
-                reviewDate: feedback.humanReviewDate?.toISOString() || '',
-                finalScore: feedback.humanScore || feedback.aiScore
-            } : undefined
-        }));
         res.json({
             success: true,
             data: transformedFeedbacks
         });
     }
     catch (error) {
-        next(error);
+        const userId = req.user?.userId || req.user?.id;
+        console.error('❌ Error fetching AI feedbacks:', {
+            error: error.message,
+            stack: error.stack,
+            userId
+        });
+        res.status(500).json({
+            success: false,
+            error: {
+                message: error.message || 'Failed to fetch AI feedbacks',
+                statusCode: 500
+            }
+        });
     }
 });
 router.get('/feedbacks/:id', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
-        const userId = req.user.userId;
-        const feedback = await prisma.aIFeedback.findFirst({
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
+        const feedback = await connection_1.prisma.aIFeedback.findFirst({
             where: {
                 id,
                 userId
@@ -153,10 +194,16 @@ router.get('/feedbacks/:id', auth_1.authenticate, async (req, res, next) => {
 });
 router.post('/feedbacks', auth_1.authenticate, async (req, res, next) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         const { simulationResultId, submissionType, submissionContent, submissionFileUrl } = req.body;
         const aiAnalysis = await generateAIFeedback(submissionContent, submissionType);
-        const feedback = await prisma.aIFeedback.create({
+        const feedback = await connection_1.prisma.aIFeedback.create({
             data: {
                 userId,
                 simulationResultId,
@@ -186,8 +233,14 @@ router.post('/feedbacks', auth_1.authenticate, async (req, res, next) => {
 router.get('/feedbacks/:id/report', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
-        const userId = req.user.userId;
-        const feedback = await prisma.aIFeedback.findFirst({
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
+        const feedback = await connection_1.prisma.aIFeedback.findFirst({
             where: {
                 id,
                 userId
@@ -224,7 +277,7 @@ router.post('/analyze-document', auth_1.authenticate, async (req, res, next) => 
         const { documentUrl, documentType, contentId } = req.body;
         const extractedText = await extractTextFromDocument(documentUrl, documentType);
         const analysis = await analyzeDocumentWithAI(extractedText);
-        await prisma.questionBankEntry.create({
+        await connection_1.prisma.questionBank.create({
             data: {
                 content: extractedText,
                 contentType: documentType || 'DOCUMENT',
@@ -253,7 +306,7 @@ router.post('/analyze-document', auth_1.authenticate, async (req, res, next) => 
 router.get('/assistant/context', auth_1.authenticate, async (req, res, next) => {
     try {
         const { query, limit = 10 } = req.query;
-        const contextEntries = await prisma.questionBankEntry.findMany({
+        const contextEntries = await connection_1.prisma.questionBank.findMany({
             where: query ? {
                 OR: [
                     { extractedText: { contains: query, mode: 'insensitive' } },
@@ -352,8 +405,14 @@ async function analyzeDocumentWithAI(text) {
 router.post('/feedbacks/:id/request-review', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
-        const userId = req.user.userId;
-        const feedback = await prisma.aIFeedback.findFirst({
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
+        const feedback = await connection_1.prisma.aIFeedback.findFirst({
             where: {
                 id,
                 userId
@@ -365,7 +424,7 @@ router.post('/feedbacks/:id/request-review', auth_1.authenticate, async (req, re
                 error: { message: 'Feedback not found' }
             });
         }
-        const updatedFeedback = await prisma.aIFeedback.update({
+        const updatedFeedback = await connection_1.prisma.aIFeedback.update({
             where: { id },
             data: {
                 status: 'PENDING_HUMAN'
@@ -386,7 +445,13 @@ router.post('/feedbacks/:id/request-review', auth_1.authenticate, async (req, re
 });
 router.get('/level-assessment', auth_1.authenticate, async (req, res, next) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         const assessment = await levelDeterminationService_1.LevelDeterminationService.determineStudentLevel(userId);
         res.json({
             success: true,
@@ -399,7 +464,13 @@ router.get('/level-assessment', auth_1.authenticate, async (req, res, next) => {
 });
 router.post('/assess-level', auth_1.authenticate, async (req, res, next) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         const { responses } = req.body;
         const totalQuestions = responses?.length || 1;
         const correctAnswers = Math.floor(totalQuestions * (0.6 + Math.random() * 0.3));
@@ -438,7 +509,13 @@ router.post('/assess-level', auth_1.authenticate, async (req, res, next) => {
 });
 router.post('/level-assessment/update', auth_1.authenticate, async (req, res, next) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         const { testAttemptId } = req.body;
         const assessment = await levelDeterminationService_1.LevelDeterminationService.determineStudentLevel(userId);
         res.json({
@@ -455,12 +532,18 @@ router.post('/level-assessment/update', auth_1.authenticate, async (req, res, ne
 });
 router.post('/feedback', auth_1.authenticate, async (req, res, next) => {
     try {
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         const { submissionType, submissionContent, simulationResultId, type, content } = req.body;
         const finalSubmissionType = submissionType || type || 'general';
         const finalSubmissionContent = submissionContent || content || 'Sample content';
         const aiAnalysis = await generateAIFeedback(finalSubmissionContent, finalSubmissionType);
-        const feedback = await prisma.aIFeedback.create({
+        const feedback = await connection_1.prisma.aIFeedback.create({
             data: {
                 userId,
                 simulationResultId,
@@ -489,9 +572,15 @@ router.post('/feedback', auth_1.authenticate, async (req, res, next) => {
 router.post('/feedback/:id/submit-for-review', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         const { selectedTutorId, message } = req.body;
-        const feedback = await prisma.aIFeedback.findFirst({
+        const feedback = await connection_1.prisma.aIFeedback.findFirst({
             where: {
                 id,
                 userId
@@ -506,17 +595,19 @@ router.post('/feedback/:id/submit-for-review', auth_1.authenticate, async (req, 
                 error: { message: 'Feedback not found' }
             });
         }
-        const reviewRequest = await prisma.reviewRequest.create({
+        const reviewRequest = await connection_1.prisma.marketplaceRequest.create({
             data: {
                 studentId: userId,
                 tutorId: selectedTutorId,
+                requestType: 'EXPERTISE',
+                subject: `Review AI Feedback - ${feedback.submissionType || 'Feedback'}`,
+                description: message || 'Please review my AI feedback',
                 feedbackId: id,
-                message: message || 'Please review my AI feedback',
                 status: 'PENDING',
-                requestType: 'AI_FEEDBACK_REVIEW'
+                urgency: 'MEDIUM'
             }
         });
-        await prisma.aIFeedback.update({
+        await connection_1.prisma.aIFeedback.update({
             where: { id },
             data: {
                 status: 'PENDING_HUMAN'
@@ -538,7 +629,13 @@ router.post('/feedback/:id/submit-for-review', auth_1.authenticate, async (req, 
 router.post('/chat', auth_1.authenticate, async (req, res, next) => {
     try {
         const { message, context } = req.body;
-        const userId = req.user.userId;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                error: { message: 'User not authenticated', statusCode: 401 }
+            });
+        }
         if (context && context.lessonTitle && context.courseTitle) {
             const result = await aiService_1.AIService.generateChatResponse(message, context);
             return res.json({

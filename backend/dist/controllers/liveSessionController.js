@@ -2,16 +2,29 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionController = void 0;
-const liveSessionService_1 = require("../services/liveSessionService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const liveSessionService_1 = require("@/services/liveSessionService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
-const emailService_1 = require("../services/emailService");
-const database_1 = require("../config/database");
+const logger_1 = require("@/utils/logger");
+const emailService_1 = require("@/services/emailService");
+const database_1 = require("@/config/database");
 class LiveSessionController {
+    static storeMessage(sessionId, message) {
+        if (!this.messageStorage.has(sessionId)) {
+            this.messageStorage.set(sessionId, []);
+        }
+        this.messageStorage.get(sessionId).push(message);
+        console.log(`💾 Message stored for session ${sessionId}. Total messages: ${this.messageStorage.get(sessionId).length}`);
+    }
+    static getStoredMessages(sessionId) {
+        const messages = this.messageStorage.get(sessionId) || [];
+        console.log(`📥 Retrieved ${messages.length} messages for session ${sessionId}`);
+        return messages;
+    }
 }
 exports.LiveSessionController = LiveSessionController;
 _a = LiveSessionController;
+LiveSessionController.messageStorage = new Map();
 LiveSessionController.createLiveSession = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const sessionData = req.body;
     const createdById = req.user?.userId;
@@ -108,13 +121,21 @@ LiveSessionController.updateSessionStatus = (0, errorHandler_1.asyncHandler)(asy
     const { status } = req.body;
     const userId = req.user?.userId;
     const userRole = req.user?.role;
+    console.log('🔍 Update session status request:', {
+        sessionId,
+        status,
+        userId,
+        userRole
+    });
     if (!userId || !userRole) {
+        console.log('❌ Authentication required');
         res.status(401).json({
             success: false,
             error: { message: 'Authentication required' }
         });
         return;
     }
+    console.log('🚀 Calling LiveSessionService.updateSessionStatus...');
     const session = await liveSessionService_1.LiveSessionService.updateSessionStatus(sessionId, status, userId, userRole);
     const response = {
         success: true,
@@ -354,45 +375,47 @@ LiveSessionController.getLiveSessionStatistics = (0, errorHandler_1.asyncHandler
         const startOfWeek = new Date(now);
         startOfWeek.setDate(now.getDate() - now.getDay());
         startOfWeek.setHours(0, 0, 0, 0);
-        const [scheduledSessions, completedSessions, totalParticipants, totalTimeThisWeek] = await Promise.all([
-            database_1.prisma.liveSession.count({
-                where: {
-                    createdById: userId,
-                    status: 'SCHEDULED'
-                }
-            }),
-            database_1.prisma.liveSession.count({
-                where: {
-                    createdById: userId,
-                    status: 'COMPLETED'
-                }
-            }),
-            database_1.prisma.liveSessionParticipant.count({
-                where: {
-                    liveSession: {
-                        createdById: userId
+        const statistics = await database_1.prisma.$transaction(async (tx) => {
+            const [scheduledSessions, completedSessions, totalParticipants, totalTimeThisWeek] = await Promise.all([
+                tx.liveSession.count({
+                    where: {
+                        createdById: userId,
+                        status: 'SCHEDULED'
                     }
-                }
-            }),
-            database_1.prisma.liveSession.aggregate({
-                where: {
-                    createdById: userId,
-                    status: 'COMPLETED',
-                    date: {
-                        gte: startOfWeek
+                }),
+                tx.liveSession.count({
+                    where: {
+                        createdById: userId,
+                        status: 'COMPLETED'
                     }
-                },
-                _sum: {
-                    duration: true
-                }
-            })
-        ]);
-        const statistics = {
-            scheduledSessions,
-            completedSessions,
-            totalParticipants,
-            totalTimeThisWeek: Math.round((totalTimeThisWeek._sum.duration || 0) / 60)
-        };
+                }),
+                tx.liveSessionParticipant.count({
+                    where: {
+                        liveSession: {
+                            createdById: userId
+                        }
+                    }
+                }),
+                tx.liveSession.aggregate({
+                    where: {
+                        createdById: userId,
+                        status: 'COMPLETED',
+                        date: {
+                            gte: startOfWeek
+                        }
+                    },
+                    _sum: {
+                        duration: true
+                    }
+                })
+            ]);
+            return {
+                scheduledSessions,
+                completedSessions,
+                totalParticipants,
+                totalTimeThisWeek: Math.round((totalTimeThisWeek._sum.duration || 0) / 60)
+            };
+        });
         const response = {
             success: true,
             data: statistics,
@@ -402,9 +425,251 @@ LiveSessionController.getLiveSessionStatistics = (0, errorHandler_1.asyncHandler
     }
     catch (error) {
         logger_1.logger.error('Failed to get live session statistics', { userId, error });
+        if (error.message && error.message.includes('remaining connection slots are reserved')) {
+            res.status(503).json({
+                success: false,
+                error: {
+                    message: 'Database connection pool exhausted. Please try again in a moment.',
+                    code: 'CONNECTION_POOL_EXHAUSTED'
+                }
+            });
+        }
+        else {
+            res.status(500).json({
+                success: false,
+                error: { message: 'Failed to retrieve statistics' }
+            });
+        }
+    }
+});
+LiveSessionController.getSessionParticipants = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.user?.userId;
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const participants = await database_1.prisma.liveSessionParticipant.findMany({
+            where: {
+                liveSessionId: sessionId
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        profilePicture: true,
+                        role: true
+                    }
+                }
+            }
+        });
+        const formattedParticipants = participants.map(p => ({
+            id: p.user.id,
+            name: `${p.user.firstName} ${p.user.lastName}`,
+            email: p.user.email,
+            profilePicture: p.user.profilePicture,
+            role: p.user.role,
+            isMuted: false,
+            isVideoOn: true,
+            hasHandRaised: false,
+            isHost: false,
+            joinedAt: p.joinedAt
+        }));
+        res.status(200).json({
+            success: true,
+            data: formattedParticipants
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get session participants', { sessionId, userId, error });
         res.status(500).json({
             success: false,
-            error: { message: 'Failed to retrieve statistics' }
+            error: { message: 'Failed to retrieve participants' }
+        });
+    }
+});
+LiveSessionController.muteParticipant = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { sessionId, participantId } = req.params;
+    const userId = req.user?.userId;
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const participant = await database_1.prisma.liveSessionParticipant.findFirst({
+            where: {
+                liveSessionId: sessionId,
+                userId: participantId
+            }
+        });
+        if (!participant) {
+            res.status(404).json({
+                success: false,
+                error: { message: 'Participant not found' }
+            });
+            return;
+        }
+        res.status(200).json({
+            success: true,
+            data: { isMuted: false }
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to mute participant', { sessionId, participantId, userId, error });
+        res.status(500).json({
+            success: false,
+            error: { message: 'Failed to mute participant' }
+        });
+    }
+});
+LiveSessionController.pinParticipant = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { sessionId, participantId } = req.params;
+    const userId = req.user?.userId;
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const participant = await database_1.prisma.liveSessionParticipant.findFirst({
+            where: {
+                liveSessionId: sessionId,
+                userId: participantId
+            }
+        });
+        if (!participant) {
+            res.status(404).json({
+                success: false,
+                error: { message: 'Participant not found' }
+            });
+            return;
+        }
+        res.status(200).json({
+            success: true,
+            data: { isPinned: false }
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to pin participant', { sessionId, participantId, userId, error });
+        res.status(500).json({
+            success: false,
+            error: { message: 'Failed to pin participant' }
+        });
+    }
+});
+LiveSessionController.removeParticipant = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { sessionId, participantId } = req.params;
+    const userId = req.user?.userId;
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const participant = await database_1.prisma.liveSessionParticipant.findFirst({
+            where: {
+                liveSessionId: sessionId,
+                userId: participantId
+            }
+        });
+        if (!participant) {
+            res.status(404).json({
+                success: false,
+                error: { message: 'Participant not found' }
+            });
+            return;
+        }
+        await database_1.prisma.liveSessionParticipant.delete({
+            where: { id: participant.id }
+        });
+        res.status(200).json({
+            success: true,
+            message: 'Participant removed successfully'
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to remove participant', { sessionId, participantId, userId, error });
+        res.status(500).json({
+            success: false,
+            error: { message: 'Failed to remove participant' }
+        });
+    }
+});
+LiveSessionController.getSessionMessages = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.user?.userId;
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const messages = _a.getStoredMessages(sessionId);
+        res.status(200).json({
+            success: true,
+            data: messages
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get session messages', { sessionId, userId, error });
+        res.status(500).json({
+            success: false,
+            error: { message: 'Failed to retrieve messages' }
+        });
+    }
+});
+LiveSessionController.sendMessage = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { sessionId } = req.params;
+    const { message } = req.body;
+    const userId = req.user?.userId;
+    if (!userId) {
+        res.status(401).json({
+            success: false,
+            error: { message: 'Authentication required' }
+        });
+        return;
+    }
+    try {
+        const user = await database_1.prisma.user.findUnique({
+            where: { id: userId },
+            select: { firstName: true, lastName: true, profilePicture: true }
+        });
+        const formattedMessage = {
+            id: `msg_${Date.now()}`,
+            senderId: userId,
+            senderName: user ? `${user.firstName} ${user.lastName}` : "Unknown User",
+            senderProfilePicture: user?.profilePicture || null,
+            message: message,
+            timestamp: new Date(),
+            isSystemMessage: false
+        };
+        _a.storeMessage(sessionId, formattedMessage);
+        res.status(201).json({
+            success: true,
+            data: formattedMessage
+        });
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to send message', { sessionId, userId, error });
+        res.status(500).json({
+            success: false,
+            error: { message: 'Failed to send message' }
         });
     }
 });

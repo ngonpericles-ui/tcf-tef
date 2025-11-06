@@ -103,11 +103,33 @@ router.post('/:sessionId/register',
 );
 
 /**
+ * @route   POST /api/live-sessions/:sessionId/join
+ * @desc    Join live session (alias for register)
+ * @access  Private
+ */
+router.post('/:sessionId/join',
+  authenticate,
+  validateParams({ sessionId: commonSchemas.id }),
+  LiveSessionController.registerForSession
+);
+
+/**
  * @route   DELETE /api/live-sessions/:sessionId/register
  * @desc    Unregister from live session
  * @access  Private
  */
 router.delete('/:sessionId/register',
+  authenticate,
+  validateParams({ sessionId: commonSchemas.id }),
+  LiveSessionController.unregisterFromSession
+);
+
+/**
+ * @route   POST /api/live-sessions/:sessionId/leave
+ * @desc    Leave live session (alias for unregister)
+ * @access  Private
+ */
+router.post('/:sessionId/leave',
   authenticate,
   validateParams({ sessionId: commonSchemas.id }),
   LiveSessionController.unregisterFromSession
@@ -169,6 +191,78 @@ router.post('/reminder',
     reminderTime: Joi.string().valid('5min', '10min').required()
   })),
   LiveSessionController.setReminder
+);
+
+/**
+ * @route   GET /api/live-sessions/:sessionId/participants
+ * @desc    Get session participants
+ * @access  Private
+ */
+router.get('/:sessionId/participants',
+  authenticate,
+  validateParams({ sessionId: commonSchemas.id }),
+  LiveSessionController.getSessionParticipants
+);
+
+/**
+ * @route   POST /api/live-sessions/:sessionId/participants/:participantId/mute
+ * @desc    Mute/unmute participant (Admin/Manager only)
+ * @access  Private (Admin/Manager)
+ */
+router.post('/:sessionId/participants/:participantId/mute',
+  authenticate,
+  requireManager,
+  validateParams({ sessionId: commonSchemas.id, participantId: commonSchemas.id }),
+  LiveSessionController.muteParticipant
+);
+
+/**
+ * @route   POST /api/live-sessions/:sessionId/participants/:participantId/pin
+ * @desc    Pin/unpin participant (Admin/Manager only)
+ * @access  Private (Admin/Manager)
+ */
+router.post('/:sessionId/participants/:participantId/pin',
+  authenticate,
+  requireManager,
+  validateParams({ sessionId: commonSchemas.id, participantId: commonSchemas.id }),
+  LiveSessionController.pinParticipant
+);
+
+/**
+ * @route   DELETE /api/live-sessions/:sessionId/participants/:participantId
+ * @desc    Remove participant from session (Admin/Manager only)
+ * @access  Private (Admin/Manager)
+ */
+router.delete('/:sessionId/participants/:participantId',
+  authenticate,
+  requireManager,
+  validateParams({ sessionId: commonSchemas.id, participantId: commonSchemas.id }),
+  LiveSessionController.removeParticipant
+);
+
+/**
+ * @route   GET /api/live-sessions/:sessionId/messages
+ * @desc    Get session chat messages
+ * @access  Private
+ */
+router.get('/:sessionId/messages',
+  authenticate,
+  validateParams({ sessionId: commonSchemas.id }),
+  LiveSessionController.getSessionMessages
+);
+
+/**
+ * @route   POST /api/live-sessions/:sessionId/messages
+ * @desc    Send message to session chat
+ * @access  Private
+ */
+router.post('/:sessionId/messages',
+  authenticate,
+  validateParams({ sessionId: commonSchemas.id }),
+  validate(Joi.object({
+    message: Joi.string().min(1).max(1000).required()
+  })),
+  LiveSessionController.sendMessage
 );
 
 export { router as liveSessionRoutes };

@@ -99,7 +99,7 @@ All 4 critical issues reported after recent Cursor changes have been successfull
    ```
 
 2. **Test Admin Login**
-   - Go to `http://localhost:3003/admin/login`
+   - Go to `http://localhost:3000/admin/login`
    - Login with admin credentials
    - Verify redirect to `/admin`
 

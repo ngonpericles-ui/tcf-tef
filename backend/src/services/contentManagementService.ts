@@ -91,6 +91,7 @@ export class ContentManagementService {
       let thumbnailUrl: string | undefined;
 
       // Upload file to Cloudinary if provided
+      let extractedDuration: number | undefined = undefined;
       if (uploadData.file) {
         const uploadResult = await CloudinaryService.uploadFile(uploadData.file.path, {
           folder: `tcf-tef-platform/content/${uploadData.contentType.toLowerCase()}`,
@@ -99,6 +100,18 @@ export class ContentManagementService {
         });
 
         fileUrl = uploadResult.secure_url;
+
+        // Extract duration from Cloudinary for videos
+        if (uploadData.contentType === 'VIDEO' && uploadResult.duration) {
+          // Cloudinary returns duration in seconds, convert to minutes for storage
+          // Store as minutes (rounded to 1 decimal place for accuracy)
+          extractedDuration = Math.round((uploadResult.duration / 60) * 10) / 10;
+          logger.info('Video duration extracted from Cloudinary', {
+            durationSeconds: uploadResult.duration,
+            durationMinutes: extractedDuration,
+            publicId: uploadResult.public_id
+          });
+        }
 
         // Generate thumbnail for videos
         if (uploadData.contentType === 'VIDEO') {
@@ -110,14 +123,21 @@ export class ContentManagementService {
       let content: ContentItem;
       let analysis: ContentAnalysisResult | undefined;
 
+      // Use extracted duration for videos, user-provided duration for tests, undefined for PDFs/Notes
+      const finalDuration = uploadData.contentType === 'VIDEO' && extractedDuration 
+        ? extractedDuration 
+        : (uploadData.contentType === 'TEST' || uploadData.contentType === 'CORRIGER_TCF')
+          ? uploadData.duration 
+          : undefined;
+
       switch (uploadData.contentType) {
         case 'NOTE':
         case 'VIDEO':
-          content = await this.createCourseContent(uploadData, userId, fileUrl, thumbnailUrl);
+          content = await this.createCourseContent(uploadData, userId, fileUrl, thumbnailUrl, finalDuration);
           break;
         case 'TEST':
         case 'CORRIGER_TCF':
-          content = await this.createTestContent(uploadData, userId, fileUrl);
+          content = await this.createTestContent(uploadData, userId, fileUrl, finalDuration);
           break;
         case 'SIMULATION':
           content = await this.createSimulationContent(uploadData, userId, fileUrl);
@@ -151,22 +171,19 @@ export class ContentManagementService {
     uploadData: ContentUploadData,
     userId: string,
     fileUrl?: string,
-    thumbnailUrl?: string
+    thumbnailUrl?: string,
+    duration?: number
   ): Promise<ContentItem> {
-    // ✅ FIXED: Support multiple levels and tiers in single course
-    const availableLevels = (uploadData as any).availableLevels || [uploadData.level];
-    const availableTiers = (uploadData as any).availableTiers || [uploadData.subscriptionTier];
-    
+    // Note: Prisma schema only supports single level and tier
+    // Multiple levels/tiers would require a separate junction table
     const course = await prisma.course.create({
       data: {
         title: uploadData.title,
         description: uploadData.description,
-        level: uploadData.level, // Primary level
+        level: uploadData.level, // Primary level (single value)
         category: uploadData.category as CourseCategory,
-        requiredTier: uploadData.subscriptionTier, // Primary tier
-        availableLevels: availableLevels, // All available levels
-        availableTiers: availableTiers, // All available tiers
-        duration: uploadData.duration || 0,
+        requiredTier: uploadData.subscriptionTier, // Primary tier (single value)
+        duration: duration || 0, // Use extracted duration for videos, 0 for PDFs/Notes
         lessons: 1,
         tags: uploadData.tags || [],
         thumbnail: thumbnailUrl,
@@ -176,9 +193,9 @@ export class ContentManagementService {
           create: {
             title: uploadData.title,
             description: uploadData.description,
-            content: fileUrl,
-            videoUrl: uploadData.contentType === 'VIDEO' ? fileUrl : undefined,
-            duration: uploadData.duration || 0,
+            content: fileUrl, // Store actual Cloudinary URL
+            videoUrl: uploadData.contentType === 'VIDEO' ? fileUrl : undefined, // Store actual Cloudinary URL for videos
+            duration: duration ? Math.round(duration) : 0, // Use extracted duration for videos (in minutes), 0 for PDFs/Notes
             order: 1,
             resources: uploadData.tags || []
           }
@@ -222,7 +239,8 @@ export class ContentManagementService {
   private static async createTestContent(
     uploadData: ContentUploadData,
     userId: string,
-    fileUrl?: string
+    fileUrl?: string,
+    duration?: number
   ): Promise<ContentItem> {
     const test = await prisma.test.create({
       data: {
@@ -232,7 +250,7 @@ export class ContentManagementService {
         type: uploadData.category === 'CORRIGER_TCF' ? 'PRACTICE' : 'QUICK',
         category: uploadData.category as CourseCategory,
         requiredTier: uploadData.subscriptionTier,
-        duration: uploadData.duration || 60,
+        duration: duration || uploadData.duration || 60, // Use passed duration or fallback to user input or default
         questionCount: 10,
         passingScore: uploadData.passingScore || 60,
         tags: uploadData.tags || [],
@@ -437,12 +455,10 @@ export class ContentManagementService {
         isPublished: true
       };
 
-      // ✅ FIXED: Filter by user's level and subscription access
+      // Filter by user's level and subscription access
+      // Note: Prisma schema only supports single level and tier, not arrays
       if (level) {
-        where.OR = [
-          { level: level }, // Direct level match
-          { availableLevels: { has: level } } // Course supports this level
-        ];
+        where.level = level; // Direct level match
       }
 
       if (subscriptionTier) {
@@ -450,14 +466,7 @@ export class ContentManagementService {
         const userTierIndex = tierHierarchy.indexOf(subscriptionTier);
         const allowedTiers = tierHierarchy.slice(0, userTierIndex + 1);
         
-        where.AND = [
-          {
-            OR: [
-              { requiredTier: { in: allowedTiers } }, // Direct tier access
-              { availableTiers: { hasSome: allowedTiers } } // Course supports user's tier
-            ]
-          }
-        ];
+        where.requiredTier = { in: allowedTiers }; // Direct tier access
       } else {
         where.requiredTier = 'FREE';
       }
@@ -503,8 +512,8 @@ export class ContentManagementService {
           level: course.level,
           category: course.category,
           subscriptionTier: course.requiredTier,
-          availableLevels: course.availableLevels,
-          availableTiers: course.availableTiers,
+          // Note: availableLevels and availableTiers don't exist in Prisma schema
+          // These would need to be implemented via junction tables if needed
           contentType: course.lessons_data.length > 0 && course.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
           fileUrl: course.lessons_data.length > 0 ? course.lessons_data[0].content : undefined,
           thumbnailUrl: course.thumbnail,
@@ -811,15 +820,31 @@ export class ContentManagementService {
         }
       });
 
-      // ✅ FIXED: Update the SINGLE course with multiple levels and tiers
-      // No more creating duplicate courses!
+      // Validate inputs
+      if (!levels || levels.length === 0) {
+        throw new ValidationError('At least one level must be provided');
+      }
+      if (!subscriptions || subscriptions.length === 0) {
+        throw new ValidationError('At least one subscription tier must be provided');
+      }
+
+      // Handle "all" selections - if all levels/subscriptions are selected, use the first one
+      // Since Prisma schema only supports single level/tier, we'll use the first selected
+      const selectedLevel = levels.includes('ALL') || levels.length === 6 
+        ? 'A1' // Default to A1 if all selected
+        : (levels[0] as CourseLevel);
+      
+      const selectedTier = subscriptions.includes('ALL') || subscriptions.length === 4
+        ? 'FREE' // Default to FREE if all selected
+        : (subscriptions[0] as SubscriptionTier);
+
+      // ✅ FIXED: Update the SINGLE course with selected level and tier
       const updatedCourse = await prisma.course.update({
         where: { id: courseId },
         data: {
-          level: levels[0] as CourseLevel, // Primary level
-          requiredTier: subscriptions[0] as SubscriptionTier, // Primary tier
-          availableLevels: levels as CourseLevel[], // All available levels
-          availableTiers: subscriptions as SubscriptionTier[] // All available tiers
+          level: selectedLevel,
+          requiredTier: selectedTier,
+          // Note: Multiple levels/tiers would require junction tables in Prisma schema
         },
         include: {
           lessons_data: true,
@@ -842,8 +867,7 @@ export class ContentManagementService {
           category: updatedCourse.category,
           subscriptionTier: updatedCourse.requiredTier, // Map requiredTier to subscriptionTier
           requiredTier: updatedCourse.requiredTier,
-          availableLevels: updatedCourse.availableLevels,
-          availableTiers: updatedCourse.availableTiers,
+          // Note: availableLevels and availableTiers don't exist in Prisma schema
           contentType: updatedCourse.lessons_data.length > 0 && updatedCourse.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
           fileUrl: updatedCourse.lessons_data.length > 0 ? updatedCourse.lessons_data[0].content : undefined,
           thumbnailUrl: updatedCourse.thumbnail,

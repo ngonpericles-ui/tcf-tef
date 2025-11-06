@@ -4,13 +4,67 @@ exports.CloudinaryService = void 0;
 const cloudinary_1 = require("cloudinary");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
+function parseCloudinaryConfig() {
+    let cloudName;
+    let apiKey;
+    let apiSecret;
+    if (process.env.CLOUDINARY_URL) {
+        try {
+            const urlMatch = process.env.CLOUDINARY_URL.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+            if (urlMatch) {
+                apiKey = urlMatch[1];
+                apiSecret = urlMatch[2];
+                cloudName = urlMatch[3];
+                logger_1.logger.info('Cloudinary configuration parsed from CLOUDINARY_URL', { cloudName });
+            }
+            else {
+                logger_1.logger.warn('CLOUDINARY_URL format is invalid, falling back to individual variables');
+            }
+        }
+        catch (error) {
+            logger_1.logger.warn('Failed to parse CLOUDINARY_URL, falling back to individual variables', { error });
+        }
+    }
+    cloudName = cloudName || process.env.CLOUDINARY_CLOUD_NAME;
+    apiKey = apiKey || process.env.CLOUDINARY_API_KEY;
+    apiSecret = apiSecret || process.env.CLOUDINARY_API_SECRET;
+    return { cloudName, apiKey, apiSecret };
+}
+const { cloudName, apiKey, apiSecret } = parseCloudinaryConfig();
 cloudinary_1.v2.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
 });
 class CloudinaryService {
+    static isConfigured() {
+        if (process.env.CLOUDINARY_URL) {
+            try {
+                const urlMatch = process.env.CLOUDINARY_URL.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+                if (urlMatch) {
+                    return true;
+                }
+            }
+            catch (error) {
+            }
+        }
+        return !!(process.env.CLOUDINARY_CLOUD_NAME &&
+            process.env.CLOUDINARY_API_KEY &&
+            process.env.CLOUDINARY_API_SECRET);
+    }
     static async uploadFile(filePath, options = {}) {
+        if (!this.isConfigured()) {
+            const missingVars = [];
+            if (!process.env.CLOUDINARY_CLOUD_NAME)
+                missingVars.push('CLOUDINARY_CLOUD_NAME');
+            if (!process.env.CLOUDINARY_API_KEY)
+                missingVars.push('CLOUDINARY_API_KEY');
+            if (!process.env.CLOUDINARY_API_SECRET)
+                missingVars.push('CLOUDINARY_API_SECRET');
+            logger_1.logger.error('Cloudinary not configured', { missingVars });
+            throw new errors_1.ValidationError(`Cloudinary is not configured. Missing environment variables: ${missingVars.join(', ')}. ` +
+                `Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file.`);
+        }
         try {
             const uploadOptions = {
                 resource_type: options.resource_type || 'auto',

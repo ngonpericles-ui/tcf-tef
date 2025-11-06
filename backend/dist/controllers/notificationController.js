@@ -2,10 +2,10 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationController = void 0;
-const notificationService_1 = require("../services/notificationService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const notificationService_1 = require("@/services/notificationService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class NotificationController {
 }
 exports.NotificationController = NotificationController;

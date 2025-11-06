@@ -117,7 +117,21 @@ export const errorHandler = (
   // Include stack trace in development
   if (config.nodeEnv === 'development') {
     errorResponse.error.stack = error.stack;
+    // Include validation details if available
+    if (error.name === 'ValidationError' && (error as any).details) {
+      errorResponse.error.details = (error as any).details;
+    }
   }
+
+  // Log the error response for debugging
+  console.error('❌ Error Response:', {
+    statusCode,
+    message,
+    code,
+    url: req.url,
+    method: req.method,
+    body: req.body
+  });
 
   res.status(statusCode).json(errorResponse);
 };

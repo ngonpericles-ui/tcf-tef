@@ -44,12 +44,20 @@ export default function NotificationsPage() {
     try {
       setLoading(true)
       const response = await apiClient.get('/notifications?limit=50')
-      if ((response.data as any)?.success) {
-        setNotifications((response.data as any).data.notifications || [])
+      // apiClient.get() returns ApiResponse<T> = { success, data, message }
+      // So response is already { success, data, message }
+      if (response.success && response.data) {
+        // Check if data has notifications array
+        const notificationsData = (response.data as any).notifications || (response.data as any).data?.notifications || []
+        setNotifications(notificationsData)
+      } else {
+        console.warn('Notifications response missing data:', response)
+        setNotifications([])
       }
     } catch (error) {
       console.error('Error fetching notifications:', error)
       toast.error(t("Erreur lors du chargement", "Error loading notifications"))
+      setNotifications([])
     } finally {
       setLoading(false)
     }

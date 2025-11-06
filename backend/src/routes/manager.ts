@@ -1,9 +1,12 @@
 import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { ManagerController } from '@/controllers/managerController';
 import { SettingsService } from '@/services/settingsService';
 import { validate, validateParams, commonSchemas } from '@/middleware/validation';
 import { authenticate, requireManager } from '@/middleware/auth';
 import Joi from 'joi';
+
+const prisma = new PrismaClient();
 
 const router = Router();
 
@@ -225,5 +228,171 @@ router.put('/settings', authenticate, requireManager, async (req, res, next) => 
     next(error);
   }
 });
+
+/**
+ * @route GET /api/manager/marketplace/profile
+ * @desc Get marketplace profile for manager
+ * @access Private (Manager+)
+ */
+router.get('/marketplace/profile', authenticate, requireManager, async (req, res, next) => {
+  try {
+    const userId = req.user!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        subscriptionTier: true,
+        profilePicture: true,
+        createdAt: true,
+        lastActivityAt: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    // Get tutor-specific stats (mock data for now since aIFeedback model doesn't exist)
+    const completedReviews = 0; // TODO: Implement when aIFeedback model is available
+    const pendingReviews = 0; // TODO: Implement when aIFeedback model is available
+
+    const profile = {
+      id: user.id,
+      name: `${user.firstName} ${user.lastName}`,
+      email: user.email,
+      role: user.role,
+      subscriptionTier: user.subscriptionTier || 'FREE',
+      profilePicture: user.profilePicture,
+      memberSince: user.createdAt,
+      lastActive: user.lastActivityAt,
+      isTutor: true,
+      isActive: true, // Manager profiles are always active
+      tutorStats: {
+        completedReviews,
+        pendingReviews,
+        totalReviews: completedReviews + pendingReviews
+      }
+    };
+
+    res.json({
+      success: true,
+      data: profile
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @route POST /api/manager/marketplace/activate
+ * @desc Activate/deactivate marketplace profile for manager
+ * @access Private (Manager+)
+ */
+router.post('/marketplace/activate', authenticate, requireManager, async (req, res, next) => {
+  try {
+    const userId = req.user!.userId;
+    const { isActive } = req.body;
+
+    console.log('🔧 Manager marketplace activation request:', { userId, isActive });
+
+    // Use the MarketplaceService to properly activate/deactivate the profile
+    const { MarketplaceService } = await import('../services/marketplaceService');
+    const result = await MarketplaceService.activateTutorProfile(userId, isActive);
+
+    if (!result.success) {
+      return res.status(result.error?.statusCode || 500).json(result);
+    }
+
+    console.log('✅ Manager marketplace profile activation successful:', result);
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Error in manager marketplace activation:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route GET /api/manager/marketplace/requests
+ * @desc Get all pending review requests for manager
+ * @access Private (Manager+)
+ * @deprecated This route is deprecated - use /api/manager/marketplace/requests from marketplaceRoutes.ts instead
+ */
+// DISABLED: This route conflicts with marketplaceRoutes.ts which properly handles marketplace requests
+// The marketplaceRoutes.ts handler uses the MarketplaceRequest model correctly
+// router.get('/marketplace/requests', authenticate, requireManager, async (req, res, next) => {
+//   try {
+//     const userId = req.user!.userId;
+//
+//     // Get all pending review requests
+//     const pendingRequests = await prisma.aIFeedback.findMany({
+//       where: {
+//         status: 'PENDING_HUMAN'
+//       },
+//       include: {
+//         user: {
+//           select: {
+//             id: true,
+//             firstName: true,
+//             lastName: true,
+//             email: true,
+//             subscriptionTier: true
+//           }
+//         },
+//         simulationResult: {
+//           include: {
+//             testAttempt: {
+//               include: {
+//                 test: {
+//                   select: {
+//                     title: true,
+//                     type: true
+//                   }
+//                 }
+//               }
+//             }
+//           }
+//         }
+//       },
+//       orderBy: { createdAt: 'desc' }
+//     });
+//
+//     const requests = pendingRequests.map(request => ({
+//       id: request.id,
+//       studentId: request.userId,
+//       studentName: `${request.user.firstName} ${request.user.lastName}`,
+//       studentEmail: request.user.email,
+//       subscriptionPlan: request.user.subscriptionTier || 'FREE',
+//       simulationTitle: request.simulationResult?.testAttempt?.test?.title || 'Unknown',
+//       simulationType: request.simulationResult?.testAttempt?.test?.type || 'Unknown',
+//       submissionType: request.submissionType,
+//       submissionContent: request.submissionContent,
+//       submissionFileUrl: request.submissionFileUrl,
+//       aiScore: request.aiScore,
+//       aiConfidence: request.aiConfidence,
+//       overallFeedback: request.overallFeedback,
+//       strengths: request.strengths,
+//       weaknesses: request.weaknesses,
+//       recommendations: request.recommendations,
+//       submissionDate: request.createdAt,
+//       priority: 'normal'
+//     }));
+//
+//     res.json({
+//       success: true,
+//       data: requests
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// });
 
 export { router as managerRoutes };

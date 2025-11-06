@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Authentication</title>
+</head>
+<body>
+    <h1>Authentication Debug</h1>
+    <div id="debug-info"></div>
+    
+    <script>
+        function debugAuth() {
+            const info = {
+                localStorage: {
+                    user: localStorage.getItem('user'),
+                    access_token: localStorage.getItem('access_token'),
+                    tcf_tef_admin_session: localStorage.getItem('tcf_tef_admin_session'),
+                    tcf_tef_session: localStorage.getItem('tcf_tef_session')
+                },
+                cookies: document.cookie,
+                parsedCookies: {}
+            };
+            
+            // Parse cookies
+            document.cookie.split(';').forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                info.parsedCookies[name] = value;
+            });
+            
+            document.getElementById('debug-info').innerHTML = '<pre>' + JSON.stringify(info, null, 2) + '</pre>';
+        }
+        
+        // Run debug on page load
+        debugAuth();
+        
+        // Add button to refresh debug info
+        const button = document.createElement('button');
+        button.textContent = 'Refresh Debug Info';
+        button.onclick = debugAuth;
+        document.body.appendChild(button);
+    </script>
+</body>
+</html>

@@ -71,7 +71,7 @@ npm run dev
 ```
 
 ### Step 2: Test Admin Login
-1. Open `http://localhost:3003/admin/login`
+1. Open `http://localhost:3000/admin/login`
 2. Enter admin credentials
 3. Verify redirect to `/admin` dashboard
 
@@ -115,7 +115,7 @@ npm run dev
 
 ### Issue: "Cannot GET /admin"
 **Solution**: 
-- Ensure frontend is running on port 3003
+- Ensure frontend is running on port 3000
 - Check `.env.local` for correct API URL
 
 ### Issue: "Erreur lors de la création de la session"
@@ -142,7 +142,7 @@ npm run dev
 ## ✅ Verification Checklist
 
 - [ ] Backend running on port 3001
-- [ ] Frontend running on port 3003
+- [ ] Frontend running on port 3000
 - [ ] Admin can login
 - [ ] Admin cannot access `/connexion`
 - [ ] Manager cannot access `/connexion`

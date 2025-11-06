@@ -42,8 +42,10 @@ import {
   Timer,
   RefreshCw,
   ChevronRight,
-  History
+  History,
+  MessageSquare
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
@@ -66,65 +68,154 @@ interface VoiceSimulation {
 
 function SimulationPageContent() {
   const { userProfile } = useSharedData();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const router = useRouter();
+  
+  // Helper function for translations
+  const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
 
   const [simulations, setSimulations] = useState<VoiceSimulation[]>([]);
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [subscriptionTier, setSubscriptionTier] = useState<string>('FREE');
   const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
+  const [accessGranted, setAccessGranted] = useState(false);
 
   useEffect(() => {
-    // Only check access when userProfile is loaded
-    if (userProfile) {
+    // Only check access when userProfile is loaded and haven't checked yet
+    if (userProfile && !hasCheckedAccess) {
       checkSubscriptionAccess();
-      setHasCheckedAccess(true);
     }
-  }, [userProfile]);
+  }, [userProfile, hasCheckedAccess]);
 
   useEffect(() => {
-    // Only fetch data if access is granted
-    if (hasCheckedAccess && (subscriptionTier === 'PREMIUM' || subscriptionTier === 'PRO')) {
+    // Fetch data if access is granted (either through free attempts or subscription)
+    if (accessGranted) {
       fetchSimulations();
       fetchMonthlyCount();
     }
-  }, [hasCheckedAccess, subscriptionTier]);
+  }, [accessGranted]);
 
   const checkSubscriptionAccess = async () => {
     try {
-      // Check user subscription tier
-      const userTier = userProfile?.subscriptionTier || 'FREE';
-      setSubscriptionTier(userTier);
+      setLoading(true);
+      setHasCheckedAccess(true);
 
-      // Voice simulations require Premium or Pro subscription
-      if (userTier === 'FREE' || userTier === 'ESSENTIAL') {
-        toast.error('Les simulations vocales nécessitent un abonnement Premium ou Pro');
-        router.push('/abonnement');
-        return;
+      // STEP 1: Check free attempts FIRST (all users get 5 free simulations)
+      const freeAttemptsResponse = await fetch('http://localhost:3001/api/simulations/free-attempts/count', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
+        }
+      });
+      
+      if (freeAttemptsResponse.ok) {
+        const freeAttemptsData = await freeAttemptsResponse.json();
+        
+        if (freeAttemptsData.success && freeAttemptsData.data.remainingFreeAttempts > 0) {
+          // User has free attempts - ALLOW ACCESS
+          console.log('✅ Access granted: User has free attempts remaining', freeAttemptsData.data.remainingFreeAttempts);
+          setSubscriptionTier('FREE_WITH_ATTEMPTS');
+          setAccessGranted(true);
+          setLoading(false);
+          return;
+        }
       }
+      
+      // STEP 2: If no free attempts, check REAL subscription from API (not userProfile)
+      const subscriptionResponse = await fetch('http://localhost:3001/api/subscriptions/active', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
+        }
+      });
+      
+      if (subscriptionResponse.ok) {
+        const subscriptionData = await subscriptionResponse.json();
+        
+        if (subscriptionData.success && subscriptionData.data?.subscription) {
+          const tier = subscriptionData.data.subscription.tier;
+          setSubscriptionTier(tier);
+          
+          // Voice simulations require PREMIUM or PRO subscription
+          if (tier === 'PREMIUM' || tier === 'PRO') {
+            console.log('✅ Access granted: User has valid subscription', tier);
+            setAccessGranted(true);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // STEP 3: No free attempts and no valid subscription - redirect
+      console.log('❌ Access denied: No free attempts and no valid subscription');
+      setSubscriptionTier('FREE');
+      setAccessGranted(false);
+      setLoading(false);
+      toast.error('Les simulations vocales nécessitent un abonnement Premium ou Pro');
+      router.push('/abonnement');
     } catch (error) {
       console.error('Error checking subscription:', error);
+      setLoading(false);
+      setHasCheckedAccess(true);
+      // On error, show error but don't redirect (fail gracefully)
+      toast.error('Erreur lors de la vérification de l\'accès');
     }
   };
 
   const fetchSimulations = async () => {
     try {
+      setLoading(true);
+      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+      
+      if (!token || token === 'null' || token === 'undefined') {
+        console.error('❌ No valid token found in localStorage');
+        toast.error(t_('Veuillez vous connecter', 'Please log in'));
+        router.push('/login');
+        return;
+      }
+      
       const response = await fetch('/api/voice-simulation/history', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Simulations fetched:', {
+          count: data.data?.length || 0,
+          scheduled: (data.data || []).filter((s: VoiceSimulation) => s.status === 'SCHEDULED').length,
+          completed: (data.data || []).filter((s: VoiceSimulation) => s.status === 'COMPLETED').length
+        });
         setSimulations(data.data || []);
       } else {
-        toast.error('Error loading simulations');
+        const contentType = response.headers.get('content-type');
+        let errorData: any = {};
+        
+        try {
+          if (contentType && contentType.includes('application/json')) {
+            errorData = await response.json();
+          } else {
+            const text = await response.text();
+            console.error('❌ Non-JSON error response:', text.substring(0, 200));
+            errorData = { message: text.substring(0, 100) || 'Backend error' };
+          }
+        } catch (parseError) {
+          console.error('❌ Error parsing error response:', parseError);
+          errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        
+        console.error('❌ Error loading simulations:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        const errorMessage = errorData?.message || errorData?.error?.message || errorData?.error || t_('Erreur lors du chargement des simulations', 'Error loading simulations');
+        toast.error(errorMessage);
       }
-    } catch (error) {
-      console.error('Error fetching simulations:', error);
-      toast.error('Connection error');
+    } catch (error: any) {
+      console.error('❌ Error fetching simulations:', error);
+      toast.error(t_('Erreur de connexion', 'Connection error'));
     } finally {
       setLoading(false);
     }
@@ -176,115 +267,191 @@ function SimulationPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 dark:from-indigo-900 dark:via-indigo-800 dark:to-purple-900 overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0">
-          <img
-            src="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80"
-            alt="Voice simulation and microphone"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/90 to-transparent"></div>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      {/* Enhanced Hero Section */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-b border-gray-200 dark:border-gray-800">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(147,51,234,0.1)_1px,transparent_0)] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]"></div>
+        
+        {/* Decorative Elements */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-200/30 dark:bg-purple-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-200/30 dark:bg-indigo-900/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div className="text-center">
-            <div className="flex items-center justify-center mb-6">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                <Mic className="w-8 h-8 text-white" />
-              </div>
-            </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left Side: Text Content */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+              className="text-center lg:text-left"
+            >
+              {/* Badge */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800"
+              >
+                <Mic className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">
+                  {t_("Simulation Orale", "Oral Simulation")}
+                </span>
+              </motion.div>
 
-            <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight">
-              Simulation vocale
+              {/* Main Title */}
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 dark:from-purple-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent leading-tight">
+                {t_("Simulation Vocale avec IA", "AI Voice Simulation")}
             </h1>
 
-            <p className="text-xl md:text-2xl text-indigo-100 mb-8 max-w-3xl mx-auto leading-relaxed">
-              <strong className="text-white font-semibold">Maîtrisez votre expression orale</strong> en français avec nos simulations vocales IA.
-              Pratiquez, améliorez votre prononciation et gagnez en confiance pour vos entretiens et examens.
-            </p>
+              {/* Description */}
+              <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed">
+                  {t_(
+                    "Pratiquez vos entretiens en français avec notre IA avancée. Entraînez-vous à parler, améliorez votre prononciation et recevez des retours détaillés pour exceller lors de vos examens et entretiens professionnels.",
+                    "Practice your French interviews with our advanced AI. Train your speaking skills, improve your pronunciation, and receive detailed feedback to excel in your exams and professional interviews."
+                  )}
+              </p>
 
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-indigo-200 mb-8">
-              <div className="flex items-center">
-                <Mic className="w-4 h-4 mr-2 text-indigo-300" />
-                Simulations réalistes
-              </div>
-              <div className="flex items-center">
-                <Volume2 className="w-4 h-4 mr-2 text-indigo-300" />
-                Feedback instantané
-              </div>
-              <div className="flex items-center">
-                <Target className="w-4 h-4 mr-2 text-indigo-300" />
-                Progrès personnalisés
-              </div>
-            </div>
-          </div>
-        </div>
+              {/* Key Features */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                {[
+                  { icon: Mic, text: t_("Pratique Orale", "Speaking Practice"), desc: t_("Entretiens réalistes", "Realistic Interviews") },
+                  { icon: MessageSquare, text: t_("Feedback IA", "AI Feedback"), desc: t_("Analyse détaillée", "Detailed Analysis") },
+                  { icon: TrendingUp, text: t_("Progression", "Progress"), desc: t_("Suivi continu", "Continuous Tracking") }
+                ].map((feature, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + idx * 0.1 }}
+                    className="flex flex-col items-center lg:items-start gap-2 p-4 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-gray-200 dark:border-gray-700"
+                  >
+                    <feature.icon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{feature.text}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{feature.desc}</div>
+                  </motion.div>
+                ))}
       </div>
 
-      {/* Header - Vercel Style */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
+              {/* CTA Button */}
+              {accessGranted && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+                >
+                  <Button
+                    onClick={() => router.push('/simulation-vocale/booking')}
+                    className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl transition-all"
+                    size="lg"
+                  >
+                    <CalendarIcon className="w-5 h-5 mr-2" />
+                    {t_("Réserver une Simulation", "Book a Simulation")}
+                  </Button>
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.back()}
-                className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                    variant="outline"
+                    onClick={() => router.push('/simulation-vocale/results')}
+                    className="border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                    size="lg"
             >
-                <ArrowLeft className="w-4 h-4 mr-1" />
-                Retour
+                    <Trophy className="w-5 h-5 mr-2" />
+                    {t_("Voir les Résultats", "View Results")}
             </Button>
-              <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Simulation Vocale</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Pratique de conversation avec IA</p>
+                </motion.div>
+              )}
+            </motion.div>
+
+            {/* Right Side: Visual Element */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="flex flex-col items-center justify-center"
+            >
+              {/* Visual Illustration - Interview/Conversation */}
+              <div className="relative w-full max-w-md">
+                {/* SVG Illustration */}
+                <svg viewBox="0 0 400 350" className="w-full h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Background circles */}
+                  <circle cx="200" cy="175" r="130" fill="url(#gradient1)" opacity="0.1"/>
+                  <circle cx="200" cy="175" r="90" fill="url(#gradient2)" opacity="0.15"/>
+                  
+                  {/* Person on left (Interviewer) */}
+                  <circle cx="120" cy="140" r="25" fill="#8B5CF6" opacity="0.2"/>
+                  <rect x="95" y="165" width="50" height="60" rx="25" fill="#8B5CF6" opacity="0.3"/>
+                  
+                  {/* Speech bubble left */}
+                  <path d="M 80 100 Q 60 90 50 110 L 60 120 Q 70 115 80 120 Z" fill="#8B5CF6" opacity="0.2"/>
+                  <circle cx="65" cy="85" r="8" fill="#8B5CF6" opacity="0.3"/>
+                  <circle cx="55" cy="75" r="6" fill="#8B5CF6" opacity="0.3"/>
+                  
+                  {/* Microphone center */}
+                  <rect x="185" y="120" width="8" height="50" rx="4" fill="#EC4899"/>
+                  <ellipse cx="189" cy="120" rx="12" ry="8" fill="#EC4899"/>
+                  <line x1="175" y1="130" x2="203" y2="130" stroke="#EC4899" strokeWidth="2" opacity="0.5"/>
+                  <line x1="175" y1="140" x2="203" y2="140" stroke="#EC4899" strokeWidth="2" opacity="0.5"/>
+                  
+                  {/* Person on right (Student) */}
+                  <circle cx="280" cy="140" r="25" fill="#06B6D4" opacity="0.2"/>
+                  <rect x="255" y="165" width="50" height="60" rx="25" fill="#06B6D4" opacity="0.3"/>
+                  
+                  {/* Speech bubble right */}
+                  <path d="M 320 100 Q 340 90 350 110 L 340 120 Q 330 115 320 120 Z" fill="#06B6D4" opacity="0.2"/>
+                  <circle cx="335" cy="85" r="8" fill="#06B6D4" opacity="0.3"/>
+                  <circle cx="345" cy="75" r="6" fill="#06B6D4" opacity="0.3"/>
+                  
+                  {/* Sound waves */}
+                  <path d="M 200 100 Q 210 90 220 100 Q 210 110 200 100" stroke="#10B981" strokeWidth="2" fill="none" opacity="0.4"/>
+                  <path d="M 200 110 Q 215 95 230 110 Q 215 125 200 110" stroke="#10B981" strokeWidth="2" fill="none" opacity="0.4"/>
+                  <path d="M 200 120 Q 220 100 240 120 Q 220 140 200 120" stroke="#10B981" strokeWidth="2" fill="none" opacity="0.4"/>
+                  
+                  {/* Conversation line */}
+                  <line x1="150" y1="175" x2="250" y2="175" stroke="#6366F1" strokeWidth="2" strokeDasharray="5,5" opacity="0.3"/>
+                  
+                  <defs>
+                    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#8B5CF6"/>
+                      <stop offset="100%" stopColor="#EC4899"/>
+                    </linearGradient>
+                    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#EC4899"/>
+                      <stop offset="100%" stopColor="#06B6D4"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+
+              {/* How It Works - Simplified */}
+              <div className="mt-8 w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-xl border-2 border-purple-100 dark:border-purple-900">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 text-center">
+                  {t_("Comment commencer", "How to Start")}
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { step: "1", icon: CalendarIcon, text: t_("Réservez votre session", "Book your session") },
+                    { step: "2", icon: Mic, text: t_("Pratiquez à l'oral", "Practice speaking") },
+                    { step: "3", icon: Trophy, text: t_("Recevez vos résultats", "Get your results") }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+                      <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
+                        {item.step}
           </div>
+                      <item.icon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.text}</span>
             </div>
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2 px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-full">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                <span className="text-xs font-medium text-green-700 dark:text-green-400">PRO</span>
+                  ))}
             </div>
             </div>
+            </motion.div>
           </div>
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="mb-8 text-center">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-              Pratiquez le français avec des simulations vocales alimentées par l'IA
-          </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
-              Engagez-vous dans des conversations réalistes avec notre système vocal IA avancé. 
-              Perfectionnez votre prononciation, fluidité et confiance en français grâce à 
-              des sessions de simulation interactives.
-            </p>
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-              <div className="flex items-center">
-                <Mic className="w-4 h-4 mr-2 text-green-600" />
-                Pratique de conversation en temps réel
-                  </div>
-              <div className="flex items-center">
-                <Target className="w-4 h-4 mr-2 text-green-600" />
-                Retour instantané et notation
-                </div>
-              <div className="flex items-center">
-                <Trophy className="w-4 h-4 mr-2 text-green-600" />
-                Suivez vos progrès
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Subscription Access Alert */}
-        {(subscriptionTier === 'FREE' || subscriptionTier === 'ESSENTIAL') && (
+        {!accessGranted && hasCheckedAccess && (subscriptionTier === 'FREE' || subscriptionTier === 'ESSENTIAL') && (
           <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
             <div className="flex items-start">
               <Crown className="w-5 h-5 text-red-500 mt-0.5 mr-3" />
@@ -299,6 +466,21 @@ function SimulationPageContent() {
                   >
                     Passer à Premium
                   </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Free Attempts Info */}
+        {accessGranted && subscriptionTier === 'FREE_WITH_ATTEMPTS' && (
+          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-blue-500 mt-0.5 mr-3" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">Accès avec simulations gratuites</h3>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                  Vous utilisez actuellement vos simulations gratuites. Passez à Premium ou Pro pour un accès illimité.
                 </p>
               </div>
             </div>
@@ -338,259 +520,484 @@ function SimulationPageContent() {
           </div>
         )}
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Utilisation mensuelle</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{monthlyCount}/2</p>
+        {/* Section Header */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            {t_("Vos Statistiques", "Your Statistics")}
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            {t_("Un aperçu de votre activité et de vos performances", "An overview of your activity and performance")}
+          </p>
+        </div>
+
+        {/* Enhanced Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          {/* Monthly Usage Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0 }}
+          >
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      {t_("Utilisation mensuelle", "Monthly Usage")}
+                    </p>
+                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+                      {monthlyCount}/2
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t_("simulations utilisées", "simulations used")}
+                    </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-blue-600" />
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="w-7 h-7 text-white" />
                 </div>
               </div>
               <div className="mt-4">
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                  <div 
-                    className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(monthlyCount / 2) * 100}%` }}
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
+                    <motion.div 
+                      className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2.5 rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min((monthlyCount / 2) * 100, 100)}%` }}
+                      transition={{ duration: 0.8, delay: 0.2 }}
                   />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Terminées</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {simulations.filter(s => s.status === 'COMPLETED').length}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    {monthlyCount < 2 
+                      ? t_(`${2 - monthlyCount} simulation${2 - monthlyCount !== 1 ? 's' : ''} restante${2 - monthlyCount !== 1 ? 's' : ''}`, 
+                          `${2 - monthlyCount} simulation${2 - monthlyCount !== 1 ? 's' : ''} remaining`)
+                      : t_("Limite atteinte", "Limit reached")
+                    }
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Programmées</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {simulations.filter(s => s.status === 'SCHEDULED').length}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-yellow-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Score moyen</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {simulations.filter(s => s.overallScore).length > 0 
-                      ? Math.round(simulations.filter(s => s.overallScore).reduce((acc, s) => acc + (s.overallScore || 0), 0) / simulations.filter(s => s.overallScore).length)
-                      : '--'
-                    }%
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-full flex items-center justify-center">
-                  <Trophy className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Navigation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Usage Card */}
-          <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer group dark:bg-gray-800 dark:border-gray-700" onClick={() => router.push('/simulation-vocale/usage')}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center group-hover:bg-blue-200 dark:group-hover:bg-blue-900/30 transition-colors">
-                  <BarChart3 className="w-6 h-6 text-blue-600" />
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Aperçu de l'utilisation</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Surveillez votre utilisation mensuelle des simulations, suivez vos progrès et consultez des analyses détaillées</p>
-              <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-medium">
-                Voir les détails
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Voice Settings Card */}
-          <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer group dark:bg-gray-800 dark:border-gray-700" onClick={() => router.push('/simulation-vocale/voice')}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center group-hover:bg-green-200 dark:group-hover:bg-green-900/30 transition-colors">
-                  <Settings className="w-6 h-6 text-green-600" />
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Paramètres vocaux</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Choisissez votre voix préférée, accent et prévisualisez différentes options pour vos simulations</p>
-              <div className="flex items-center text-sm text-green-600 dark:text-green-400 font-medium">
-                Configurer
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Booking Card */}
-          <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer group dark:bg-gray-800 dark:border-gray-700" onClick={() => router.push('/simulation-vocale/booking')}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center group-hover:bg-yellow-200 dark:group-hover:bg-yellow-900/30 transition-colors">
-                  <CalendarIcon className="w-6 h-6 text-yellow-600" />
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Réserver une simulation</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Planifiez votre prochaine session de simulation vocale avec des options de réservation flexibles et des créneaux horaires</p>
-              <div className="flex items-center text-sm text-yellow-600 dark:text-yellow-400 font-medium">
-                Réserver maintenant
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Results Card */}
-          <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer group dark:bg-gray-800 dark:border-gray-700" onClick={() => router.push('/simulation-vocale/results')}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center group-hover:bg-purple-200 dark:group-hover:bg-purple-900/30 transition-colors">
-                  <Trophy className="w-6 h-6 text-purple-600" />
-                </div>
-                <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Résultats et performance</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Analysez vos résultats de simulation, suivez les tendances d'amélioration et consultez des métriques de performance détaillées</p>
-              <div className="flex items-center text-sm text-purple-600 dark:text-purple-400 font-medium">
-                Voir les résultats
-                <ChevronRight className="w-4 h-4 ml-1" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* How It Works */}
-        <Card className="mb-8 dark:bg-gray-800 dark:border-gray-700">
-          <CardHeader>
-            <CardTitle className="flex items-center text-gray-900 dark:text-gray-100">
-              <Brain className="w-5 h-5 mr-2" />
-              Comment fonctionne la simulation vocale
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CalendarIcon className="w-8 h-8 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">1. Réservez votre session</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Planifiez un moment convenable pour votre session de simulation vocale</p>
-              </div>
-              <div className="text-center">
-                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Mic className="w-8 h-8 text-green-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">2. Pratiquez la parole</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Engagez-vous dans des conversations réalistes avec notre système vocal IA</p>
-              </div>
-              <div className="text-center">
-                <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trophy className="w-8 h-8 text-purple-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">3. Recevez des commentaires</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Recevez des scores détaillés et des commentaires pour améliorer votre français</p>
-              </div>
-            </div>
               </CardContent>
             </Card>
+          </motion.div>
 
-        {/* Recent Activity */}
-        <Card className="dark:bg-gray-800 dark:border-gray-700">
-          <CardHeader>
-            <CardTitle className="flex items-center text-gray-900 dark:text-gray-100">
-              <History className="w-5 h-5 mr-2" />
-              Activité récente
+          {/* Completed Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-green-100 dark:border-green-900/50 dark:bg-gray-800/80">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      {t_("Terminées", "Completed")}
+                    </p>
+                    <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
+                      {simulations.filter(s => s.status === 'COMPLETED').length}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t_("simulations terminées", "simulations completed")}
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <CheckCircle className="w-7 h-7 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+
+          {/* Scheduled Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+          >
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-yellow-100 dark:border-yellow-900/50 dark:bg-gray-800/80">
+              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      {t_("Programmées", "Scheduled")}
+                    </p>
+                    <p className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 dark:from-yellow-400 dark:to-amber-400 bg-clip-text text-transparent">
+                    {simulations.filter(s => s.status === 'SCHEDULED').length}
+                  </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {t_("en attente", "pending")}
+                    </p>
+                </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Clock className="w-7 h-7 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+
+          {/* Average Score Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
+          >
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-purple-100 dark:border-purple-900/50 dark:bg-gray-800/80">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      {t_("Score moyen", "Average Score")}
+                    </p>
+                    <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
+                    {simulations.filter(s => s.overallScore).length > 0 
+                        ? `${Math.round(simulations.filter(s => s.overallScore).reduce((acc, s) => acc + (s.overallScore || 0), 0) / simulations.filter(s => s.overallScore).length)}%`
+                      : '--'
+                      }
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {simulations.filter(s => s.overallScore).length > 0 
+                        ? t_("basé sur vos résultats", "based on your results")
+                        : t_("aucun score disponible", "no scores available")
+                      }
+                  </p>
+                </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Trophy className="w-7 h-7 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+        </div>
+
+        {/* Section Header */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            {t_("Actions Rapides", "Quick Actions")}
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            {t_("Gérez vos simulations et consultez vos résultats", "Manage your simulations and view your results")}
+          </p>
+        </div>
+
+        {/* Enhanced Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Usage Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
+            whileHover={{ y: -4 }}
+          >
+            <Card 
+              className="relative overflow-hidden cursor-pointer group border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80 h-full" 
+              onClick={() => router.push('/simulation-vocale/usage')}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative h-full flex flex-col">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="w-7 h-7 text-white" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  {t_("Aperçu de l'utilisation", "Usage Overview")}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                  {t_("Surveillez votre utilisation mensuelle des simulations, suivez vos progrès et consultez des analyses détaillées", 
+                      "Monitor your monthly simulation usage, track your progress, and view detailed analytics")}
+                </p>
+                <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-2 transition-all">
+                  {t_("Voir les détails", "View Details")}
+                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+
+          {/* Voice Settings Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.5 }}
+            whileHover={{ y: -4 }}
+          >
+            <Card 
+              className="relative overflow-hidden cursor-pointer group border-2 border-green-100 dark:border-green-900/50 dark:bg-gray-800/80 h-full" 
+              onClick={() => router.push('/simulation-vocale/voice')}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative h-full flex flex-col">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Settings className="w-7 h-7 text-white" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-green-600 dark:group-hover:text-green-400 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                  {t_("Paramètres vocaux", "Voice Settings")}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                  {t_("Choisissez votre voix préférée, accent et prévisualisez différentes options pour vos simulations", 
+                      "Choose your preferred voice, accent, and preview different options for your simulations")}
+                </p>
+                <div className="flex items-center text-sm text-green-600 dark:text-green-400 font-semibold group-hover:gap-2 transition-all">
+                  {t_("Configurer", "Configure")}
+                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+
+          {/* Booking Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.6 }}
+            whileHover={{ y: -4 }}
+          >
+            <Card 
+              className="relative overflow-hidden cursor-pointer group border-2 border-yellow-100 dark:border-yellow-900/50 dark:bg-gray-800/80 h-full" 
+              onClick={() => router.push('/simulation-vocale/booking')}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-amber-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative h-full flex flex-col">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <CalendarIcon className="w-7 h-7 text-white" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-yellow-600 dark:group-hover:text-yellow-400 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
+                  {t_("Réserver une simulation", "Book a Simulation")}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                  {t_("Planifiez votre prochaine session de simulation vocale avec des options de réservation flexibles et des créneaux horaires", 
+                      "Schedule your next voice simulation session with flexible booking options and time slots")}
+                </p>
+                <div className="flex items-center text-sm text-yellow-600 dark:text-yellow-400 font-semibold group-hover:gap-2 transition-all">
+                  {t_("Réserver maintenant", "Book Now")}
+                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+
+          {/* Results Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.7 }}
+            whileHover={{ y: -4 }}
+          >
+            <Card 
+              className="relative overflow-hidden cursor-pointer group border-2 border-purple-100 dark:border-purple-900/50 dark:bg-gray-800/80 h-full" 
+              onClick={() => router.push('/simulation-vocale/results')}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <CardContent className="p-6 relative h-full flex flex-col">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Trophy className="w-7 h-7 text-white" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-purple-600 dark:group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                  {t_("Résultats et performance", "Results & Performance")}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                  {t_("Analysez vos résultats de simulation, suivez les tendances d'amélioration et consultez des métriques de performance détaillées", 
+                      "Analyze your simulation results, track improvement trends, and view detailed performance metrics")}
+                </p>
+                <div className="flex items-center text-sm text-purple-600 dark:text-purple-400 font-semibold group-hover:gap-2 transition-all">
+                  {t_("Voir les résultats", "View Results")}
+                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </CardContent>
+          </Card>
+          </motion.div>
+        </div>
+
+
+        {/* Recent Activity - Enhanced */}
+        <Card className="dark:bg-gray-800 dark:border-gray-700 shadow-lg">
+          <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center text-gray-900 dark:text-gray-100">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-3">
+                  <History className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">{t_("Activité récente", "Recent Activity")}</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    {t_("Vos dernières simulations", "Your latest simulations")}
+                  </p>
+                </div>
+              </div>
+              {simulations.length > 5 && (
+                <Button 
+                  variant="ghost"
+                  size="sm"
+                  className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
+                  onClick={() => router.push('/simulation-vocale/usage')}
+                >
+                  {t_("Voir tout", "View All")}
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             {simulations.length === 0 ? (
-              <div className="text-center py-8">
-                <Mic className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">Aucune simulation pour le moment</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Réservez votre première simulation pour commencer</p>
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Mic className="w-10 h-10 text-purple-600 dark:text-purple-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  {t_("Aucune simulation pour le moment", "No simulations yet")}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+                  {t_("Commencez votre parcours en réservant votre première simulation vocale", 
+                      "Start your journey by booking your first voice simulation")}
+                </p>
                 <Button 
-                  className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
                   onClick={() => router.push('/simulation-vocale/booking')}
+                  size="lg"
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Réserver une simulation
+                  <Plus className="w-5 h-5 mr-2" />
+                  {t_("Réserver une simulation", "Book a Simulation")}
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4">
-                {simulations.slice(0, 5).map((simulation) => (
-                  <div key={simulation.id} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-                        <Mic className="w-4 h-4 text-green-600" />
+              <div className="space-y-3">
+                {simulations
+                  .filter((sim) => {
+                    // Only show simulations with valid dates and real data
+                    const scheduledDate = sim.scheduledDate ? new Date(sim.scheduledDate) : null;
+                    const createdDate = sim.createdAt ? new Date(sim.createdAt) : null;
+                    return (scheduledDate && !isNaN(scheduledDate.getTime())) || 
+                           (createdDate && !isNaN(createdDate.getTime()));
+                  })
+                  .slice(0, 5)
+                  .map((simulation) => {
+                    // Use scheduledDate if valid, otherwise fallback to createdAt
+                    const dateStr = simulation.scheduledDate || simulation.createdAt;
+                    const date = dateStr ? new Date(dateStr) : new Date();
+                    const isValidDate = !isNaN(date.getTime());
+                    
+                    // Format date properly
+                    const formattedDate = isValidDate 
+                      ? date.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })
+                      : '';
+                    
+                    const formattedTime = isValidDate && simulation.scheduledDate
+                      ? date.toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : '';
+
+                    const statusLabels = {
+                      'SCHEDULED': { fr: 'Programmée', en: 'Scheduled' },
+                      'ACTIVE': { fr: 'Active', en: 'Active' },
+                      'COMPLETED': { fr: 'Terminée', en: 'Completed' },
+                      'CANCELLED': { fr: 'Annulée', en: 'Cancelled' }
+                    };
+
+                    const statusLabel = statusLabels[simulation.status as keyof typeof statusLabels]?.[lang as 'fr' | 'en'] || simulation.status;
+
+                    return (
+                      <motion.div
+                        key={simulation.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="group relative overflow-hidden rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 bg-white dark:bg-gray-800/50 hover:shadow-lg transition-all duration-300"
+                      >
+                        <div className="p-5 flex items-center justify-between">
+                          <div className="flex items-center space-x-4 flex-1">
+                            {/* Icon */}
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 ${
+                              simulation.status === 'COMPLETED' 
+                                ? 'bg-gradient-to-br from-green-500 to-emerald-500' 
+                                : simulation.status === 'SCHEDULED'
+                                ? 'bg-gradient-to-br from-blue-500 to-cyan-500'
+                                : simulation.status === 'ACTIVE'
+                                ? 'bg-gradient-to-br from-yellow-500 to-amber-500'
+                                : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                            }`}>
+                              {simulation.status === 'COMPLETED' ? (
+                                <CheckCircle className="w-6 h-6 text-white" />
+                              ) : (
+                                <Mic className="w-6 h-6 text-white" />
+                              )}
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {new Date(simulation.scheduledDate).toLocaleDateString('fr-FR')}
+
+                            {/* Details */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                  {formattedDate}
                         </div>
+                                {formattedTime && (
+                                  <>
+                                    <span className="text-gray-400">•</span>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {simulation.voicePreference === 'MALE' ? 'Voix masculine' : 'Voix féminine'}
+                                      {formattedTime}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+                                  <Volume2 className="w-4 h-4" />
+                                  <span>
+                                    {simulation.voicePreference === 'MALE' 
+                                      ? t_('Voix masculine', 'Male voice')
+                                      : t_('Voix féminine', 'Female voice')}
+                                  </span>
+                                </div>
+                                {simulation.duration && (
+                                  <>
+                                    <span className="text-gray-400">•</span>
+                                    <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
+                                      <Clock className="w-4 h-4" />
+                                      <span>{Math.floor(simulation.duration / 60)} {t_('min', 'min')}</span>
+                                    </div>
+                                  </>
+                                )}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(simulation.status)}`}>
+
+                          {/* Status and Score */}
+                          <div className="flex items-center gap-3 ml-4">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm ${
+                              getStatusColor(simulation.status)
+                            }`}>
                         {getStatusIcon(simulation.status)}
-                        <span className="ml-1">
-                          {simulation.status === 'SCHEDULED' ? 'Programmée' : 
-                           simulation.status === 'ACTIVE' ? 'Active' :
-                           simulation.status === 'COMPLETED' ? 'Terminée' : 'Annulée'}
-                        </span>
+                              {statusLabel}
                       </span>
                       {simulation.overallScore && (
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-200 dark:border-purple-800">
+                                <Trophy className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                                <span className="text-sm font-bold text-purple-700 dark:text-purple-300">
                             {simulation.overallScore}%
                           </span>
+                              </div>
                       )}
                     </div>
                   </div>
-                ))}
-                {simulations.length > 5 && (
-                  <div className="text-center pt-4">
-                    <Button 
-                      variant="outline" 
-                      className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-                      onClick={() => router.push('/simulation-vocale/usage')}
-                    >
-                      Voir toute l'activité
-                    </Button>
-                  </div>
-                )}
+                      </motion.div>
+                    );
+                  })}
             </div>
           )}
           </CardContent>

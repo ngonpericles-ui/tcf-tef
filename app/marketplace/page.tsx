@@ -15,7 +15,6 @@ import {
   Clock,
   Users,
   MapPin,
-  DollarSign,
   CheckCircle,
   TrendingUp,
   Filter,
@@ -31,6 +30,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import apiClient from "@/lib/api-client"
 import Link from "next/link"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 // Type definitions
 interface TutorProfile {
@@ -39,19 +39,17 @@ interface TutorProfile {
   firstName: string
   lastName: string
   specialities: string[]
-  rating: number
-  reviews: number
-  hourlyRate: number
-  location: string
+  subjects?: string[] // Sujets (Grammaire, Expression Orale, etc.)
+  location: string | null
   languages: string[]
-  availability: string[]
+  availability: string[] // Working time periods (disponibilité) - e.g., ["Lun-Ven"]
+  workingHours?: string[] // Specific time slots - e.g., ["Lundi: 09:00-12:00", "Mardi: 14:00-17:00"]
   isAvailable: boolean
-  profileImage?: string
+  isOnline?: boolean // NEW: Online status
+  availabilityStatus?: string // NEW: Status label ("En ligne" / "Hors ligne")
+  profileImage?: string | null
   bio?: string
-  online?: boolean
-  verified?: boolean
-  completedSessions?: number
-  responseTime?: string
+  acceptsMessages?: boolean // Whether tutor accepts messages from students
 }
 
 interface AIFeedback {
@@ -93,6 +91,7 @@ interface ApiResponse<T = any> {
 export default function MarketplacePage() {
   const { lang } = useLang()
   const { user, isAuthenticated } = useAuth()
+  const router = useRouter()
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
 
   const [instructors, setInstructors] = useState<TutorProfile[]>([])
@@ -100,7 +99,7 @@ export default function MarketplacePage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSpeciality, setSelectedSpeciality] = useState("all")
-  const [priceRange, setPriceRange] = useState("all")
+  const [availableSpecialities, setAvailableSpecialities] = useState<string[]>(["all"])
 
   // Review request state
   const [showReviewDialog, setShowReviewDialog] = useState(false)
@@ -110,73 +109,217 @@ export default function MarketplacePage() {
   const [userFeedbacks, setUserFeedbacks] = useState<AIFeedback[]>([])
   const [availabilityFilter, setAvailabilityFilter] = useState("all")
 
-  const specialities = ["all", "Grammaire avancée", "Expression écrite", "Compréhension orale", "Préparation TCF", "Business French", "Français médical"]
-
-  // Fetch tutors from backend
+  // Fetch available specialties from backend (TCF, TEF)
   useEffect(() => {
-    const fetchTutors = async () => {
+    const fetchSpecialities = async () => {
       if (!isAuthenticated) return
+      
+      try {
+        const response = await apiClient.get('/marketplace/specialties') as ApiResponse<string[]>
+        if (response.success && Array.isArray(response.data)) {
+          // Add "Tous" (All) option at the beginning, then TCF, TEF
+          setAvailableSpecialities(["all", ...response.data])
+        } else {
+          // Fallback to TCF, TEF if API fails
+          setAvailableSpecialities(["all", "TCF", "TEF"])
+        }
+      } catch (err: any) {
+        console.error('Error fetching specialties:', err)
+        // Fallback to TCF, TEF if API fails
+        setAvailableSpecialities(["all", "TCF", "TEF"])
+      }
+    }
+    
+    fetchSpecialities()
+  }, [isAuthenticated])
 
+  // Fetch tutors from backend - Simple and direct approach
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setInstructors([])
+      return
+    }
+
+    let isMounted = true
+
+    const fetchTutors = async () => {
       try {
         setLoading(true)
         setError(null)
 
+        console.log('🔍 Fetching marketplace tutors...')
         const response = await apiClient.get('/marketplace/tutors') as ApiResponse<any[]>
 
-        if (response.success && response.data) {
-          // Transform backend data to match frontend expectations
-          const transformedTutors: TutorProfile[] = response.data.map((tutor: any) => ({
-            id: tutor.id,
-            name: `${tutor.userId}`, // Will be replaced with actual name
-            firstName: tutor.title?.includes('Admin') ? 'Admin' :
-                      tutor.title?.includes('Senior') ? 'Senior Manager' : 'Manager',
-            lastName: 'User',
-            specialities: tutor.specialties || ['TCF', 'TEF'],
-            rating: tutor.rating || 4.8,
-            reviews: tutor.totalStudents || 0,
-            hourlyRate: tutor.hourlyRate || 0,
-            location: tutor.location || 'Non spécifié',
-            languages: tutor.languages || ['Français'],
-            availability: tutor.availability || [],
-            isAvailable: tutor.isActive || false,
-            profileImage: undefined,
-            bio: tutor.bio || '',
-            online: tutor.online || false,
-            verified: tutor.verified || false,
-            completedSessions: tutor.experience || 0,
-            responseTime: '< 1h'
-          }))
+        if (!isMounted) return
 
-          setInstructors(transformedTutors)
+        console.log('📋 API Response:', {
+          success: response.success,
+          dataType: typeof response.data,
+          isArray: Array.isArray(response.data),
+          dataLength: Array.isArray(response.data) ? response.data.length : 0
+        })
+
+        // Direct validation - no complex array manipulation
+        if (!response.success) {
+          throw new Error(response.error?.message || 'Failed to fetch tutors')
         }
+
+        if (!response.data) {
+          console.warn('⚠️ No data in response')
+          setInstructors([])
+          return
+        }
+
+        // Simple type check and conversion
+        const tutorsData = Array.isArray(response.data) ? response.data : []
+        
+        console.log(`📊 Processing ${tutorsData.length} tutors from backend`)
+
+        // DIRECT MAPPING - Match backend response structure EXACTLY
+        const processedTutors: TutorProfile[] = tutorsData.map((tutor: any) => {
+          // Backend sends: firstName, lastName, fullName, specialties, languages, availability, isActive, status, location, profilePicture, bio
+          const fullName = tutor.fullName || `${tutor.firstName || ''} ${tutor.lastName || ''}`.trim() || 'Formateur'
+          
+          // Backend sends 'specialties' (not 'specialities') - match exactly
+          const specialties = Array.isArray(tutor.specialties) 
+            ? tutor.specialties 
+            : tutor.specialties 
+            ? [tutor.specialties] 
+            : []
+          
+          // Backend sends languages as array
+          const languages = Array.isArray(tutor.languages) 
+            ? tutor.languages 
+            : tutor.languages 
+            ? [tutor.languages] 
+            : ['Français']
+          
+          // Backend sends availability as array
+          const availability = Array.isArray(tutor.availability) 
+            ? tutor.availability 
+            : tutor.availability 
+            ? [tutor.availability] 
+            : ['Disponible']
+          
+          // Status from backend - backend now sends 'ONLINE' or 'OFFLINE' based on activity
+          // Backend logic: ONLINE if status === 'ONLINE' OR (status === 'ACTIVE' && recently active)
+          // Backend returns status as 'ONLINE' or 'OFFLINE' in the status field
+          const isOnline = tutor.status === 'ONLINE'
+          const availabilityStatus = isOnline ? 'En ligne' : 'Hors ligne'
+          
+          // Debug log to see what status backend is sending
+          if (tutorsData.indexOf(tutor) === 0) {
+            console.log(`📊 Sample tutor status from backend:`, {
+              id: tutor.id,
+              name: fullName,
+              status: tutor.status,
+              isOnline,
+              location: tutor.location
+            })
+          }
+
+          // Backend sends subjects (sujets)
+          const subjects = Array.isArray(tutor.subjects) 
+            ? tutor.subjects 
+            : tutor.subjects 
+            ? [tutor.subjects] 
+            : []
+
+          // Backend sends working hours (specific time slots)
+          const workingHours = Array.isArray(tutor.workingHours) 
+            ? tutor.workingHours 
+            : tutor.workingHours 
+            ? [tutor.workingHours] 
+            : []
+
+          // Return EXACT structure frontend expects
+          return {
+            id: tutor.id || tutor.userId || '',
+            name: fullName,
+            firstName: tutor.firstName || '',
+            lastName: tutor.lastName || '',
+            specialities: specialties, // Map backend's 'specialties' to frontend's 'specialities'
+            subjects: subjects, // Sujets (Grammaire, Expression Orale, etc.)
+            location: tutor.location || null,
+            languages,
+            availability, // Working time periods (disponibilité)
+            workingHours: workingHours, // Specific time slots
+            isAvailable: tutor.isActive === true,
+            isOnline,
+            availabilityStatus,
+            profileImage: tutor.profilePicture 
+              ? (() => {
+                  if (tutor.profilePicture.startsWith('http')) return tutor.profilePicture
+                  let cleanPath = tutor.profilePicture.replace(/^\/+/, '')
+                  if (cleanPath.startsWith('uploads/')) {
+                    return `http://localhost:3001/${cleanPath}`
+                  } else {
+                    return `http://localhost:3001/uploads/${cleanPath}`
+                  }
+                })()
+              : null,
+            bio: tutor.bio || '',
+            acceptsMessages: tutor.acceptsMessages !== false // Default to true if not set
+          }
+        })
+
+        console.log(`✅ Processed ${processedTutors.length} tutors successfully`)
+        if (processedTutors.length > 0) {
+          console.log('📋 Sample tutor processed:', {
+            id: processedTutors[0].id,
+            name: processedTutors[0].name,
+            specialities: processedTutors[0].specialities,
+            isActive: processedTutors[0].isAvailable,
+            isOnline: processedTutors[0].isOnline,
+            status: processedTutors[0].availabilityStatus,
+            location: processedTutors[0].location,
+            rawStatus: tutorsData[0]?.status
+          })
+        } else {
+          console.warn('⚠️ No tutors processed - check backend response structure')
+          console.log('📋 Raw response.data sample:', tutorsData[0])
+        }
+
+        setInstructors(processedTutors)
       } catch (err: any) {
-        console.error('Error fetching tutors:', err)
-        setError(err.message || 'Failed to load tutors')
+        if (!isMounted) return
+        
+        console.error('❌ Error fetching tutors:', err)
+        const errorMessage = err.response?.data?.error?.message 
+          || err.response?.data?.message 
+          || err.message 
+          || 'Failed to load tutors'
+        
+        setError(errorMessage)
+        toast.error(errorMessage)
+        setInstructors([])
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchTutors()
+
+    return () => {
+      isMounted = false
+    }
   }, [isAuthenticated])
 
-  // Fetch user's AI feedbacks for review requests
+  // Skip AI feedbacks for marketplace - this is for tutor selection, not feedback review
   useEffect(() => {
     const fetchUserFeedbacks = async () => {
       if (!isAuthenticated) return
 
       try {
-        const response = await apiClient.get('/ai/feedbacks') as ApiResponse<AIFeedback[]>
-        if (response.success && response.data) {
-          // Filter feedbacks that can be submitted for review (AI completed with low confidence)
-          const reviewableFeedbacks = response.data.filter((feedback: AIFeedback) =>
-            feedback.status === 'ai_completed' &&
-            (feedback.percentage < 80 || (feedback.aiConfidence && feedback.aiConfidence < 0.8))
-          )
-          setUserFeedbacks(reviewableFeedbacks)
-        }
-      } catch (err) {
-        console.error('Error fetching user feedbacks:', err)
+        console.log('🔍 Marketplace: AI feedbacks not implemented for this page - skipping...')
+        // AI feedbacks are for simulation pages, not marketplace
+        // This marketplace is for students to select tutors for one-on-one sessions
+        setUserFeedbacks([])
+      } catch (err: any) {
+        console.error('❌ Error in fetchUserFeedbacks:', err)
+        setUserFeedbacks([])
       }
     }
 
@@ -223,22 +366,34 @@ export default function MarketplacePage() {
     }
   }
 
+  // Simple filtering - direct and clear
   const filteredInstructors = useMemo(() => {
+    if (!instructors.length) return []
+
     return instructors.filter(instructor => {
-      const matchesSearch = instructor.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           instructor.specialities?.some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
-      const matchesSpeciality = selectedSpeciality === "all" || instructor.specialities?.includes(selectedSpeciality)
-      const matchesPrice = priceRange === "all" || 
-                          (priceRange === "low" && instructor.hourlyRate <= 35) ||
-                          (priceRange === "medium" && instructor.hourlyRate > 35 && instructor.hourlyRate <= 45) ||
-                          (priceRange === "high" && instructor.hourlyRate > 45)
-      const matchesAvailability = availabilityFilter === "all" || 
-                                 (availabilityFilter === "online" && instructor.online) ||
-                                 (availabilityFilter === "available" && instructor.availability?.includes("maintenant"))
+      // Search filter
+      const searchLower = searchQuery.toLowerCase()
+      const matchesSearch = !searchQuery || 
+        instructor.name?.toLowerCase().includes(searchLower) ||
+        instructor.specialities?.some((s: string) => s.toLowerCase().includes(searchLower))
       
-      return matchesSearch && matchesSpeciality && matchesPrice && matchesAvailability
+      // Specialty filter - "all" shows all activated profiles, otherwise filter by specialty
+      const matchesSpeciality = selectedSpeciality === "all" || 
+        (instructor.specialities && Array.isArray(instructor.specialities) && 
+         instructor.specialities.includes(selectedSpeciality))
+      
+      // Availability filter - NEW: Handle online/offline status
+      let matchesAvailability = true
+      if (availabilityFilter === "online") {
+        matchesAvailability = instructor.isOnline === true
+      } else if (availabilityFilter === "available") {
+        matchesAvailability = instructor.isAvailable === true && 
+          (instructor.availability?.includes("maintenant") || instructor.isOnline === true)
+      }
+      
+      return matchesSearch && matchesSpeciality && matchesAvailability
     })
-  }, [searchQuery, selectedSpeciality, priceRange, availabilityFilter])
+  }, [instructors, searchQuery, selectedSpeciality, availabilityFilter])
 
   return (
     <PageShell>
@@ -318,26 +473,13 @@ export default function MarketplacePage() {
                     onChange={(e) => setSelectedSpeciality(e.target.value)}
                     className="w-full lg:w-auto px-4 py-3 border border-gray-200 dark:border-gray-800/50 rounded-lg dark:bg-gray-800 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 dark:focus:border-green-400 dark:focus:ring-green-400/20"
                   >
-                    <option value="all">{t("Toutes spécialités", "All specialities")}</option>
-                    {specialities.slice(1).map(speciality => (
+                    <option value="all">{t("Tous", "All")}</option>
+                    {availableSpecialities.slice(1).map(speciality => (
                       <option key={speciality} value={speciality}>{speciality}</option>
                     ))}
                   </select>
                 </div>
                 
-                {/* Price Filter */}
-                <div className="w-full lg:w-auto">
-                  <select 
-                    value={priceRange}
-                    onChange={(e) => setPriceRange(e.target.value)}
-                    className="w-full lg:w-auto px-4 py-3 border border-gray-200 dark:border-gray-800/50 rounded-lg dark:bg-gray-800 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 dark:focus:border-green-400 dark:focus:ring-green-400/20"
-                  >
-                    <option value="all">{t("Tous prix", "All prices")}</option>
-                    <option value="low">{t("35 CFA/h et moins", "35 CFA/h and less")}</option>
-                    <option value="medium">{t("35-45 CFA/h", "35-45 CFA/h")}</option>
-                    <option value="high">{t("45 CFA/h et plus", "45 CFA/h and more")}</option>
-                  </select>
-                </div>
                 
                 {/* Availability Filter */}
                 <div className="w-full lg:w-auto">
@@ -500,41 +642,70 @@ export default function MarketplacePage() {
                     <div className="p-6 pb-4">
                       <div className="flex items-start gap-4 mb-4">
                         <div className="relative">
-                          <div className="h-16 w-16 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center text-white font-bold text-xl">
-                            {instructor.name?.charAt(0) || "?"}
-                          </div>
-                          {instructor.online && (
-                            <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-green-500 border-2 border-background"></div>
-                          )}
+                          {instructor.profileImage ? (
+                            <img 
+                              src={instructor.profileImage} 
+                              alt={instructor.name}
+                              className="h-16 w-16 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                              onError={(e) => {
+                                // If image fails to load, show fallback
+                                const target = e.target as HTMLImageElement
+                                target.style.display = 'none'
+                                const fallback = target.nextElementSibling as HTMLElement
+                                if (fallback) fallback.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`h-16 w-16 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center text-white font-bold text-xl ${instructor.profileImage ? 'hidden' : ''}`}
+                          >
+                              {instructor.name?.charAt(0) || "?"}
+                            </div>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-bold text-lg text-foreground truncate">
                               {instructor.name || "Instructeur"}
                             </h3>
-                            {instructor.verified && (
-                              <CheckCircle className="h-4 w-4 text-blue-500" />
+                            <CheckCircle className="h-4 w-4 text-blue-500" />
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            {/* Availability Status Badge */}
+                            <Badge 
+                              variant={instructor.isOnline ? "default" : "secondary"} 
+                              className={`text-xs ${
+                                instructor.isOnline 
+                                  ? "bg-green-500 hover:bg-green-600 text-white" 
+                                  : "bg-gray-400 hover:bg-gray-500 text-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1">
+                                <div className={`w-2 h-2 rounded-full ${
+                                  instructor.isOnline ? "bg-white animate-pulse" : "bg-white"
+                                }`} />
+                                {instructor.availabilityStatus || (instructor.isOnline ? "En ligne" : "Hors ligne")}
+                              </div>
+                            </Badge>
+                            {instructor.location && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin className="h-3 w-3" />
+                                <span className="truncate">{instructor.location}</span>
+                              </div>
                             )}
-                          </div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="flex items-center gap-1">
-                              <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                              <span className="text-sm font-medium text-foreground">{instructor.rating || "0"}</span>
-                              <span className="text-sm text-muted-foreground">({instructor.reviews || 0})</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            <span className="truncate">{instructor.location || "Non spécifié"}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Specialities */}
+                      {/* Specialities and Subjects */}
                       <div className="flex flex-wrap gap-2 mb-4">
                         {instructor.specialities?.slice(0, 2).map((speciality: string, index: number) => (
                           <Badge key={index} variant="secondary" className="text-xs">
                             {speciality}
+                          </Badge>
+                        ))}
+                        {instructor.subjects && instructor.subjects.length > 0 && instructor.subjects.slice(0, 3).map((subject: string, index: number) => (
+                          <Badge key={`subject-${index}`} variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
+                            {subject}
                           </Badge>
                         ))}
                         {instructor.specialities?.length > 2 && (
@@ -543,52 +714,159 @@ export default function MarketplacePage() {
                           </Badge>
                         )}
                       </div>
+                      
+                      {/* Working time (disponibilité) */}
+                      {instructor.availability && instructor.availability.length > 0 && (
+                        <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span className="font-medium">{t("Périodes", "Periods")}:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {instructor.availability.slice(0, 2).map((avail: string, index: number) => (
+                              <span key={index} className="bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                                {avail}
+                              </span>
+                            ))}
+                            {instructor.availability.length > 2 && (
+                              <span className="text-muted-foreground">
+                                +{instructor.availability.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Working hours (specific time slots) */}
+                      {instructor.workingHours && instructor.workingHours.length > 0 && (
+                        <div className="flex items-start gap-2 mb-4 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3 mt-0.5" />
+                          <div className="flex-1">
+                            <span className="font-medium mb-1 block">{t("Horaires", "Hours")}:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {instructor.workingHours.slice(0, 3).map((hours: string, index: number) => (
+                                <span key={index} className="bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+                                  {hours}
+                                </span>
+                              ))}
+                              {instructor.workingHours.length > 3 && (
+                                <span className="text-muted-foreground">
+                                  +{instructor.workingHours.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                      {/* Stats */}
-                      <div className="grid grid-cols-3 gap-4 mb-4 text-center">
-                        <div>
-                          <div className="text-lg font-bold text-foreground">{instructor.completedSessions || 0}</div>
-                          <div className="text-xs text-muted-foreground">{t("Sessions", "Sessions")}</div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-foreground">{instructor.reviews || 0}</div>
-                          <div className="text-xs text-muted-foreground">{t("Avis", "Reviews")}</div>
-                        </div>
-                        <div>
-                          <div className="text-lg font-bold text-foreground">{instructor.responseTime || "—"}</div>
-                          <div className="text-xs text-muted-foreground">{t("Réponse", "Response")}</div>
-                        </div>
-                      </div>
                     </div>
 
                     {/* Instructor Footer */}
                     <div className="px-6 pb-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-green-600" />
-                          <span className="text-lg font-bold text-foreground">{instructor.hourlyRate || 0} CFA/h</span>
-                        </div>
-                        <Badge
-                          variant={instructor.online ? "default" : "secondary"}
-                          className={instructor.online ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400" : ""}
-                        >
-                          {instructor.online ? t("En ligne", "Online") : t("Hors ligne", "Offline")}
-                        </Badge>
-                      </div>
 
                       <div className="flex gap-2">
                         <Button 
                           variant="outline" 
                           className="flex-1 gap-2 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          onClick={async () => {
+                            try {
+                              // Check if tutor accepts messages
+                              const acceptsMessages = instructor.acceptsMessages !== false
+                              if (!acceptsMessages) {
+                                toast.error(t("Ce tuteur n'accepte pas les messages", "This tutor does not accept messages"))
+                                return
+                              }
+                              
+                              // Show loading state
+                              const loadingToast = toast.loading(t("Création de la conversation...", "Creating conversation..."))
+                              
+                              // Fetch tutor profile to ensure they exist and accept messages
+                              // Use marketplace tutors endpoint which is public and returns tutor info
+                              const tutorsResponse = await apiClient.get('/marketplace/tutors')
+                              if (!tutorsResponse.success || !tutorsResponse.data) {
+                                toast.dismiss(loadingToast)
+                                toast.error(t("Impossible de récupérer les informations du tuteur", "Unable to fetch tutor information"))
+                                return
+                              }
+                              
+                              const tutors = Array.isArray(tutorsResponse.data) ? tutorsResponse.data : []
+                              const tutor = tutors.find((t: any) => t.id === instructor.id)
+                              
+                              if (!tutor) {
+                                toast.dismiss(loadingToast)
+                                toast.error(t("Tuteur introuvable", "Tutor not found"))
+                                return
+                              }
+                              
+                              // Verify tutor accepts messages
+                              const tutorAcceptsMessages = tutor.acceptsMessages !== false
+                              if (!tutorAcceptsMessages) {
+                                toast.dismiss(loadingToast)
+                                toast.error(t("Ce tuteur n'accepte pas les messages", "This tutor does not accept messages"))
+                                return
+                              }
+                              
+                              // Send an initial greeting message to create the conversation properly
+                              try {
+                                const messageResponse = await apiClient.post('/messages', {
+                                  receiverId: instructor.id,
+                                  content: t("Bonjour ! Je souhaite commencer une conversation avec vous.", "Hello! I would like to start a conversation with you."),
+                                  subject: t("Nouvelle conversation", "New conversation")
+                                })
+                                
+                                if (messageResponse.success) {
+                                  toast.dismiss(loadingToast)
+                                  toast.success(t("Conversation créée avec succès", "Conversation created successfully"))
+                                  // Redirect to messages page with tutor ID
+                                  router.push(`/messages?contact=${instructor.id}`)
+                                } else {
+                                  // Even if message fails, redirect anyway - the conversation can be created when student sends first message
+                                  toast.dismiss(loadingToast)
+                                  console.warn('Initial message failed, but redirecting anyway:', messageResponse.error)
+                                  router.push(`/messages?contact=${instructor.id}`)
+                                }
+                              } catch (messageError: any) {
+                                // If sending message fails, still redirect - conversation will be created on first message
+                                toast.dismiss(loadingToast)
+                                console.warn('Error sending initial message, but redirecting anyway:', messageError)
+                                router.push(`/messages?contact=${instructor.id}`)
+                              }
+                            } catch (error: any) {
+                              console.error('Error creating conversation:', error)
+                              toast.error(t("Erreur lors de la création de la conversation", "Error creating conversation"))
+                            }
+                          }}
+                          disabled={instructor.acceptsMessages === false}
                         >
                           <MessageCircle className="h-4 w-4" />
-                          {t("Message", "Message")}
+                          {instructor.acceptsMessages === false 
+                            ? t("Messages désactivés", "Messages disabled")
+                            : t("Message", "Message")
+                          }
                         </Button>
                         <Button 
                           className="flex-1 gap-2 bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black"
+                          onClick={async () => {
+                            // Submit session request
+                            try {
+                              const response = await apiClient.post('/marketplace/requests', {
+                                tutorId: instructor.id,
+                                requestType: 'SESSION',
+                                subject: t("Demande de session 1-on-1", "One-on-one session request"),
+                                description: t("Demande de session individuelle avec {name}", `Individual session request with ${instructor.name}`),
+                                urgency: 'MEDIUM'
+                              })
+                              
+                              if (response.success) {
+                                toast.success(t("Demande envoyée avec succès", "Request sent successfully"))
+                              } else {
+                                toast.error(response.error?.message || t("Erreur lors de l'envoi", "Error sending request"))
+                              }
+                            } catch (error: any) {
+                              toast.error(t("Erreur lors de l'envoi de la demande", "Error sending request"))
+                            }
+                          }}
                         >
                           <Calendar className="h-4 w-4" />
-                          {t("Réserver", "Book")}
+                          {t("Soumettre", "Submit")}
                         </Button>
                       </div>
                     </div>

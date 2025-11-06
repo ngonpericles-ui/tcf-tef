@@ -12,14 +12,30 @@ export const validate = (schema: Joi.ObjectSchema | { body?: Joi.ObjectSchema; q
 
         // Validate body if schema provided
         if (schemaObj.body) {
+          // Log incoming request for debugging
+          console.log('🔍 Validation - Request body:', JSON.stringify(req.body, null, 2));
+          
           const { error, value } = schemaObj.body.validate(req.body, {
             abortEarly: false,
             stripUnknown: true
           });
 
           if (error) {
+          // Log detailed validation errors
+          console.error('❌ Validation errors:', {
+            url: req.url,
+            method: req.method,
+            errors: error.details.map(d => ({
+              path: d.path.join('.'),
+              message: d.message,
+              type: d.type,
+              context: d.context
+            })),
+            receivedBody: JSON.stringify(req.body, null, 2)
+          });
+            
             const errorMessage = error.details
-              .map(detail => detail.message)
+              .map(detail => `${detail.path.join('.')}: ${detail.message}`)
               .join(', ');
             throw new ValidationError(errorMessage);
           }
@@ -379,11 +395,14 @@ export const testSchemas = {
 // Immigration simulation validation schemas
 export const immigrationSimulationSchemas = {
   create: Joi.object({
-    country: Joi.string().valid('canada', 'france', 'belgium').required(),
-    immigrationType: Joi.string().valid('skilled_worker', 'student', 'family_reunification', 'work_permit', 'family', 'work').required(),
-    level: Joi.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').required(),
-    voicePreference: Joi.string().valid('france_female_1', 'france_male_1', 'quebec_female_1', 'quebec_male_1').optional(),
-    personalInfo: Joi.object().optional()
+    country: Joi.string().valid('canada', 'france', 'belgium', 'CANADA', 'FRANCE', 'BELGIUM').required(),
+    immigrationType: Joi.string().valid('skilled_worker', 'student', 'family_reunification', 'work_permit', 'family', 'work', 'immigration', 'school', 'relocation').required(),
+    level: Joi.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').optional().default('B1'),
+    voicePreference: Joi.string().optional(),
+    personalInfo: Joi.object().optional(),
+    bookingType: Joi.string().valid('AUTO', 'MANUAL').optional().default('AUTO'),
+    scheduledDate: Joi.date().iso().optional(),
+    questionsData: Joi.object().optional()
   }),
 
   params: Joi.object({

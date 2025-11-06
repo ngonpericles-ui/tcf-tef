@@ -21,6 +21,9 @@ const createManagerSchema = Joi.object({
 const updateManagerSchema = Joi.object({
   firstName: Joi.string().min(2).max(50).optional(),
   lastName: Joi.string().min(2).max(50).optional(),
+  email: Joi.string().email().optional(),
+  phone: Joi.string().optional(),
+  password: Joi.string().min(8).optional(),
   role: Joi.string().valid('JUNIOR_MANAGER', 'SENIOR_MANAGER').optional(),
   status: Joi.string().valid('ACTIVE', 'INACTIVE', 'SUSPENDED').optional()
 });
@@ -122,6 +125,25 @@ router.get('/managers/:managerId/performance',
   validateParams({ managerId: commonSchemas.id }),
   AdminController.getManagerPerformance
 );
+
+/**
+ * @route   DELETE /api/admin/managers/:managerId
+ * @desc    Delete manager
+ * @access  Private (Admin)
+ */
+router.delete('/managers/:managerId',
+  authenticate,
+  requireAdmin,
+  validateParams({ managerId: commonSchemas.id }),
+  AdminController.deleteManager
+);
+
+/**
+ * @route   GET /api/admin/statistics
+ * @desc    Get admin profile statistics
+ * @access  Private (Admin)
+ */
+router.get('/statistics', authenticate, requireAdmin, AdminController.getStatistics);
 
 /**
  * @route   GET /api/admin/analytics
@@ -302,10 +324,10 @@ router.put('/subscription-plans/:id',
       billingCycle: Joi.string().valid('monthly', 'quarterly', 'yearly').optional(),
       features: Joi.array().items(Joi.string()).optional(),
       featuresEn: Joi.array().items(Joi.string()).optional(),
-      maxSimulations: Joi.number().min(0).optional(),
-      maxLiveSessions: Joi.number().min(0).optional(),
-      maxCourses: Joi.number().min(0).optional(),
-      maxTests: Joi.number().min(0).optional(),
+      maxSimulations: Joi.number().min(-1).allow(null).optional(),
+      maxLiveSessions: Joi.number().min(-1).allow(null).optional(),
+      maxCourses: Joi.number().min(-1).allow(null).optional(),
+      maxTests: Joi.number().min(-1).allow(null).optional(),
       isActive: Joi.boolean().optional(),
       isPopular: Joi.boolean().optional(),
       sortOrder: Joi.number().optional(),
@@ -391,19 +413,24 @@ router.post('/audio-simulations',
   validate({
     body: Joi.object({
       title: Joi.string().min(3).max(200).required(),
-      description: Joi.string().min(10).max(1000).required(),
-      level: Joi.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').required(),
-      category: Joi.string().valid('GRAMMAR', 'LISTENING', 'READING', 'VOCABULARY', 'WRITING', 'ORAL', 'TCF_TEF').required(),
+      description: Joi.string().min(1).max(2000).allow('').required(), // Allow empty string but still require field
+      level: Joi.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').optional().default('B1'),
+      category: Joi.string().valid('GRAMMAR', 'LISTENING', 'READING', 'VOCABULARY', 'WRITING', 'ORAL', 'TCF_TEF', 'GENERAL').optional().default('GENERAL'),
+      subscription: Joi.array().items(Joi.string()).optional().default([]),
+      duration: Joi.number().min(60).max(1800).optional().default(420),
+      maxDuration: Joi.number().min(60).max(1800).optional(),
+      instructions: Joi.string().allow('').optional(), // Allow empty string
+      sujets: Joi.array().items(Joi.string()).optional().default([]),
+      extractedQuestions: Joi.array().items(Joi.any()).optional().default([]),
       questions: Joi.array().items(Joi.object({
         question: Joi.string().required(),
         type: Joi.string().valid('multiple-choice', 'open-ended', 'scenario').required(),
         options: Joi.array().items(Joi.string()).optional(),
         correctAnswer: Joi.string().optional(),
         points: Joi.number().min(1).max(10).required()
-      })).min(1).required(),
-      duration: Joi.number().min(60).max(1800).default(420),
-      voicePreference: Joi.string().default('france_female_1'),
-      isActive: Joi.boolean().default(true)
+      })).optional(),
+      voicePreference: Joi.string().optional().default('france_female_1'),
+      isActive: Joi.boolean().optional().default(true)
     })
   }),
   AdminController.createAudioSimulation

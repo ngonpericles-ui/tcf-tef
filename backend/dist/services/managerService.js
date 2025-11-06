@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ManagerService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const client_1 = require("@prisma/client");
-const notificationService_1 = require("../services/notificationService");
-const logger_1 = require("../utils/logger");
+const notificationService_1 = require("@/services/notificationService");
+const logger_1 = require("@/utils/logger");
 class ManagerService {
     static async getDashboardData(managerId, timeframe, team) {
         const startDate = this.getStartDate(timeframe);
@@ -320,67 +320,111 @@ class ManagerService {
         });
     }
     static async getContentLibrary(managerId, filters) {
-        const where = {};
-        if (filters.type) {
-            if (filters.type === 'courses') {
-                const courses = await connection_1.prisma.course.findMany({
-                    where: {
-                        createdById: managerId,
-                        ...(filters.status && { isPublished: filters.status === 'published' })
-                    },
-                    orderBy: { createdAt: 'desc' }
-                });
-                return { type: 'courses', content: courses };
+        try {
+            const where = {};
+            if (filters.type) {
+                if (filters.type === 'courses') {
+                    try {
+                        const courses = await connection_1.prisma.course.findMany({
+                            where: {
+                                createdById: managerId,
+                                ...(filters.status && { isPublished: filters.status === 'published' })
+                            },
+                            orderBy: { createdAt: 'desc' },
+                            take: 50
+                        });
+                        return { type: 'courses', content: courses };
+                    }
+                    catch (error) {
+                        logger_1.logger.warn('Failed to fetch courses', { managerId, error: error.message });
+                        return { type: 'courses', content: [] };
+                    }
+                }
+                else if (filters.type === 'tests') {
+                    try {
+                        const tests = await connection_1.prisma.test.findMany({
+                            where: {
+                                createdById: managerId,
+                                ...(filters.status && { isPublished: filters.status === 'published' })
+                            },
+                            orderBy: { createdAt: 'desc' },
+                            take: 50
+                        });
+                        return { type: 'tests', content: tests };
+                    }
+                    catch (error) {
+                        logger_1.logger.warn('Failed to fetch tests', { managerId, error: error.message });
+                        return { type: 'tests', content: [] };
+                    }
+                }
+                else if (filters.type === 'posts') {
+                    try {
+                        const posts = await connection_1.prisma.post.findMany({
+                            where: {
+                                authorId: managerId,
+                                ...(filters.status && { status: filters.status.toUpperCase() })
+                            },
+                            orderBy: { createdAt: 'desc' },
+                            take: 50
+                        });
+                        return { type: 'posts', content: posts };
+                    }
+                    catch (error) {
+                        logger_1.logger.warn('Failed to fetch posts', { managerId, error: error.message });
+                        return { type: 'posts', content: [] };
+                    }
+                }
             }
-            else if (filters.type === 'tests') {
-                const tests = await connection_1.prisma.test.findMany({
-                    where: {
-                        createdById: managerId,
-                        ...(filters.status && { isPublished: filters.status === 'published' })
-                    },
-                    orderBy: { createdAt: 'desc' }
-                });
-                return { type: 'tests', content: tests };
-            }
-            else if (filters.type === 'posts') {
-                const posts = await connection_1.prisma.post.findMany({
-                    where: {
-                        authorId: managerId,
-                        ...(filters.status && { status: filters.status.toUpperCase() })
-                    },
-                    orderBy: { createdAt: 'desc' }
-                });
-                return { type: 'posts', content: posts };
-            }
+            const [courses, tests, posts, liveSessions] = await Promise.all([
+                connection_1.prisma.course.findMany({
+                    where: { createdById: managerId },
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                }).catch((error) => {
+                    logger_1.logger.warn('Failed to fetch courses', { managerId, error: error.message });
+                    return [];
+                }),
+                connection_1.prisma.test.findMany({
+                    where: { createdById: managerId },
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                }).catch((error) => {
+                    logger_1.logger.warn('Failed to fetch tests', { managerId, error: error.message });
+                    return [];
+                }),
+                connection_1.prisma.post.findMany({
+                    where: { authorId: managerId },
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                }).catch((error) => {
+                    logger_1.logger.warn('Failed to fetch posts', { managerId, error: error.message });
+                    return [];
+                }),
+                connection_1.prisma.liveSession.findMany({
+                    where: { createdById: managerId },
+                    orderBy: { createdAt: 'desc' },
+                    take: 10
+                }).catch((error) => {
+                    logger_1.logger.warn('Failed to fetch liveSessions (table may not exist)', { managerId, error: error.message });
+                    return [];
+                })
+            ]);
+            return {
+                courses,
+                tests,
+                posts,
+                liveSessions: liveSessions || []
+            };
         }
-        const [courses, tests, posts, liveSessions] = await Promise.all([
-            connection_1.prisma.course.findMany({
-                where: { createdById: managerId },
-                orderBy: { createdAt: 'desc' },
-                take: 10
-            }),
-            connection_1.prisma.test.findMany({
-                where: { createdById: managerId },
-                orderBy: { createdAt: 'desc' },
-                take: 10
-            }),
-            connection_1.prisma.post.findMany({
-                where: { authorId: managerId },
-                orderBy: { createdAt: 'desc' },
-                take: 10
-            }),
-            connection_1.prisma.liveSession.findMany({
-                where: { createdById: managerId },
-                orderBy: { createdAt: 'desc' },
-                take: 10
-            })
-        ]);
-        return {
-            courses,
-            tests,
-            posts,
-            liveSessions
-        };
+        catch (error) {
+            logger_1.logger.error('Failed to get content library', { managerId, error: error.message });
+            return {
+                courses: [],
+                tests: [],
+                posts: [],
+                liveSessions: []
+            };
+        }
     }
     static async createContent(managerId, contentData) {
         const { type, ...data } = contentData;

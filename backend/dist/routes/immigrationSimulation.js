@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -14,18 +47,34 @@ const prisma = new client_1.PrismaClient();
 const ImmigrationSimulationService = require('../services/immigrationSimulationService');
 router.get('/history/user', auth_1.authenticate, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            console.error('❌ No userId found in token (immigration history):', {
+                user: req.user,
+                hasId: !!req.user?.id,
+                hasUserId: !!req.user?.userId
+            });
+            return res.status(401).json({
+                success: false,
+                message: 'User ID not found in token'
+            });
+        }
+        console.log('📋 Fetching immigration simulation history for user:', userId);
         const result = await ImmigrationSimulationService.getUserSimulations(userId);
+        console.log('📋 Immigration simulations result:', {
+            simulationsCount: Array.isArray(result) ? result.length : 0,
+            result: result
+        });
         res.json({
             success: true,
             data: result
         });
     }
     catch (error) {
-        console.error('Error getting immigration simulation history:', error);
+        console.error('❌ Error getting immigration simulation history:', error);
         res.status(500).json({
             success: false,
-            message: error.message
+            message: error.message || 'Failed to fetch immigration simulation history'
         });
     }
 });
@@ -66,13 +115,23 @@ router.get('/monthly-count/user', auth_1.authenticate, async (req, res) => {
 router.post('/create', requestLogger_1.requestLogger, auth_1.authenticate, (0, validation_1.validate)(validation_1.immigrationSimulationSchemas.create), async (req, res) => {
     try {
         const userId = req.user.id;
-        const { country, immigrationType, level, personalInfo, voicePreference } = req.body;
+        const { country, immigrationType, level, personalInfo, voicePreference, bookingType, scheduledDate, questionsData } = req.body;
         const language = i18nService_1.default.getLanguageFromRequest(req);
+        const topicMap = {
+            'immigration': 'skilled_worker',
+            'school': 'student',
+            'work': 'work_permit',
+            'relocation': 'family_reunification'
+        };
+        const normalizedCountry = country?.toLowerCase() || '';
+        const mappedImmigrationType = topicMap[immigrationType] || immigrationType || 'skilled_worker';
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { subscriptionTier: true }
         });
-        if (!user || user.subscriptionTier !== 'PRO') {
+        const { checkSimulationLimit } = await Promise.resolve().then(() => __importStar(require('../services/simulationLimitService')));
+        const limitCheck = await checkSimulationLimit(userId);
+        if (!user || (user.subscriptionTier !== 'PRO' && limitCheck.subscriptionTier !== 'FREE')) {
             return res.status(403).json({
                 success: false,
                 message: language === 'fr'
@@ -80,31 +139,26 @@ router.post('/create', requestLogger_1.requestLogger, auth_1.authenticate, (0, v
                     : 'Immigration simulations are exclusive to Pro subscribers'
             });
         }
-        const currentMonth = new Date();
-        currentMonth.setDate(1);
-        currentMonth.setHours(0, 0, 0, 0);
-        const monthlyCount = await prisma.immigrationSimulation.count({
-            where: {
-                userId,
-                createdAt: {
-                    gte: currentMonth
-                }
-            }
-        });
-        if (monthlyCount >= 2) {
-            return res.status(400).json({
+        if (!limitCheck.canCreate) {
+            return res.status(403).json({
                 success: false,
                 message: language === 'fr'
-                    ? 'Vous avez atteint la limite mensuelle de 2 simulations d\'immigration'
-                    : 'You have reached the monthly limit of 2 immigration simulations'
+                    ? limitCheck.error || `Vous avez atteint votre limite de simulations (${limitCheck.maxSimulations}). Veuillez attendre le prochain cycle de facturation ou améliorer votre abonnement.`
+                    : limitCheck.error || `You have reached your simulation limit (${limitCheck.maxSimulations}). Please wait for the next billing cycle or upgrade your subscription.`,
+                limitReached: true,
+                remaining: limitCheck.remaining,
+                maxSimulations: limitCheck.maxSimulations
             });
         }
         const sessionData = {
-            country,
-            immigrationType,
-            level,
-            personalInfo,
-            voicePreference
+            country: normalizedCountry,
+            immigrationType: mappedImmigrationType,
+            level: level || 'B1',
+            personalInfo: personalInfo || {},
+            voicePreference: voicePreference || 'france_female_1',
+            bookingType: bookingType || 'AUTO',
+            scheduledDate: scheduledDate || null,
+            questionsData: questionsData || {}
         };
         const simulation = await ImmigrationSimulationService.createImmigrationSession(userId, sessionData);
         res.json({
@@ -198,10 +252,110 @@ router.post('/end/:id', auth_1.authenticate, async (req, res) => {
         });
     }
 });
+router.delete('/cancel/:id', auth_1.authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || req.user?.id;
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        if (!userId) {
+            console.error('❌ No userId found in token (immigration cancel):', {
+                user: req.user,
+                hasId: !!req.user?.id,
+                hasUserId: !!req.user?.userId
+            });
+            return res.status(401).json({
+                success: false,
+                message: 'User ID not found in token'
+            });
+        }
+        console.log('🗑️ Cancel immigration simulation endpoint called:', {
+            simulationId: id,
+            userId
+        });
+        const result = await ImmigrationSimulationService.cancelSimulation(id, userId, language);
+        res.json({
+            success: true,
+            data: result,
+            message: language === 'fr'
+                ? 'Simulation d\'immigration annulée avec succès'
+                : 'Immigration simulation cancelled successfully'
+        });
+    }
+    catch (error) {
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        res.status(400).json({
+            success: false,
+            message: error.message || (language === 'fr'
+                ? 'Erreur lors de l\'annulation'
+                : 'Error cancelling simulation')
+        });
+    }
+});
+router.put('/reschedule/:id', auth_1.authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { newDate, voicePreference } = req.body;
+        const userId = req.user?.userId || req.user?.id;
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        if (!userId) {
+            console.error('❌ No userId found in token (immigration reschedule):', {
+                user: req.user,
+                hasId: !!req.user?.id,
+                hasUserId: !!req.user?.userId
+            });
+            return res.status(401).json({
+                success: false,
+                message: 'User ID not found in token'
+            });
+        }
+        if (!newDate) {
+            return res.status(400).json({
+                success: false,
+                message: language === 'fr'
+                    ? 'Nouvelle date requise'
+                    : 'New date required'
+            });
+        }
+        console.log('📅 Reschedule immigration simulation endpoint called:', {
+            simulationId: id,
+            userId,
+            newDate,
+            voicePreference
+        });
+        const result = await ImmigrationSimulationService.rescheduleSimulation(id, userId, new Date(newDate), voicePreference, language);
+        res.json({
+            success: true,
+            data: result,
+            message: language === 'fr'
+                ? 'Simulation d\'immigration reprogrammée avec succès'
+                : 'Immigration simulation rescheduled successfully'
+        });
+    }
+    catch (error) {
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        res.status(400).json({
+            success: false,
+            message: error.message || (language === 'fr'
+                ? 'Erreur lors de la reprogrammation'
+                : 'Error rescheduling simulation')
+        });
+    }
+});
 router.get('/:id', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
+        const userId = req.user?.userId || req.user?.id;
+        if (!userId) {
+            console.error('❌ No userId found in token (immigration get):', {
+                user: req.user,
+                hasId: !!req.user?.id,
+                hasUserId: !!req.user?.userId
+            });
+            return res.status(401).json({
+                success: false,
+                message: 'User ID not found in token'
+            });
+        }
         const simulation = await ImmigrationSimulationService.getSession(id, userId);
         res.json({
             success: true,

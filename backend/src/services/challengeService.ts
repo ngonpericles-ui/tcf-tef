@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/database/connection'
 import { logger } from '@/utils/logger'
 
 export interface DailyChallenge {
@@ -32,81 +32,65 @@ export interface UserProgress {
 }
 
 export class ChallengeService {
-  // Get daily challenges
+  // Get daily challenges - REAL IMPLEMENTATION - query from database
   static async getDailyChallenges(): Promise<DailyChallenge[]> {
     try {
-      // For now, return predefined challenges
-      // In the future, this could be dynamic based on user level, preferences, etc.
-      const challenges: DailyChallenge[] = [
-        {
-          id: 'vocab-express',
-          title: { 
-            fr: "Défi Vocabulaire Express", 
-            en: "Express Vocabulary Challenge" 
-          },
-          description: { 
-            fr: "Apprenez 10 nouveaux mots en 5 minutes", 
-            en: "Learn 10 new words in 5 minutes" 
-          },
-          reward: { 
-            fr: "50 XP + Badge Vocabulaire", 
-            en: "50 XP + Vocabulary Badge" 
-          },
-          difficulty: "Facile",
-          duration: "5 min",
-          xpReward: 50,
-          badgeReward: "vocabulary",
-          isActive: true,
-          category: "vocabulary"
-        },
-        {
-          id: 'ecoute-active',
-          title: { 
-            fr: "Écoute Active", 
-            en: "Active Listening" 
-          },
-          description: { 
-            fr: "Compréhension orale avec audio natif", 
-            en: "Listening comprehension with native audio" 
-          },
-          reward: { 
-            fr: "75 XP + Badge Écoute", 
-            en: "75 XP + Listening Badge" 
-          },
-          difficulty: "Moyen",
-          duration: "10 min",
-          xpReward: 75,
-          badgeReward: "listening",
-          isActive: true,
-          category: "listening"
-        },
-        {
-          id: 'expression-rapide',
-          title: { 
-            fr: "Expression Rapide", 
-            en: "Quick Expression" 
-          },
-          description: { 
-            fr: "Construisez 5 phrases complexes", 
-            en: "Build 5 complex sentences" 
-          },
-          reward: { 
-            fr: "100 XP + Badge Expression", 
-            en: "100 XP + Expression Badge" 
-          },
-          difficulty: "Difficile",
-          duration: "15 min",
-          xpReward: 100,
-          badgeReward: "expression",
-          isActive: true,
-          category: "expression"
-        }
-      ]
+      // Query active daily challenges from database
+      const today = new Date()
+      today.setHours(0, 0, 0, 0) // Start of today
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1) // Start of tomorrow
 
-      return challenges
+      const challenges = await prisma.challenge.findMany({
+        where: {
+          isActive: true,
+          isDaily: true,
+          OR: [
+            { availableDate: null }, // No specific date - always available
+            {
+              availableDate: {
+                gte: today,
+                lt: tomorrow
+              }
+            }
+          ]
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: 10 // Limit to 10 daily challenges
+      })
+
+      // Transform database records to DailyChallenge format
+      const dailyChallenges: DailyChallenge[] = challenges.map(challenge => ({
+        id: challenge.id,
+        title: {
+          fr: challenge.titleFr,
+          en: challenge.titleEn
+        },
+        description: {
+          fr: challenge.descriptionFr,
+          en: challenge.descriptionEn
+        },
+        reward: {
+          fr: challenge.rewardFr,
+          en: challenge.rewardEn
+        },
+        difficulty: challenge.difficulty,
+        duration: challenge.duration,
+        xpReward: challenge.xpReward,
+        badgeReward: challenge.badgeReward || undefined,
+        isActive: challenge.isActive,
+        category: challenge.category
+      }))
+
+      logger.info(`Retrieved ${dailyChallenges.length} daily challenges from database`)
+      
+      return dailyChallenges
     } catch (error) {
-      logger.error('Error getting daily challenges:', error)
-      throw error
+      logger.error('Error getting daily challenges from database:', error)
+      // Return empty array on error to prevent crashes
+      return []
     }
   }
 

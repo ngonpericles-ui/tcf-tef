@@ -62,11 +62,19 @@ export default function LivePage() {
       )
 
       if (allSessionsResponse.success && allSessionsResponse.data) {
-        setSessions(allSessionsResponse.data.sessions || [])
+        // Handle both response formats: data.sessions or data directly
+        const sessionsData = Array.isArray(allSessionsResponse.data) 
+          ? allSessionsResponse.data 
+          : allSessionsResponse.data.sessions || []
+        setSessions(sessionsData)
       }
 
       if (upcomingResponse.success && upcomingResponse.data) {
-        setUpcomingSessions(upcomingResponse.data.sessions || [])
+        // Handle both response formats: data.sessions or data directly
+        const upcomingData = Array.isArray(upcomingResponse.data) 
+          ? upcomingResponse.data 
+          : upcomingResponse.data.sessions || []
+        setUpcomingSessions(upcomingData)
       }
 
     } catch (err: any) {
@@ -98,6 +106,14 @@ export default function LivePage() {
       return
     }
 
+    // Check if already registered
+    if (session.isRegistered) {
+      toast.info(t("Vous êtes déjà inscrit à cette session", "You are already registered for this session"))
+      // Redirect to session page
+      window.location.href = `/live-session/${session.id}`
+      return
+    }
+
     if (!canAccess(session.requiredTier)) {
       toast.error(t("Upgradez votre abonnement pour accéder à cette session", "Upgrade your subscription to access this session"))
       // Redirect to subscription page
@@ -108,10 +124,17 @@ export default function LivePage() {
     try {
       await liveSessionService.joinSession(session.id)
       toast.success(t("Vous avez rejoint la session avec succès!", "Successfully joined the session!"))
-      // Redirect to session or show success
+      // Redirect to session page
+      window.location.href = `/live-session/${session.id}`
     } catch (error: any) {
       console.error('Failed to join session:', error)
-      toast.error(error.message || t("Erreur lors de la connexion à la session", "Error joining session"))
+      if (error.response?.status === 409) {
+        toast.info(t("Vous êtes déjà inscrit à cette session", "You are already registered for this session"))
+        // Redirect to session page
+        window.location.href = `/live-session/${session.id}`
+      } else {
+        toast.error(error.message || t("Erreur lors de la connexion à la session", "Error joining session"))
+      }
     }
   }
 

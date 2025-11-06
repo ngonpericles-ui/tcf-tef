@@ -10,19 +10,30 @@ import {
   Target,
   Clock,
   Globe,
-  Award
+  Award,
+  Shield,
+  Crown,
+  TrendingUp,
+  BookOpen,
+  Mic,
+  Users,
+  Zap,
+  BarChart3,
+  Sparkles
 } from "lucide-react"
 import { useLanguage } from "@/components/language-provider"
 import { useRouter } from "next/navigation"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
+import { CircularProgressCounter } from "@/components/circular-progress-counter"
+import { motion } from "framer-motion"
 
 const testLevels = [
   {
     id: "essentiel",
     title: { fr: "Essentiel", en: "Essential" },
     description: { fr: "Tests B1 avec analyse", en: "B1 tests with analysis" },
-    icon: <CheckCircle className="w-6 h-6" />,
+    icon: Shield,
     level: "B1",
     popular: false,
     features: [
@@ -37,7 +48,7 @@ const testLevels = [
     id: "premium",
     title: { fr: "Premium", en: "Premium" },
     description: { fr: "Tests complets B1-C2", en: "Complete B1-C2 tests" },
-    icon: <Star className="w-6 h-6" />,
+    icon: Star,
     level: "B1-C2",
     popular: true,
     features: [
@@ -52,7 +63,7 @@ const testLevels = [
     id: "pro",
     title: { fr: "Pro+", en: "Pro+" },
     description: { fr: "Accompagnement personnalisé", en: "Personalized coaching" },
-    icon: <Globe className="w-6 h-6" />,
+    icon: Crown,
     level: "B1-C2",
     popular: false,
     features: [
@@ -79,10 +90,16 @@ interface LevelAssessment {
 }
 
 interface FreeAttemptsInfo {
-  freeAttemptsUsed: number
-  remainingFreeAttempts: number
+  totalSimulationsUsed: number
+  remainingSimulations: number // -1 means unlimited
+  maxSimulations: number // -1 means unlimited
+  subscriptionTier: string
   isBlocked: boolean
-  userTier: string
+  canAccessPaid: boolean
+  // Legacy fields for backward compatibility
+  freeAttemptsUsed?: number
+  remainingFreeAttempts?: number
+  userTier?: string
 }
 
 export default function TestNiveauPage() {
@@ -140,6 +157,9 @@ export default function TestNiveauPage() {
     try {
       const response = await apiClient.get('/simulations/free-attempts/count') as any
       if (response.success && response.data) {
+        console.log('🔍 Frontend received free attempts info:', response.data)
+        console.log('🔍 Max simulations:', response.data.maxSimulations)
+        console.log('🔍 Subscription tier:', response.data.subscriptionTier)
         setFreeAttemptsInfo(response.data as FreeAttemptsInfo)
       }
     } catch (error) {
@@ -159,11 +179,12 @@ export default function TestNiveauPage() {
 
     setLoading(true)
 
-    // Check if user is blocked due to free attempts limit
+    // Check if user is blocked (reached simulation limit)
     if (freeAttemptsInfo?.isBlocked) {
+      const maxSims = freeAttemptsInfo.maxSimulations === -1 ? 'illimitées' : freeAttemptsInfo.maxSimulations
       toast.error(t(
-        "Vous avez utilisé vos 5 simulations gratuites. Veuillez vous abonner pour continuer.",
-        "You have used your 5 free simulations. Please subscribe to continue."
+        `Vous avez utilisé toutes vos simulations (${maxSims}). Veuillez vous abonner pour continuer.`,
+        `You have used all your simulations (${maxSims}). Please subscribe to continue.`
       ))
       setLoading(false)
       router.push('/abonnement')
@@ -207,141 +228,239 @@ export default function TestNiveauPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 dark:from-emerald-900 dark:via-emerald-800 dark:to-teal-900 overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0">
-          <img
-            src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80"
-            alt="French language learning and assessment"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/90 to-transparent"></div>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      {/* Enhanced Hero Section with Visuals */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-b border-gray-200 dark:border-gray-800">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(59,130,246,0.1)_1px,transparent_0)] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]"></div>
+        
+        {/* Decorative Elements */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-200/30 dark:bg-blue-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-200/30 dark:bg-purple-900/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-          <div className="text-center">
-            <div className="flex items-center justify-center mb-6">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                <Target className="w-8 h-8 text-white" />
-              </div>
-            </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left Side: Text Content */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+              className="text-center lg:text-left"
+            >
+              {/* Badge */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800"
+              >
+                <Target className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  {t("Évaluation de Niveau", "Level Assessment")}
+                </span>
+              </motion.div>
 
-            <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6 leading-tight">
-              Test de Niveau
+              {/* Main Title */}
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 dark:from-blue-400 dark:via-purple-400 dark:to-blue-400 bg-clip-text text-transparent leading-tight">
+                {t("Testez Votre Niveau de Français", "Test Your French Level")}
           </h1>
 
-            <p className="text-xl md:text-2xl text-emerald-100 mb-8 max-w-3xl mx-auto leading-relaxed">
-              <strong className="text-white font-semibold">Évaluez votre niveau de français</strong> avec nos tests adaptés à vos objectifs.
-              Découvrez votre niveau actuel, identifiez vos points forts et planifiez votre progression.
-            </p>
+              {/* Description */}
+              <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed">
+                {t(
+                  "Déterminez votre niveau de français (A1 à C2) avec nos tests TCF/TEF officiels. Obtenez une évaluation précise, des recommandations personnalisées et un certificat reconnu.",
+                  "Determine your French level (A1 to C2) with our official TCF/TEF tests. Get accurate assessment, personalized recommendations, and a recognized certificate."
+                )}
+              </p>
 
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-emerald-200 mb-8">
-              <div className="flex items-center">
-                <Target className="w-4 h-4 mr-2 text-emerald-300" />
-                Évaluation précise
+              {/* Key Features */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                {[
+                  { icon: CheckCircle, text: t("Tests Officiels", "Official Tests"), desc: t("TCF/TEF", "TCF/TEF") },
+                  { icon: Award, text: t("Certificat", "Certificate"), desc: t("Reconnu", "Recognized") },
+                  { icon: BarChart3, text: t("Analyse Détaillée", "Detailed Analysis"), desc: t("Progression", "Progress") }
+                ].map((feature, idx) => (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + idx * 0.1 }}
+                    className="flex flex-col items-center lg:items-start gap-2 p-4 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-gray-200 dark:border-gray-700"
+                  >
+                    <feature.icon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{feature.text}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{feature.desc}</div>
+                  </motion.div>
+                ))}
               </div>
-              <div className="flex items-center">
-                <Award className="w-4 h-4 mr-2 text-emerald-300" />
-                Certificat de niveau
+            </motion.div>
+
+            {/* Right Side: Visual Element with Counter */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="flex flex-col items-center justify-center"
+            >
+              {/* Visual Illustration */}
+              <div className="relative w-full max-w-md mb-8">
+                {/* SVG Illustration */}
+                <svg viewBox="0 0 400 300" className="w-full h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Background circles */}
+                  <circle cx="200" cy="150" r="120" fill="url(#gradient1)" opacity="0.1"/>
+                  <circle cx="200" cy="150" r="80" fill="url(#gradient2)" opacity="0.15"/>
+                  
+                  {/* Document/Test illustration */}
+                  <rect x="140" y="80" width="120" height="140" rx="8" fill="white" stroke="#3B82F6" strokeWidth="2"/>
+                  <rect x="150" y="100" width="100" height="4" rx="2" fill="#3B82F6" opacity="0.3"/>
+                  <rect x="150" y="120" width="80" height="4" rx="2" fill="#3B82F6" opacity="0.3"/>
+                  <rect x="150" y="140" width="90" height="4" rx="2" fill="#3B82F6" opacity="0.3"/>
+                  <circle cx="200" cy="170" r="15" fill="#10B981"/>
+                  <path d="M193 170 L198 175 L207 166" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+                  
+                  {/* Level indicators */}
+                  <circle cx="120" cy="80" r="25" fill="#8B5CF6" opacity="0.2"/>
+                  <circle cx="280" cy="80" r="25" fill="#EC4899" opacity="0.2"/>
+                  <circle cx="120" cy="220" r="25" fill="#F59E0B" opacity="0.2"/>
+                  <circle cx="280" cy="220" r="25" fill="#06B6D4" opacity="0.2"/>
+                  
+                  <defs>
+                    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#3B82F6"/>
+                      <stop offset="100%" stopColor="#8B5CF6"/>
+                    </linearGradient>
+                    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#8B5CF6"/>
+                      <stop offset="100%" stopColor="#EC4899"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
               </div>
-              <div className="flex items-center">
-                <Star className="w-4 h-4 mr-2 text-emerald-300" />
-                Progression personnalisée
+
+              {/* Circular Progress Counter - Placed Below Visual */}
+              {freeAttemptsInfo && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                  className="w-full max-w-sm"
+                >
+                  <div className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-2xl border-2 border-blue-100 dark:border-blue-900">
+                    <CircularProgressCounter
+                      used={freeAttemptsInfo.totalSimulationsUsed || 0}
+                      total={freeAttemptsInfo.maxSimulations === -1 || freeAttemptsInfo.maxSimulations === null || freeAttemptsInfo.maxSimulations === undefined
+                        ? Infinity
+                        : (freeAttemptsInfo.maxSimulations || 5)}
+                      size={180}
+                      strokeWidth={14}
+                      label={freeAttemptsInfo.subscriptionTier === 'FREE' 
+                        ? t("Simulations gratuites", "Free simulations")
+                        : t("Simulations disponibles", "Available simulations")}
+                    />
+                    <div className="mt-4 text-center">
+                      {freeAttemptsInfo.isBlocked ? (
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                            {t("Simulations épuisées", "Simulations exhausted")}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {freeAttemptsInfo.maxSimulations === -1 
+                              ? t("Limite atteinte", "Limit reached")
+                              : t(`Vous avez utilisé toutes vos ${freeAttemptsInfo.maxSimulations} simulations.`, 
+                                  `You have used all your ${freeAttemptsInfo.maxSimulations} simulations.`)}
+                          </p>
+                          <Button 
+                            onClick={() => router.push('/abonnement')} 
+                            className="mt-2 bg-red-600 hover:bg-red-700 text-white"
+                            size="sm"
+                          >
+                            {t("S'abonner", "Subscribe")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {freeAttemptsInfo.maxSimulations === -1 
+                              ? t("Simulations illimitées", "Unlimited simulations")
+                              : t(`Il vous reste ${freeAttemptsInfo.remainingSimulations} simulation${freeAttemptsInfo.remainingSimulations !== 1 ? "s" : ""}`, 
+                                  `You have ${freeAttemptsInfo.remainingSimulations} simulation${freeAttemptsInfo.remainingSimulations !== 1 ? "s" : ""} left`)}
+                          </p>
+                          {freeAttemptsInfo.subscriptionTier !== 'FREE' && freeAttemptsInfo.remainingSimulations <= 5 && freeAttemptsInfo.remainingSimulations > 0 && (
+                            <p className="text-xs text-yellow-600 dark:text-yellow-400 font-medium">
+                              {t("Bientôt épuisé", "Running low")}
+                            </p>
+                          )}
+                        </div>
+                      )}
               </div>
             </div>
+                </motion.div>
+              )}
+            </motion.div>
           </div>
         </div>
       </div>
 
-      {/* Free Attempts Counter Section */}
-      {freeAttemptsInfo && (
-        <div className={`py-6 px-4 ${freeAttemptsInfo.isBlocked ? 'bg-red-50 dark:bg-red-900/20 border-b-2 border-red-300' : 'bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-300'}`}>
-          <div className="container mx-auto max-w-7xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className={`font-semibold ${freeAttemptsInfo.isBlocked ? 'text-red-700 dark:text-red-300' : 'text-blue-700 dark:text-blue-300'}`}>
-                  {freeAttemptsInfo.isBlocked
-                    ? t("Simulations gratuites épuisées", "Free simulations exhausted")
-                    : t("Simulations gratuites disponibles", "Free simulations available")
-                  }
-                </h3>
-                <p className={`text-sm ${freeAttemptsInfo.isBlocked ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`}>
-                  {freeAttemptsInfo.isBlocked
-                    ? t("Vous avez utilisé vos 5 simulations gratuites. Abonnez-vous pour accéder à plus.", "You have used your 5 free simulations. Subscribe to access more.")
-                    : t(`${freeAttemptsInfo.remainingFreeAttempts} simulations gratuites restantes sur 5`, `${freeAttemptsInfo.remainingFreeAttempts} free simulations remaining out of 5`)
-                  }
-                </p>
-              </div>
-              {freeAttemptsInfo.isBlocked && (
-                <Button onClick={() => router.push('/abonnement')} className="bg-red-600 hover:bg-red-700">
-                  {t("S'abonner maintenant", "Subscribe now")}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Current Level Assessment Section */}
       {!levelLoading && (
-        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 py-16">
-          <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto">
+        <div className="relative py-16 md:py-24 bg-white dark:bg-gray-950">
+          <div className="container mx-auto px-4 max-w-6xl">
               {currentLevel ? (
-                <>
-                  <div className="text-center mb-8">
-                    <h2 className="text-3xl font-bold text-foreground mb-4">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+              >
+                <div className="text-center mb-12">
+                  <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
                       {t("Votre Niveau Actuel", "Your Current Level")}
                     </h2>
-                    <p className="text-lg text-muted-foreground">
+                  <p className="text-lg text-gray-600 dark:text-gray-400">
                       {t("Basé sur vos performances précédentes", "Based on your previous performance")}
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Current Level Card */}
-                    <Card className="text-center p-6 bg-white/80 backdrop-blur-sm border-2 border-blue-200">
+                  <Card className="text-center p-6 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-800">
                       <CardHeader>
-                        <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                          <Award className="w-8 h-8 text-blue-600" />
+                      <div className="mx-auto w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+                        <Award className="w-8 h-8 text-white" />
                         </div>
-                        <CardTitle className="text-2xl font-bold text-blue-600">
+                      <CardTitle className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                           {currentLevel.currentLevel}
                         </CardTitle>
-                        <CardDescription className="text-base">
+                      <CardDescription className="text-base mt-2">
                           {t("Niveau actuel", "Current level")}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-sm text-muted-foreground">
+                      <Badge variant="secondary" className="mt-2">
                           {t("Confiance:", "Confidence:")} {Math.round(currentLevel.confidence)}%
-                        </div>
+                      </Badge>
                       </CardContent>
                     </Card>
 
                     {/* Strengths Card */}
-                    <Card className="p-6 bg-white/80 backdrop-blur-sm">
+                  <Card className="p-6 border-2 border-green-200 dark:border-green-800">
                       <CardHeader>
-                        <CardTitle className="text-lg font-semibold text-green-600 flex items-center gap-2">
+                      <CardTitle className="text-lg font-semibold text-green-700 dark:text-green-400 flex items-center gap-2">
                           <CheckCircle className="w-5 h-5" />
                           {t("Points forts", "Strengths")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <ul className="space-y-2 text-sm">
+                      <ul className="space-y-3 text-sm">
                           {currentLevel.strengths && currentLevel.strengths.length > 0 ? (
                             currentLevel.strengths.slice(0, 3).map((strength, index) => (
-                              <li key={index} className="flex items-center gap-2">
-                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                                <span>{strength}</span>
+                            <li key={index} className="flex items-start gap-3">
+                              <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                              <span className="text-gray-700 dark:text-gray-300">{strength}</span>
                               </li>
                             ))
                           ) : (
-                            <li className="flex items-center gap-2">
-                              <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                              <span className="text-gray-500">Effectuer un test pour identifier vos forces</span>
+                          <li className="text-gray-500 dark:text-gray-400 text-sm">
+                            {t("Effectuez un test pour identifier vos forces", "Take a test to identify your strengths")}
                             </li>
                           )}
                         </ul>
@@ -349,71 +468,92 @@ export default function TestNiveauPage() {
                     </Card>
 
                     {/* Next Level Card */}
-                    <Card className="p-6 bg-white/80 backdrop-blur-sm">
+                  <Card className="p-6 border-2 border-purple-200 dark:border-purple-800">
                       <CardHeader>
-                        <CardTitle className="text-lg font-semibold text-purple-600 flex items-center gap-2">
+                      <CardTitle className="text-lg font-semibold text-purple-700 dark:text-purple-400 flex items-center gap-2">
                           <Target className="w-5 h-5" />
                           {t("Objectif suivant", "Next goal")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-sm space-y-2">
-                          <div className="font-medium">
-                            {t("Temps estimé:", "Estimated time:")} {currentLevel.estimatedTimeToNextLevel}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {currentLevel.estimatedTimeToNextLevel}
+                          </span>
                           </div>
-                          <div className="text-muted-foreground">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
                             {currentLevel.recommendations && currentLevel.recommendations.length > 0 
                               ? currentLevel.recommendations[0]
-                              : t("Effectuez un test pour des recommandations personnalisées", "Take a test for personalized recommendations")
+                            : t("Recommandations disponibles après le test", "Recommendations available after test")
                             }
-                          </div>
+                        </p>
                         </div>
                       </CardContent>
                     </Card>
                   </div>
-                </>
+              </motion.div>
               ) : (
-                // Show message when no assessment exists
-                <div className="text-center py-12">
-                  <div className="mx-auto w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                    <Target className="w-10 h-10 text-gray-400" />
+              // Modern empty state design
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="text-center py-16"
+              >
+                <div className="inline-flex items-center justify-center w-24 h-24 mb-6 rounded-3xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700">
+                  <BarChart3 className="w-12 h-12 text-gray-400 dark:text-gray-500" />
                   </div>
-                  <h2 className="text-3xl font-bold text-foreground mb-4">
-                    {t("Aucune évaluation disponible", "No Assessment Available")}
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+                  {t("Prêt à commencer ?", "Ready to start?")}
                   </h2>
-                  <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+                <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto leading-relaxed">
                     {t(
-                      "Vous n'avez pas encore effectué de test de niveau. Commencez par passer un test pour obtenir une évaluation personnalisée de votre niveau de français.",
-                      "You haven't taken a level test yet. Start by taking a test to get a personalized assessment of your French level."
+                    "Vous n'avez pas encore effectué de test de niveau. Sélectionnez un parcours ci-dessous pour obtenir une évaluation personnalisée de votre niveau de français.",
+                    "You haven't taken a level test yet. Select a path below to get a personalized assessment of your French level."
                     )}
                   </p>
-                  <div className="flex items-center justify-center space-x-4 text-sm text-muted-foreground">
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
-                      <span>—</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
-                      <span>—</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
-                      <span>—</span>
-                    </div>
-                  </div>
+                <div className="flex items-center justify-center gap-2 mt-8">
+                  {[1, 2, 3].map((step) => (
+                    <div
+                      key={step}
+                      className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-700"
+                    />
+                  ))}
                 </div>
+              </motion.div>
               )}
-            </div>
           </div>
         </div>
       )}
 
-      {/* Test Cards - Square-like design */}
-      <div className="container mx-auto px-4 py-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-          {testLevels.map((test) => (
+      {/* Modern Test Cards Section */}
+      <div className="relative py-20 md:py-24 bg-gradient-to-b from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              {t("Choisissez votre parcours", "Choose your path")}
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+              {t("Sélectionnez le niveau adapté à vos besoins et objectifs", "Select the level suited to your needs and goals")}
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {testLevels.map((test, index) => (
+              <motion.div
+                key={test.id}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+              >
             <TestCard
-              key={test.id}
               title={test.title.fr}
               description={test.description.fr}
               icon={test.icon}
@@ -426,201 +566,328 @@ export default function TestNiveauPage() {
               onHover={() => setHoveredCard(test.id)}
               onLeave={() => setHoveredCard(null)}
               tier={test.id}
+                  hasVoiceSimulation={test.hasVoiceSimulation}
+                  hasImmigrationSimulation={test.hasImmigrationSimulation}
             />
+              </motion.div>
           ))}
         </div>
 
-        {/* Selected Test Info - Enhanced Design */}
+          {/* Selected Test Info - Modern Premium Design */}
         {selectedTest && (
-          <div className="mt-12 max-w-4xl mx-auto">
-            <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl border-2 border-blue-200 dark:border-blue-700 shadow-xl overflow-hidden">
-              {/* Header Section */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 px-8 py-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                      <Target className="w-6 h-6 text-white" />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="mt-16 max-w-6xl mx-auto"
+            >
+              <Card className="overflow-hidden border-0 shadow-2xl bg-white dark:bg-gray-900">
+                {/* Premium Header with Gradient */}
+                <div className="relative bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-8 py-8">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-5">
+                      <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/30 shadow-lg">
+                        {(() => {
+                          const selected = testLevels.find(t => t.id === selectedTest)
+                          const IconComponent = selected?.icon || Crown
+                          return <IconComponent className="w-8 h-8 text-white" />
+                        })()}
+                      </div>
+                      <div>
+                        <h3 className="text-3xl font-bold text-white mb-1">
+                          {testLevels.find(t => t.id === selectedTest)?.title.fr}
+                        </h3>
+                        <p className="text-blue-100 text-base">
+                          {testLevels.find(t => t.id === selectedTest)?.description.fr}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-white">
-                        {testLevels.find(t => t.id === selectedTest)?.title.fr}
-                      </h3>
-                      <p className="text-blue-100 text-sm">
-                        {testLevels.find(t => t.id === selectedTest)?.description.fr}
-                      </p>
-                    </div>
+                    <Badge className="bg-white/20 backdrop-blur-sm text-white border border-white/30 px-5 py-2 text-sm font-semibold shadow-lg">
+                      {t("Niveau", "Level")} {testLevels.find(t => t.id === selectedTest)?.level}
+                    </Badge>
                   </div>
-                  <div className="text-right">
-                    <div className="text-white/80 text-sm">Niveau</div>
-                    <div className="text-white font-semibold text-lg">
-                      {testLevels.find(t => t.id === selectedTest)?.level}
-                    </div>
-                  </div>
+                  
+                  {/* Decorative background elements */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                  <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
                 </div>
-              </div>
 
               {/* Content Section */}
-              <div className="p-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Left Column - Features */}
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                      <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
-                      Ce qui est inclus
-                    </h4>
-                    <ul className="space-y-3">
+              <CardContent className="p-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-10">
+                  {/* Features - Left Column */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center">
+                        <BookOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <h4 className="text-xl font-bold text-gray-900 dark:text-white">
+                        {t("Ce qui est inclus", "What's included")}
+                      </h4>
+                    </div>
+                    <ul className="space-y-4">
                       {testLevels.find(t => t.id === selectedTest)?.features.map((feature, index) => (
-                        <li key={index} className="flex items-center space-x-3">
-                          <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                          <span className="text-gray-700 dark:text-gray-300">{feature.fr}</span>
-                        </li>
+                        <motion.li
+                          key={index}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="flex items-start gap-4 group"
+                        >
+                          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                            <CheckCircle className="w-4 h-4 text-white" />
+                          </div>
+                          <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1">
+                            {feature.fr}
+                          </span>
+                        </motion.li>
                       ))}
                     </ul>
                   </div>
 
-                  {/* Right Column - Benefits */}
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                      <Star className="w-5 h-5 text-yellow-500 mr-2" />
-                      Avantages
-                    </h4>
-                    <div className="space-y-3">
+                  {/* Benefits - Right Column */}
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <h4 className="text-xl font-bold text-gray-900 dark:text-white">
+                        {t("Avantages", "Benefits")}
+                      </h4>
+                    </div>
+                    <div className="space-y-4">
                       {selectedTest === 'essentiel' && (
                         <>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Tests B1 avec analyse détaillée</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">5 tests blancs par mois</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Support par email</span>
-                          </div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+                          >
+                            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                              <Target className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Tests B1 avec analyse détaillée
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+                          >
+                            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                              <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              5 tests blancs par mois
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
+                          >
+                            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                              <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Support par email
+                            </span>
+                          </motion.div>
                         </>
                       )}
                       {selectedTest === 'premium' && (
                         <>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Tests complets A1-C2 illimités</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Coach IA et feedback détaillé</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Certificats de réussite officiels</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Support prioritaire</span>
-                          </div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 hover:from-purple-100 hover:to-blue-100 dark:hover:from-purple-900/30 dark:hover:to-blue-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <BookOpen className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Tests complets B1-C2 illimités
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 hover:from-purple-100 hover:to-blue-100 dark:hover:from-purple-900/30 dark:hover:to-blue-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <Zap className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Coach IA et feedback détaillé
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 hover:from-purple-100 hover:to-blue-100 dark:hover:from-purple-900/30 dark:hover:to-blue-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <Award className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Certificats de réussite officiels
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.4 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 hover:from-purple-100 hover:to-blue-100 dark:hover:from-purple-900/30 dark:hover:to-blue-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <Users className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Support prioritaire
+                            </span>
+                          </motion.div>
                         </>
                       )}
                       {selectedTest === 'pro' && (
                         <>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Parcours personnalisés avec managers</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Sessions 1-on-1 et correction prioritaire</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Rapports détaillés et garantie de réussite</span>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-gray-700 dark:text-gray-300">Support téléphonique et accès anticipé</span>
-                          </div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 hover:from-blue-100 hover:via-indigo-100 hover:to-purple-100 dark:hover:from-blue-900/30 dark:hover:via-indigo-900/30 dark:hover:to-purple-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <TrendingUp className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Parcours personnalisés avec managers
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.2 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 hover:from-blue-100 hover:via-indigo-100 hover:to-purple-100 dark:hover:from-blue-900/30 dark:hover:via-indigo-900/30 dark:hover:to-purple-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <Users className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Sessions 1-on-1 et correction prioritaire
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.3 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 hover:from-blue-100 hover:via-indigo-100 hover:to-purple-100 dark:hover:from-blue-900/30 dark:hover:via-indigo-900/30 dark:hover:to-purple-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <BarChart3 className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Rapports détaillés et garantie de réussite
+                            </span>
+                          </motion.div>
+                          <motion.div
+                            initial={{ opacity: 0, x: 10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.4 }}
+                            className="flex items-start gap-4 p-4 rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 hover:from-blue-100 hover:via-indigo-100 hover:to-purple-100 dark:hover:from-blue-900/30 dark:hover:via-indigo-900/30 dark:hover:to-purple-900/30 transition-all group"
+                          >
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                              <Users className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300 text-base leading-relaxed flex-1 pt-1">
+                              Support téléphonique et accès anticipé
+                            </span>
+                          </motion.div>
                         </>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Action Section */}
-                <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-            <div className="text-center">
-                    <p className="text-gray-600 dark:text-gray-400 mb-6 text-lg">
-                {t(
+                {/* Action Section - Modern Design */}
+                <div className="pt-10 border-t-2 border-gray-100 dark:border-gray-800">
+                  <div className="text-center space-y-6">
+                    <p className="text-gray-600 dark:text-gray-400 text-lg leading-relaxed max-w-2xl mx-auto">
+                      {t(
                         "Prêt à commencer votre évaluation ? Cliquez sur Continuer pour accéder à vos tests.",
                         "Ready to start your assessment? Click Continue to access your tests."
-                )}
-              </p>
+                      )}
+                    </p>
 
-              {/* Main Continue Button */}
-              <div className="space-y-4">
-                <Button
-                  onClick={handleContinue}
-                  disabled={loading}
+                    <div className="flex flex-col items-center gap-5">
+                      <Button
+                        onClick={handleContinue}
+                        disabled={loading}
                         size="lg"
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-12 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                >
-                  {loading ? (
-                    <>
-                            <Clock className="w-5 h-5 mr-2 animate-spin" />
-                      {t("Chargement...", "Loading...")}
-                    </>
-                  ) : (
+                        className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 hover:from-blue-700 hover:via-blue-800 hover:to-indigo-800 text-white px-16 py-7 text-lg font-bold shadow-2xl hover:shadow-3xl transition-all transform hover:scale-105 rounded-2xl"
+                      >
+                        {loading ? (
                           <>
-                            <Target className="w-5 h-5 mr-2" />
+                            <Clock className="w-6 h-6 mr-3 animate-spin" />
+                            {t("Chargement...", "Loading...")}
+                          </>
+                        ) : (
+                          <>
+                            <Target className="w-6 h-6 mr-3" />
                             {t("Continuer l'évaluation", "Continue Assessment")}
                           </>
-                  )}
-                </Button>
-
-                {/* Voice and Immigration Simulation Buttons for PREMIUM and PRO */}
-                {(selectedTest === 'premium' || selectedTest === 'pro') && (
-                  <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
-                    {/* Voice Simulation Button */}
-                    <Button
-                      onClick={() => router.push('/simulation-vocale')}
-                      variant="outline"
-                      size="lg"
-                      className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 px-8 py-3"
-                    >
-                      <Globe className="w-5 h-5 mr-2" />
-                      {t("Simulation Vocale", "Voice Simulation")}
-                    </Button>
-
-                    {/* Immigration Simulation Button (PRO only) */}
-                    {selectedTest === 'pro' && (
-                      <Button
-                        onClick={() => router.push('/immigration-simulations')}
-                        variant="outline"
-                        size="lg"
-                        className="border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 px-8 py-3"
-                      >
-                        <Award className="w-5 h-5 mr-2" />
-                        {t("Simulation Immigration", "Immigration Simulation")}
+                        )}
                       </Button>
-                    )}
-                  </div>
-                )}
-              </div>
+
+                      {/* Additional Actions - Modern Button Design */}
+                      {(selectedTest === 'premium' || selectedTest === 'pro') && (
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center w-full max-w-md">
+                          <Button
+                            onClick={() => router.push('/simulation-vocale')}
+                            variant="outline"
+                            size="lg"
+                            className="border-2 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-400 dark:hover:border-blue-600 rounded-xl px-8 py-6 transition-all group"
+                          >
+                            <Mic className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+                            {t("Simulation Vocale", "Voice Simulation")}
+                          </Button>
+                          {selectedTest === 'pro' && (
+                            <Button
+                              onClick={() => router.push('/immigration-simulations')}
+                              variant="outline"
+                              size="lg"
+                              className="border-2 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-400 dark:hover:border-blue-600 rounded-xl px-8 py-6 transition-all group"
+                            >
+                              <Globe className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+                              {t("Simulation Immigration", "Immigration Simulation")}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         )}
+          </div>
       </div>
     </div>
   )
 }
 
-// Test Card Component (inspired by abonnement page)
+// Modern Test Card Component
 interface TestCardProps {
   title: string
   description: string
-  icon: React.ReactNode
+  icon: React.ComponentType<{ className?: string }>
   level: string
   features: string[]
   popular: boolean
@@ -630,12 +897,14 @@ interface TestCardProps {
   onHover: () => void
   onLeave: () => void
   tier: string
+  hasVoiceSimulation?: boolean
+  hasImmigrationSimulation?: boolean
 }
 
 function TestCard({
   title,
   description,
-  icon,
+  icon: IconComponent,
   level,
   features,
   popular,
@@ -644,102 +913,150 @@ function TestCard({
   onSelect,
   onHover,
   onLeave,
-  tier
+  tier,
+  hasVoiceSimulation,
+  hasImmigrationSimulation
 }: TestCardProps) {
   const { t } = useLanguage()
 
-  // Get subscription tier badge text
-  const getTierBadge = (tier: string) => {
-    const tierMap = {
-      "essentiel": { fr: "Essentiel", en: "Essential", color: "bg-blue-100 text-blue-800" },
-      "premium": { fr: "Premium", en: "Premium", color: "bg-purple-100 text-purple-800" },
-      "pro": { fr: "Pro+", en: "Pro+", color: "bg-green-100 text-green-800" }
-    }
-    return tierMap[tier as keyof typeof tierMap] || tierMap.essentiel
-  }
-
-  const tierBadge = getTierBadge(tier)
-
   return (
+    <motion.div
+      whileHover={{ y: -4 }}
+      transition={{ duration: 0.2 }}
+    >
     <Card
-      className={`relative cursor-pointer transition-all duration-500 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border-2 hover:shadow-2xl group aspect-square ${
-        popular ? "ring-2 ring-[#2ECC71] shadow-lg border-[#2ECC71]" : "border-gray-200 dark:border-gray-700"
-      } ${selected ? "ring-2 ring-[#007BFF] shadow-xl scale-105 border-blue-300" : ""} ${hovered ? "shadow-xl scale-102" : ""}`}
+        className={`relative cursor-pointer transition-all duration-300 h-full flex flex-col ${
+          selected
+            ? "border-2 border-blue-500 shadow-xl ring-4 ring-blue-500/20 bg-blue-50/50 dark:bg-blue-950/20"
+            : "border border-gray-200 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg"
+        } ${popular && !selected ? "border-green-300 dark:border-green-700" : ""}`}
       onClick={onSelect}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
     >
+        {/* Popular Badge */}
       {popular && (
         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-10">
-          <Badge className="bg-gradient-to-r from-[#2ECC71] to-green-500 text-white font-bold px-4 py-2 shadow-lg">
-            <Star className="w-4 h-4 mr-1" />
+            <Badge className="bg-green-500 text-white font-semibold px-3 py-1 shadow-lg border-0">
+              <Sparkles className="w-3 h-3 mr-1.5" />
             {t("Plus populaire", "Most popular")}
           </Badge>
         </div>
       )}
 
-      <CardHeader className="space-y-4 p-6 pb-4">
-        <div className="flex items-center justify-between">
-          <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl transition-all duration-300 ${
-            selected ? "bg-blue-100 dark:bg-blue-900" : "bg-gray-100 dark:bg-gray-700"
-          }`}>
-          {icon}
-          </div>
+        {/* Selected Indicator */}
           {selected && (
-            <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-4 h-4 text-white" />
+          <div className="absolute top-4 right-4 z-10">
+            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+              <CheckCircle className="w-5 h-5 text-white" />
+            </div>
             </div>
           )}
+
+        <CardHeader className="p-6 pb-4">
+          {/* Icon */}
+          <div
+            className={`inline-flex h-14 w-14 items-center justify-center rounded-2xl mb-4 transition-colors ${
+              selected
+                ? "bg-blue-500 text-white shadow-lg"
+                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+            }`}
+          >
+            <IconComponent className="w-7 h-7" />
         </div>
         
+          {/* Title & Description */}
         <div>
-          <CardTitle className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1">{title}</CardTitle>
-          <CardDescription className="text-sm text-gray-600 dark:text-gray-400">{description}</CardDescription>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4 p-6 pt-0">
-        {/* Subscription Tier Badge */}
-        <div className="flex items-center justify-center">
-          <Badge className={`${tierBadge.color} font-semibold px-4 py-2 text-sm rounded-full shadow-sm`}>
-            {tierBadge.fr}
-          </Badge>
+            <CardTitle className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+              {title}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-600 dark:text-gray-400">
+              {description}
+            </CardDescription>
         </div>
 
         {/* Level Badge */}
-        <div className="flex justify-center">
-          <Badge variant="outline" className="text-sm px-4 py-2 font-semibold border-2 rounded-full">
-            Niveau {level}
+          <div className="mt-4">
+            <Badge
+              variant="outline"
+              className={`text-xs font-semibold ${
+                selected
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                  : "border-gray-300 dark:border-gray-700"
+              }`}
+            >
+              {t("Niveau", "Level")} {level}
           </Badge>
         </div>
+        </CardHeader>
 
+        <CardContent className="p-6 pt-0 flex-1 flex flex-col">
         {/* Features List */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">
-            Inclus dans ce plan
+          <div className="flex-1">
+            <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+              {t("Inclus", "Included")}
           </h4>
-          <ul className="space-y-2">
+            <ul className="space-y-2.5">
             {features.map((feature, index) => (
-              <li key={index} className="flex items-center gap-2 group-hover:translate-x-1 transition-transform duration-300">
-                <div className="w-4 h-4 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
-                </div>
-                <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">{feature}</span>
+                <li key={index} className="flex items-start gap-2.5">
+                  <CheckCircle
+                    className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                      selected
+                        ? "text-blue-500"
+                        : "text-green-500 dark:text-green-400"
+                    }`}
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                    {feature}
+                  </span>
             </li>
           ))}
         </ul>
         </div>
 
-        {/* Selection Indicator */}
-        {selected && (
-          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-            <div className="flex items-center justify-center space-x-2 text-blue-700 dark:text-blue-300">
-              <Target className="w-4 h-4" />
-              <span className="text-sm font-semibold">Sélectionné</span>
+          {/* Special Features */}
+          {(hasVoiceSimulation || hasImmigrationSimulation) && (
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
+              {hasVoiceSimulation && (
+                <Badge variant="secondary" className="text-xs">
+                  <Mic className="w-3 h-3 mr-1" />
+                  {t("Vocal", "Voice")}
+                </Badge>
+              )}
+              {hasImmigrationSimulation && (
+                <Badge variant="secondary" className="text-xs">
+                  <Globe className="w-3 h-3 mr-1" />
+                  {t("Immigration", "Immigration")}
+                </Badge>
+              )}
             </div>
+          )}
+
+          {/* Selection Button */}
+          <div className="mt-6">
+            <Button
+              className={`w-full ${
+                selected
+                  ? "bg-blue-500 hover:bg-blue-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
+              }`}
+              onClick={onSelect}
+            >
+              {selected ? (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  {t("Sélectionné", "Selected")}
+                </>
+              ) : (
+                <>
+                  {t("Choisir", "Select")}
+                  <Target className="w-4 h-4 ml-2" />
+                </>
+              )}
+            </Button>
           </div>
-        )}
       </CardContent>
     </Card>
+    </motion.div>
   )
 }

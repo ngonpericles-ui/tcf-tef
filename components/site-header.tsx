@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Bell, Flame, Moon, Search, Sun, UserRound, AlignJustify, Globe, BookOpen, Target, Video, Wifi, Heart, Trophy, Download, CreditCard, User, Store } from "lucide-react"
+import { Bell, Home, Moon, Search, Sun, UserRound, AlignJustify, Globe, BookOpen, Target, Video, Wifi, Heart, Trophy, Download, CreditCard, User, Store, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +12,7 @@ import { useLang } from "./language-provider"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useSession } from "@/components/use-session"
 import NotificationIndicator from "@/components/notification-indicator"
+import { useMessagingRoute } from "@/hooks/useMessagingRoute"
 
 const SiteHeader = React.memo(function SiteHeader() {
   const { theme, setTheme } = useTheme()
@@ -21,6 +22,7 @@ const SiteHeader = React.memo(function SiteHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { isAuthenticated, logout } = useSession()
+  const { getMessagingRoute } = useMessagingRoute()
 
   // Prevent hydration mismatch for theme
   useEffect(() => {
@@ -58,20 +60,15 @@ const SiteHeader = React.memo(function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-200/50 dark:border-gray-800/30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-transform duration-200">
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Brand - Moved 1 inch to the left */}
-        <div
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer flex-shrink-0 -ml-16"
+        {/* Brand - Home Button */}
+        <Link
+          href="/home"
+          className="flex items-center gap-2 hover:opacity-80 transition-opacity flex-shrink-0 -ml-16"
           aria-label="Home"
-          onClick={() => {
-            // Only navigate if not already on home or root
-            if (pathname !== "/home" && pathname !== "/") {
-              router.push("/home")
-            }
-          }}
         >
-          <Flame className="h-6 w-6 text-[#2ECC71]" aria-hidden="true" />
-          <span className="font-[var(--font-poppins)] font-semibold tracking-tight text-lg">TCF•TEF</span>
-        </div>
+          <Home className="h-6 w-6 text-[#2ECC71]" aria-hidden="true" />
+          <span className="font-[var(--font-poppins)] font-semibold tracking-tight text-lg">Accueil</span>
+        </Link>
 
         {/* Desktop nav - Centered */}
         <nav aria-label="Primary" className="hidden md:flex items-center gap-2 text-sm flex-1 justify-center max-w-4xl">
@@ -140,7 +137,7 @@ const SiteHeader = React.memo(function SiteHeader() {
           </Link>
         </nav>
 
-        {/* Right controls - Better spacing */}
+        {/* Right controls - Restored original order */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {/* Mobile menu */}
           <div className="md:hidden">
@@ -227,13 +224,21 @@ const SiteHeader = React.memo(function SiteHeader() {
           {isAuthenticated && (
             <div className="flex items-center gap-2">
               <NotificationIndicator type="notifications" />
-              <NotificationIndicator type="messages" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push(getMessagingRoute())}
+                className="relative h-9 w-9 p-0"
+              >
+                <MessageCircle className="h-5 w-5" />
+                {/* Unread count badge can be added here if needed */}
+              </Button>
             </div>
           )}
 
           {/* Auth buttons / Logout */}
           {isAuthenticated ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center">
               <Button
                 className="h-9 bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black font-medium"
                 onClick={async () => {
@@ -271,6 +276,7 @@ const SiteHeader = React.memo(function SiteHeader() {
           )}
         </div>
       </div>
+
     </header>
   )
 })

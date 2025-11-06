@@ -4,8 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiChatService = void 0;
-const prisma_1 = require("../lib/prisma");
-const logger_1 = require("../utils/logger");
+const prisma_1 = require("@/lib/prisma");
+const logger_1 = require("@/utils/logger");
 const aiService_1 = require("./aiService");
 const questionBankService_1 = __importDefault(require("./questionBankService"));
 class AiChatService {
@@ -26,7 +26,7 @@ class AiChatService {
             await prisma_1.prisma.chatMessage.create({
                 data: {
                     sessionId: session.id,
-                    role: 'user',
+                    role: 'USER',
                     content: message,
                     metadata: { context }
                 }
@@ -36,7 +36,7 @@ class AiChatService {
             await prisma_1.prisma.chatMessage.create({
                 data: {
                     sessionId: session.id,
-                    role: 'assistant',
+                    role: 'ASSISTANT',
                     content: aiResponse.message,
                     sources: aiResponse.sources,
                     confidence: aiResponse.confidence,

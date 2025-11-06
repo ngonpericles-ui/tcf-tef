@@ -24,8 +24,8 @@ export declare class LikeService {
             id: string;
             createdAt: Date;
             userId: string;
-            contentId: string;
-            contentType: import(".prisma/client").$Enums.LikeType;
+            postId: string | null;
+            commentId: string | null;
         })[];
         pagination: {
             page: number;
@@ -42,12 +42,17 @@ export declare class LikeService {
                 lastName: string;
                 profileImage: string;
             };
+            post: {
+                id: string;
+                title: string;
+                excerpt: string;
+            };
         } & {
             id: string;
             createdAt: Date;
             userId: string;
-            contentId: string;
-            contentType: import(".prisma/client").$Enums.LikeType;
+            postId: string | null;
+            commentId: string | null;
         })[];
         pagination: {
             page: number;

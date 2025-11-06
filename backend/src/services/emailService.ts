@@ -57,6 +57,8 @@ export interface VoiceSimulationBookingEmailData {
   scheduledDate: Date;
   voicePreference: string;
   duration: string;
+  simulationId?: string;
+  accessUrl?: string;
 }
 
 export interface VoiceSimulationReminderEmailData {
@@ -111,18 +113,108 @@ export interface ImmigrationSimulationResultsEmailData {
   simulationId: string;
 }
 
+export interface OneOnOneSessionEmailData {
+  firstName: string;
+  email: string;
+  sessionTitle: string;
+  instructorName: string;
+  sessionDate: string;
+  sessionTime: string;
+  secureLink: string;
+  duration: number;
+}
+
 export class EmailService {
   private static transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
+    host: process.env.SMTP_HOST || process.env.TWILIO_SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || process.env.TWILIO_SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true' || process.env.TWILIO_SMTP_SECURE === 'true',
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
+      user: process.env.SMTP_USER || process.env.TWILIO_SMTP_USER,
+      pass: process.env.SMTP_PASS || process.env.TWILIO_SMTP_PASS
+    },
+    // Configuration Twilio SendGrid si disponible
+    ...(process.env.TWILIO_SMTP_HOST && {
+      pool: true,
+      maxConnections: 1,
+      rateDelta: 1000,
+      rateLimit: 14
+    })
   });
 
-  private static fromAddress = `${process.env.EMAIL_FROM_NAME || 'TCF/TEF Learning Platform'} <${process.env.SMTP_USER}>`;
+  private static fromAddress = `${process.env.EMAIL_FROM_NAME || 'TCF/TEF Learning Platform'} <${process.env.SMTP_USER || process.env.TWILIO_SMTP_USER || process.env.EMAIL_FROM_ADDRESS || 'noreply@tcftef.com'}>`;
+
+  /**
+   * Get logo URL for emails
+   */
+  private static getLogoUrl(): string {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return `${frontendUrl}/logo/AURA.CA.png`;
+  }
+
+  /**
+   * Wrap email HTML content with logo and modern styling
+   */
+  private static wrapEmailWithLogo(htmlContent: string, headerColor: string = '#667eea', headerGradient: string = '#764ba2'): string {
+    const logoUrl = this.getLogoUrl();
+    
+    // Extract body content from existing HTML (remove DOCTYPE, html, head, body tags if present)
+    let bodyContent = htmlContent;
+    const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    if (bodyMatch) {
+      bodyContent = bodyMatch[1];
+    }
+    
+    // Extract existing styles
+    const styleMatch = htmlContent.match(/<style[^>]*>([\s\S]*)<\/style>/i);
+    const existingStyles = styleMatch ? styleMatch[1] : '';
+    
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+                line-height: 1.6; 
+                color: #333; 
+                background-color: #f5f7fa;
+                margin: 0;
+                padding: 20px 0;
+            }
+            .email-wrapper { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: white;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .logo-container {
+                text-align: center;
+                padding: 25px 20px;
+                background: linear-gradient(135deg, ${headerColor} 0%, ${headerGradient} 100%);
+            }
+            .logo-container img {
+                max-width: 200px;
+                height: auto;
+                display: block;
+                margin: 0 auto;
+            }
+            ${existingStyles}
+        </style>
+    </head>
+    <body>
+        <div class="email-wrapper">
+            <div class="logo-container">
+                <img src="${logoUrl}" alt="AURA.CA Logo" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
+            </div>
+            ${bodyContent}
+        </div>
+    </body>
+    </html>`;
+  }
 
   /**
    * Send a generic email
@@ -237,7 +329,7 @@ export class EmailService {
     return this.sendEmail({
       to: data.email,
       subject,
-      html
+      html: this.wrapEmailWithLogo(html, '#667eea', '#764ba2')
     });
   }
 
@@ -306,7 +398,7 @@ export class EmailService {
     return this.sendEmail({
       to: data.email,
       subject,
-      html
+      html: this.wrapEmailWithLogo(html, '#4CAF50', '#45a049')
     });
   }
 
@@ -379,7 +471,7 @@ export class EmailService {
     return this.sendEmail({
       to: data.email,
       subject,
-      html
+      html: this.wrapEmailWithLogo(html, '#FF6B6B', '#ee5a52')
     });
   }
 
@@ -464,7 +556,7 @@ export class EmailService {
     return this.sendEmail({
       to: data.email,
       subject,
-      html
+      html: this.wrapEmailWithLogo(html, '#667eea', '#764ba2')
     });
   }
 
@@ -485,8 +577,19 @@ export class EmailService {
   /**
    * Send voice simulation booking confirmation email
    */
-  static async sendVoiceSimulationBookingEmail(data: VoiceSimulationBookingEmailData): Promise<boolean> {
+  static async sendVoiceSimulationBookingEmail(data: VoiceSimulationBookingEmailData & { accessUrl?: string; simulationId?: string }): Promise<boolean> {
     const subject = 'Confirmation de votre simulation vocale TCF/TEF';
+    
+    // Formatage de la date
+    const scheduledDate = new Date(data.scheduledDate);
+    const dateStr = scheduledDate.toLocaleDateString('fr-FR', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
     const html = `
     <!DOCTYPE html>
@@ -499,7 +602,9 @@ export class EmailService {
             .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
             .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
             .highlight { background: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+            .button { display: inline-block; background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; }
+            .access-section { background: #e8f5e8; border: 2px solid #4caf50; padding: 20px; border-radius: 5px; margin: 20px 0; text-align: center; }
+            .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; color: #856404; }
         </style>
     </head>
     <body>
@@ -514,10 +619,26 @@ export class EmailService {
 
                 <div class="highlight">
                     <h3>📅 Détails de votre simulation :</h3>
-                    <p><strong>Date et heure :</strong> ${new Date(data.scheduledDate).toLocaleString('fr-FR')}</p>
+                    <p><strong>Date et heure :</strong> ${dateStr}</p>
                     <p><strong>Durée :</strong> ${data.duration}</p>
-                    <p><strong>Voix préférée :</strong> ${data.voicePreference === 'MALE' ? 'Masculine' : 'Féminine'}</p>
+                    <p><strong>Voix préférée :</strong> ${data.voicePreference === 'MALE' || data.voicePreference?.includes('Masculine') ? 'Masculine' : 'Féminine'}</p>
                 </div>
+
+                ${data.accessUrl ? `
+                <div class="access-section">
+                    <h3>🚀 Accès à votre simulation</h3>
+                    <p>Cliquez sur le bouton ci-dessous pour accéder à votre simulation :</p>
+                    <a href="${data.accessUrl}" class="button" style="background: #4caf50;">🎯 Accéder à la simulation</a>
+                    <div class="warning" style="margin-top: 15px;">
+                        <p><strong>⚠️ Important :</strong></p>
+                        <ul style="text-align: left; margin: 10px 0;">
+                            <li>Ce lien sera accessible 5 minutes avant le début de votre simulation</li>
+                            <li>Le lien expire après la fin de la simulation</li>
+                            <li>Ce lien est personnel et sécurisé - ne le partagez pas</li>
+                        </ul>
+                    </div>
+                </div>
+                ` : ''}
 
                 <h3>📋 Ce qui vous attend :</h3>
                 <ul>
@@ -532,6 +653,7 @@ export class EmailService {
                     <li>Testez votre microphone et connexion internet</li>
                     <li>Trouvez un endroit calme</li>
                     <li>Préparez-vous mentalement en français</li>
+                    <li>Assurez-vous que votre caméra fonctionne</li>
                     <li>Arrivez 5 minutes avant l'heure</li>
                 </ul>
 
@@ -545,11 +667,28 @@ export class EmailService {
     </body>
     </html>`;
 
-    return this.sendEmail({
-      to: data.email,
-      subject,
-      html
-    });
+    try {
+      console.log('📧 EmailService: Sending voice simulation booking email to:', data.email);
+      const result = await this.sendEmail({
+        to: data.email,
+        subject,
+        html: this.wrapEmailWithLogo(html, '#667eea', '#764ba2')
+      });
+      
+      if (result) {
+        console.log('✅ EmailService: Voice simulation booking email sent successfully to:', data.email);
+      } else {
+        console.error('❌ EmailService: Failed to send voice simulation booking email to:', data.email);
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ EmailService: Error sending voice simulation booking email:', {
+        error: error?.message,
+        email: data.email
+      });
+      return false;
+    }
   }
 
   /**
@@ -625,7 +764,7 @@ export class EmailService {
       return this.sendEmail({
         to: data.email,
         subject,
-        html
+        html: this.wrapEmailWithLogo(html, '#ff6b6b', '#ee5a24')
       });
     } catch (error) {
       console.error('Error sending voice simulation reminder email:', error);
@@ -741,7 +880,7 @@ export class EmailService {
     return this.sendEmail({
       to: data.email,
       subject,
-      html
+      html: this.wrapEmailWithLogo(html, '#27ae60', '#2ecc71')
     });
   }
 
@@ -838,7 +977,7 @@ export class EmailService {
       return this.sendEmail({
         to: data.email,
         subject,
-        html
+        html: this.wrapEmailWithLogo(html, '#2c3e50', '#3498db')
       });
     } catch (error) {
       console.error('Error sending immigration simulation confirmation email:', error);
@@ -940,7 +1079,7 @@ export class EmailService {
       return this.sendEmail({
         to: data.email,
         subject,
-        html
+        html: this.wrapEmailWithLogo(html, '#e74c3c', '#c0392b')
       });
     } catch (error) {
       console.error('Error sending immigration simulation reminder email:', error);
@@ -1035,6 +1174,76 @@ export class EmailService {
       console.error('Error sending immigration simulation results email:', error);
       return false;
     }
+  }
+
+  /**
+   * Send one-on-one session invitation email
+   */
+  static async sendOneOnOneSessionEmail(data: OneOnOneSessionEmailData): Promise<boolean> {
+    const subject = `🎥 Invitation à une session privée: ${data.sessionTitle}`;
+    
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Invitation à une session privée</title>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+            .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; margin: -20px -20px 20px -20px; }
+            .content { padding: 20px 0; }
+            .cta-button { display: inline-block; background: #4CAF50; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+            .session-details { background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; }
+            .footer { text-align: center; color: #666; font-size: 14px; margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🎥 Session Privée TCF/TEF</h1>
+                <p>Votre instructeur vous a invité à une session individuelle</p>
+            </div>
+            
+            <div class="content">
+                <h2>Bonjour ${data.firstName} !</h2>
+                
+                <p><strong>${data.instructorName}</strong> vous a invité à une session privée de préparation TCF/TEF.</p>
+                
+                <div class="session-details">
+                    <h3>📋 Détails de la session</h3>
+                    <p><strong>Titre:</strong> ${data.sessionTitle}</p>
+                    <p><strong>Instructeur:</strong> ${data.instructorName}</p>
+                    <p><strong>Date:</strong> ${data.sessionDate}</p>
+                    <p><strong>Heure:</strong> ${data.sessionTime}</p>
+                    <p><strong>Durée:</strong> ${data.duration} minutes</p>
+                </div>
+                
+                <p>Cette session est privée et personnalisée pour vous. Cliquez sur le bouton ci-dessous pour rejoindre la session :</p>
+                
+                <div style="text-align: center;">
+                    <a href="${data.secureLink}" class="cta-button">🎥 Rejoindre la Session</a>
+                </div>
+                
+                <p><strong>Note importante:</strong> Ce lien est personnel et sécurisé. Ne le partagez pas avec d'autres personnes.</p>
+                
+                <p>Si vous avez des questions, n'hésitez pas à contacter votre instructeur via la messagerie de la plateforme.</p>
+            </div>
+            
+            <div class="footer">
+                <p>TCF/TEF Learning Platform</p>
+                <p>Préparez-vous efficacement pour vos examens TCF/TEF</p>
+            </div>
+        </div>
+    </body>
+    </html>`;
+
+    return this.sendEmail({
+      to: data.email,
+      subject,
+      html: this.wrapEmailWithLogo(html, '#667eea', '#764ba2')
+    });
   }
 }
 

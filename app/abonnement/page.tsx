@@ -46,15 +46,56 @@ export default function SubscriptionPage() {
         if (plansResponse.success && plansResponse.data) {
           const plansData = (plansResponse.data as any).plans || plansResponse.data
           const plansArray = Array.isArray(plansData) ? plansData : []
-          console.log('📡 Subscription plans loaded:', plansArray)
-          setPlans(plansArray)
+          
+          // Filter out FREE plan and map backend data to frontend format
+          const mappedPlans = plansArray
+            .filter((plan: any) => plan.tier !== 'FREE' && plan.id !== 'free')
+            .map((plan: any) => {
+              // Get default maxSimulations if not set
+              const getDefaultMaxSims = (tier: string): number => {
+                switch (tier) {
+                  case 'ESSENTIAL': return 25;
+                  case 'PREMIUM': return 40;
+                  case 'PRO': return 60;
+                  default: return 25;
+                }
+              };
+              const maxSims = plan.maxSimulations !== null && plan.maxSimulations !== undefined
+                ? plan.maxSimulations
+                : getDefaultMaxSims(plan.tier);
+              
+              return {
+              id: plan.id || plan.tier?.toLowerCase() || 'essential',
+              title: plan.name || plan.nameEn || plan.id || 'Plan',
+              description: lang === 'fr' ? (plan.description || '') : (plan.descriptionEn || plan.description || ''),
+              monthlyPrice: plan.price || 0,
+              features: plan.features || [],
+                maxSimulations: maxSims,
+              icon: plan.id === 'essential' || plan.tier === 'ESSENTIAL' ? <Shield className="h-6 w-6" /> :
+                    plan.id === 'premium' || plan.tier === 'PREMIUM' ? <Crown className="h-6 w-6" /> :
+                    plan.id === 'pro' || plan.tier === 'PRO' ? <Sparkles className="h-6 w-6" /> :
+                    <Shield className="h-6 w-6" />,
+              popular: plan.isPopular || false
+              };
+            })
+          
+          console.log('📡 Subscription plans loaded:', mappedPlans)
+          setPlans(mappedPlans)
         }
 
         // Load current user subscription
-        const subscriptionResponse = await apiClient.get('/users/subscription')
-        if (subscriptionResponse.success && subscriptionResponse.data) {
-          setCurrentSubscription(subscriptionResponse.data)
+        try {
+          const subscriptionResponse = await apiClient.get('/subscriptions/active')
+          if (subscriptionResponse.success && subscriptionResponse.data) {
+            setCurrentSubscription(subscriptionResponse.data)
+          }
+        } catch (subError) {
+          // Handle case where user has no subscription - not an error
+          console.log('No active subscription found')
+          setCurrentSubscription(null)
         }
+
+        // Simulation usage removed from abonnement page as requested
 
       } catch (error) {
         console.error('Error loading subscription data:', error)
@@ -166,8 +207,10 @@ export default function SubscriptionPage() {
       title: t("Essentiel", "Essential"),
       description: t("Base pour démarrer", "Basics to get started"),
       monthlyPrice: 4500,
+      maxSimulations: 25,
       features: [
         t("Cours fondamentaux (A1–B1)", "Core courses (A1–B1)"),
+        t("25 simulations par mois", "25 simulations per month"),
         t("5 tests blancs par mois", "5 mock exams per month"),
         t("2 sessions live par mois", "2 live sessions per month"),
         t("Aperçu du fil social", "Social feed preview"),
@@ -181,8 +224,10 @@ export default function SubscriptionPage() {
       title: "Premium",
       description: t("Tout inclus pour réussir", "All‑inclusive for success"),
       monthlyPrice: 9500,
+      maxSimulations: 40,
       features: [
         t("Cours complets (A1–C2)", "Full courses (A1–C2)"),
+        t("40 simulations par mois", "40 simulations per month"),
         t("Tests blancs illimités", "Unlimited mock exams"),
         t("Sessions live illimitées", "Unlimited live sessions"),
         t("Coach IA et feedback détaillé", "AI coach and detailed feedback"),
@@ -198,8 +243,10 @@ export default function SubscriptionPage() {
       title: t("Pro+", "Pro+"),
       description: t("Pour objectifs intensifs", "For intensive goals"),
       monthlyPrice: 14500,
+      maxSimulations: 60,
       features: [
         t("Parcours personnalisés", "Personalized paths"),
+        t("60 simulations par mois", "60 simulations per month"),
         t("Sessions 1-on-1 avec managers", "1-on-1 sessions with managers"),
         t("Correction prioritaire", "Priority grading"),
         t("Rapports détaillés", "Detailed reports"),
@@ -280,6 +327,7 @@ export default function SubscriptionPage() {
           </p>
         </header>
 
+
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-700 px-2 py-1">
           <button
             onClick={() => setPeriod("monthly")}
@@ -317,22 +365,23 @@ export default function SubscriptionPage() {
           {(plans.length > 0 ? plans : staticPlans).map((plan) => {
             const isSelected = selectedPlan === plan.id
             const isHovered = hoveredPlan === plan.id
-            const price = getPrice(plan.monthlyPrice)
+            const monthlyPrice = plan.monthlyPrice || 0
+            const price = getPrice(monthlyPrice)
 
             return (
               <PlanCard
                 key={plan.id}
                 icon={plan.icon}
-                title={plan.title}
-                description={plan.description}
+                title={plan.title || plan.name || 'Plan'}
+                description={plan.description || ''}
                 price={price}
                 period={period}
-                features={plan.features}
-                highlight={plan.popular}
+                features={plan.features || []}
+                highlight={plan.popular || false}
                 selected={isSelected}
                 hovered={isHovered}
-                onSelect={() => setSelectedPlan(plan.id)}
-                onHover={() => setHoveredPlan(plan.id)}
+                onSelect={() => setSelectedPlan(plan.id as PlanType)}
+                onHover={() => setHoveredPlan(plan.id as PlanType)}
                 onLeave={() => setHoveredPlan(null)}
                 trial
                 cta={t("Sélectionner", "Select Plan")}
@@ -414,6 +463,20 @@ export default function SubscriptionPage() {
                   <td className="border border-gray-200 dark:border-gray-700 p-4 text-center">{t("Limité B1", "B1 limited")}</td>
                   <td className="border border-gray-200 dark:border-gray-700 p-4 text-center">{t("Illimité", "Unlimited")}</td>
                   <td className="border border-gray-200 dark:border-gray-700 p-4 text-center">{t("Illimité", "Unlimited")}</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-200 dark:border-gray-700 p-4 text-foreground">
+                    {t("Simulations (tests, vocales, immigration)", "Simulations (tests, voice, immigration)")}
+                  </td>
+                  <td className="border border-gray-200 dark:border-gray-700 p-4 text-center">
+                    {(plans.length > 0 ? plans.find(p => p.id === 'essential')?.maxSimulations : staticPlans.find(p => p.id === 'essential')?.maxSimulations) || 25}
+                  </td>
+                  <td className="border border-gray-200 dark:border-gray-700 p-4 text-center">
+                    {(plans.length > 0 ? plans.find(p => p.id === 'premium')?.maxSimulations : staticPlans.find(p => p.id === 'premium')?.maxSimulations) || 40}
+                  </td>
+                  <td className="border border-gray-200 dark:border-gray-700 p-4 text-center">
+                    {(plans.length > 0 ? plans.find(p => p.id === 'pro+')?.maxSimulations : staticPlans.find(p => p.id === 'pro+')?.maxSimulations) || 60}
+                  </td>
                 </tr>
                 <tr>
                   <td className="border border-gray-200 dark:border-gray-700 p-4 text-foreground">{t("Sessions live", "Live sessions")}</td>

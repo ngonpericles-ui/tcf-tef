@@ -52,19 +52,17 @@ export default function SmartDashboard() {
   const fetchDashboardData = async () => {
     try {
       const [dashboardResponse, achievementsResponse] = await Promise.all([
-        apiClient.get('/home/dashboard'),
-        apiClient.get('/achievements/recent')
+        apiClient.get('/home/dashboard').catch(() => ({ success: false, data: null })),
+        apiClient.get('/achievements/recent').catch(() => ({ success: false, data: [] })) // Catch ALL errors
       ])
       
-      if (dashboardResponse.success) {
+      if (dashboardResponse.success && dashboardResponse.data) {
         setDashboardData(dashboardResponse.data)
       }
       
-      // Store achievements data for display
-      if (achievementsResponse.success) {
-        const realAchievements = achievementsResponse.data
-        if (Array.isArray(realAchievements) && realAchievements.length > 0) {
-          setAchievements(realAchievements.map((achievement: any) => ({
+      // Store achievements data for display - ONLY real data, NO MOCK DATA
+      if (achievementsResponse.success && achievementsResponse.data && Array.isArray(achievementsResponse.data) && achievementsResponse.data.length > 0) {
+        setAchievements(achievementsResponse.data.map((achievement: any) => ({
             id: achievement.id,
             title: achievement.title,
             description: achievement.description,
@@ -73,13 +71,13 @@ export default function SmartDashboard() {
             points: achievement.points
           })))
         } else {
-          // Fallback to empty array if no achievements
+        // NO MOCK DATA - empty array if API fails or no data
           setAchievements([])
-        }
-        console.log('Achievements loaded:', realAchievements)
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
+      // NO MOCK DATA on error
+      setAchievements([])
     } finally {
       setLoading(false)
     }

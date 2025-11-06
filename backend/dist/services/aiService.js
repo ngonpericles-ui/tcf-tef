@@ -1,11 +1,8 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIService = void 0;
 const logger_1 = require("../utils/logger");
-const geminiApiManager_1 = __importDefault(require("../utils/geminiApiManager"));
+const geminiApiManager = require('../utils/geminiApiManager');
 class AIService {
     static async generateGreeting(firstName, lastName) {
         try {
@@ -154,7 +151,7 @@ class AIService {
     static async generateResponse(params) {
         try {
             const { message, systemPrompt, context } = params;
-            const response = await geminiApiManager_1.default.makeRequest(async (model) => {
+            const response = await geminiApiManager.makeRequest(async (model) => {
                 const prompt = `${systemPrompt}
 
 Message: ${message}
@@ -179,7 +176,7 @@ Réponds directement et utilement en français.`;
     }
     static async generateContent(prompt) {
         try {
-            return await geminiApiManager_1.default.generateContent(async (model) => {
+            return await geminiApiManager.generateContent(async (model) => {
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
                 return response.text();
@@ -203,7 +200,7 @@ Réponds directement et utilement en français.`;
       Chaque note doit être concise (1-2 phrases) et pédagogique.
       Format de réponse: Liste de notes, une par ligne, sans numérotation.
     `;
-        const response = await geminiApiManager_1.default.generateContent(async (model) => {
+        const response = await geminiApiManager.generateContent(async (model) => {
             const result = await model.generateContent(prompt);
             const response = await result.response;
             return response.text();
@@ -265,7 +262,7 @@ Réponds directement et utilement en français.`;
       Pour les questions ouvertes, fournissez la réponse attendue comme correctAnswer.
     `;
         try {
-            const response = await geminiApiManager_1.default.generateContent(async (model) => {
+            const response = await geminiApiManager.generateContent(async (model) => {
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
                 return response.text();
@@ -428,7 +425,7 @@ Réponds directement et utilement en français.`;
       Si la question n'est pas liée au cours, redirigez poliment vers le contenu du cours.
       Réponse en français.
     `;
-        const response = await geminiApiManager_1.default.generateContent(async (model) => {
+        const response = await geminiApiManager.generateContent(async (model) => {
             const result = await model.generateContent(prompt);
             const response = await result.response;
             return response.text();
@@ -455,7 +452,7 @@ Réponds directement et utilement en français.`;
       Format de réponse: Transcription directe du contenu de la leçon.
     `;
         try {
-            const response = await geminiApiManager_1.default.generateContent(async (model) => {
+            const response = await geminiApiManager.generateContent(async (model) => {
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
                 return response.text();
@@ -486,7 +483,7 @@ Réponds directement et utilement en français.`;
       - Uniques (pas de doublons)
     `;
         try {
-            const response = await geminiApiManager_1.default.generateContent(async (model) => {
+            const response = await geminiApiManager.generateContent(async (model) => {
                 const result = await model.generateContent(prompt);
                 const response = await result.response;
                 return response.text();

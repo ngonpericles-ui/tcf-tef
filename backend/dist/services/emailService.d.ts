@@ -48,6 +48,8 @@ export interface VoiceSimulationBookingEmailData {
     scheduledDate: Date;
     voicePreference: string;
     duration: string;
+    simulationId?: string;
+    accessUrl?: string;
 }
 export interface VoiceSimulationReminderEmailData {
     firstName: string;
@@ -96,21 +98,37 @@ export interface ImmigrationSimulationResultsEmailData {
     completedAt: Date;
     simulationId: string;
 }
+export interface OneOnOneSessionEmailData {
+    firstName: string;
+    email: string;
+    sessionTitle: string;
+    instructorName: string;
+    sessionDate: string;
+    sessionTime: string;
+    secureLink: string;
+    duration: number;
+}
 export declare class EmailService {
     private static transporter;
     private static fromAddress;
+    private static getLogoUrl;
+    private static wrapEmailWithLogo;
     static sendEmail(options: EmailOptions): Promise<boolean>;
     static sendWelcomeEmail(data: WelcomeEmailData): Promise<boolean>;
     static sendCourseEnrollmentEmail(data: CourseEnrollmentEmailData): Promise<boolean>;
     static sendLiveSessionReminderEmail(data: LiveSessionEmailData): Promise<boolean>;
     static sendTestResultsEmail(data: TestResultEmailData): Promise<boolean>;
     static testEmailConfiguration(): Promise<boolean>;
-    static sendVoiceSimulationBookingEmail(data: VoiceSimulationBookingEmailData): Promise<boolean>;
+    static sendVoiceSimulationBookingEmail(data: VoiceSimulationBookingEmailData & {
+        accessUrl?: string;
+        simulationId?: string;
+    }): Promise<boolean>;
     static sendVoiceSimulationReminderEmail(data: VoiceSimulationReminderEmailData): Promise<boolean>;
     static sendVoiceSimulationResultsEmail(data: VoiceSimulationResultsEmailData): Promise<boolean>;
     static sendImmigrationSimulationConfirmationEmail(data: ImmigrationSimulationConfirmationEmailData): Promise<boolean>;
     static sendImmigrationSimulationReminderEmail(data: ImmigrationSimulationReminderEmailData): Promise<boolean>;
     static sendImmigrationSimulationResultsEmail(data: ImmigrationSimulationResultsEmailData): Promise<boolean>;
+    static sendOneOnOneSessionEmail(data: OneOnOneSessionEmailData): Promise<boolean>;
 }
 declare const _default: EmailService;
 export default _default;

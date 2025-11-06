@@ -79,7 +79,7 @@ export function SharedDataProvider({
   const [isOnline, setIsOnline] = useState(true)
 
   // Computed values
-  const unreadNotificationCount = notifications.filter(n => !n.read).length
+  const unreadNotificationCount = Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0
 
   // Refresh user profile
   const refreshUserProfile = useCallback(async () => {
@@ -133,11 +133,20 @@ export function SharedDataProvider({
         setNotifications(response.data)
         setLastUpdated(new Date())
       } else {
-        setError(response.error || 'Failed to load notifications')
+        // Don't set error for network failures - just log
+        if (response.error?.code !== 'ERR_NETWORK' && response.error?.code !== 'ECONNREFUSED') {
+          setError(response.error?.message || 'Failed to load notifications')
+        }
       }
-    } catch (err) {
-      setError('Failed to load notifications')
-      console.error('Error refreshing notifications:', err)
+    } catch (err: any) {
+      // Only log network errors, don't show them as critical errors
+      if (err?.code !== 'ERR_NETWORK' && err?.code !== 'ECONNREFUSED') {
+        setError('Failed to load notifications')
+        console.error('Error refreshing notifications:', err)
+      } else {
+        // Network error - backend might be down, just log silently
+        console.debug('Notifications API unavailable:', err?.message)
+      }
     } finally {
       setNotificationsLoading(false)
     }

@@ -1,24 +1,45 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requirePaidSubscription = exports.requirePremium = exports.requireRole = exports.requireAdmin = exports.requireSeniorManager = exports.requireManager = exports.authorizeResourceOwner = exports.requireSubscriptionTier = exports.authorize = exports.optionalAuthenticate = exports.authenticate = void 0;
-const jwt_1 = require("../utils/jwt");
-const errorHandler_1 = require("../middleware/errorHandler");
+const jwt_1 = require("@/utils/jwt");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 const authenticate = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
+        console.log('🔐 Authenticate middleware called:', {
+            hasAuthHeader: !!authHeader,
+            authHeaderLength: authHeader?.length || 0,
+            authPreview: authHeader?.substring(0, 30) + '...' || 'none',
+            path: req.path,
+            method: req.method
+        });
         if (!authHeader) {
+            console.error('❌ No authorization header found');
             throw new errorHandler_1.AuthenticationError('Authorization header is required');
         }
         const token = authHeader.startsWith('Bearer ')
             ? authHeader.substring(7)
             : authHeader;
-        if (!token) {
+        if (!token || token === 'null' || token === 'undefined') {
+            console.error('❌ Invalid token:', { token: token?.substring(0, 20) + '...' });
             throw new errorHandler_1.AuthenticationError('Token is required');
         }
+        console.log('🔍 Verifying token...', {
+            tokenLength: token.length,
+            tokenPreview: token.substring(0, 30) + '...'
+        });
         const decoded = jwt_1.JWTService.verifyAccessToken(token);
         req.user = decoded;
+        console.log('✅ User authenticated successfully:', {
+            userId: decoded.userId,
+            id: decoded.id,
+            email: decoded.email,
+            role: decoded.role,
+            hasUserId: !!decoded.userId,
+            hasId: !!decoded.id
+        });
         logger_1.logger.debug('User authenticated', {
             userId: decoded.userId,
             email: decoded.email,
@@ -27,6 +48,11 @@ const authenticate = (req, res, next) => {
         next();
     }
     catch (error) {
+        console.error('❌ Authentication failed:', {
+            error: error instanceof Error ? error.message : error,
+            path: req.path,
+            method: req.method
+        });
         let message = 'Authentication required';
         if (error instanceof Error) {
             if (error.message.includes('expired')) {

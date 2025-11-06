@@ -1,4 +1,4 @@
-import { UserProfile, UpdateUserProfileRequest, PaginationParams, FilterParams } from '../types';
+import { UserProfile, UpdateUserProfileRequest, PaginationParams, FilterParams } from '@/types';
 import { UserRole, UserStatus } from '@prisma/client';
 export declare class UserService {
     static calculateUserAchievements(userId: string): Promise<{
@@ -47,7 +47,6 @@ export declare class UserService {
             createdAt: Date;
             updatedAt: Date;
             userId: string;
-            duration: number | null;
             completedAt: Date | null;
             timeSpent: number | null;
             score: number | null;
@@ -55,11 +54,6 @@ export declare class UserService {
             startedAt: Date;
             answers: import("@prisma/client/runtime/library").JsonValue | null;
             feedback: string | null;
-            correctAnswers: number | null;
-            maxScore: number | null;
-            metadata: import("@prisma/client/runtime/library").JsonValue | null;
-            percentage: number | null;
-            timeRemaining: number | null;
         }[];
     }>;
     static calculateCEFRLevel(points: number): {
@@ -154,7 +148,6 @@ export declare class UserService {
             createdAt: Date;
             updatedAt: Date;
             userId: string;
-            duration: number | null;
             completedAt: Date | null;
             timeSpent: number | null;
             score: number | null;
@@ -162,11 +155,6 @@ export declare class UserService {
             startedAt: Date;
             answers: import("@prisma/client/runtime/library").JsonValue | null;
             feedback: string | null;
-            correctAnswers: number | null;
-            maxScore: number | null;
-            metadata: import("@prisma/client/runtime/library").JsonValue | null;
-            percentage: number | null;
-            timeRemaining: number | null;
         })[];
         liveSessionParticipation: ({
             liveSession: {

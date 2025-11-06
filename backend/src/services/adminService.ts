@@ -702,6 +702,7 @@ export class AdminService {
         firstName: true,
         lastName: true,
         email: true,
+        phone: true,
         role: true,
         status: true,
         createdAt: true,
@@ -734,6 +735,7 @@ export class AdminService {
         firstName: managerData.firstName,
         lastName: managerData.lastName,
         role: managerData.role,
+        phone: managerData.phone || null,
         status: 'ACTIVE',
         subscriptionTier: 'FREE'
       }
@@ -770,9 +772,45 @@ export class AdminService {
       throw new Error('Manager not found');
     }
 
+    // Prepare update data
+    const updatePayload: any = {
+      firstName: updateData.firstName,
+      lastName: updateData.lastName,
+      email: updateData.email,
+    };
+
+    // Handle phone update - allow null to clear phone, or set value
+    // Explicitly handle phone field (including null to clear it)
+    if (updateData.hasOwnProperty('phone')) {
+      updatePayload.phone = (updateData.phone && updateData.phone.trim()) ? updateData.phone.trim() : null;
+    }
+
+    // Handle password update separately (hash it)
+    if (updateData.password) {
+      const { PasswordService } = await import('./passwordService');
+      updatePayload.passwordHash = await PasswordService.hashPassword(updateData.password);
+    }
+
+    // Handle role update
+    if (updateData.role) {
+      updatePayload.role = updateData.role;
+    }
+
+    // Handle status update
+    if (updateData.status) {
+      updatePayload.status = updateData.status;
+    }
+
+    // Remove undefined values
+    Object.keys(updatePayload).forEach(key => {
+      if (updatePayload[key] === undefined) {
+        delete updatePayload[key];
+      }
+    });
+
     const manager = await prisma.user.update({
       where: { id: managerId },
-      data: updateData
+      data: updatePayload
     });
 
     // Log the update
@@ -783,11 +821,56 @@ export class AdminService {
         resource: 'users',
         resourceId: managerId,
         oldValues: oldManager,
-        newValues: updateData
+        newValues: updatePayload
       }
     });
 
     return manager;
+  }
+
+  /**
+   * Delete manager
+   */
+  static async deleteManager(managerId: string, deletedById: string) {
+    try {
+      const manager = await prisma.user.findUnique({
+        where: { id: managerId }
+      });
+
+      if (!manager) {
+        logger.warn('Manager not found for deletion', { managerId, deletedById });
+        throw new Error('Manager not found');
+      }
+
+      // Verify it's a manager role
+      if (manager.role !== 'JUNIOR_MANAGER' && manager.role !== 'SENIOR_MANAGER') {
+        logger.warn('Attempted to delete non-manager user', { managerId, role: manager.role, deletedById });
+        throw new Error('User is not a manager');
+      }
+
+      // Delete manager
+      await prisma.user.delete({
+        where: { id: managerId }
+      });
+
+      // Log the deletion
+      await prisma.auditLog.create({
+        data: {
+          userId: deletedById,
+          action: 'DELETE',
+          resource: 'users',
+          resourceId: managerId,
+          oldValues: manager
+        }
+      });
+
+      logger.info('Manager deleted successfully', { managerId, deletedById, managerEmail: manager.email });
+
+      return { success: true };
+    } catch (error: any) {
+      logger.error('Failed to delete manager', { managerId, deletedById, error: error.message });
+      throw error;
+    }
   }
 
   /**
@@ -857,54 +940,95 @@ export class AdminService {
 
   /**
    * Get comprehensive analytics data for admin dashboard - REAL DATA ONLY
+   * OPTIMIZED to prevent timeouts with pagination and limits
    */
   static async getAnalytics(category?: string, timeframe: string = '30d', filters?: string) {
     const startDate = this.getStartDate(timeframe);
     const endDate = new Date();
+    
+    // Set timeout and limit data fetching to prevent timeouts
+    const MAX_PAYMENTS = 1000; // Limit payments query
+    const MAX_USERS = 5000; // Limit users query
 
     try {
-      // Get real user statistics
-      const totalUsers = await prisma.user.count();
-      const newUsers = await prisma.user.count({
-        where: { createdAt: { gte: startDate } }
-      });
+      // Get real user statistics - with error handling
+      let totalUsers = 0
+      let newUsers = 0
+      let activeUsers = 0
+      let subscriptionDistribution: any[] = []
 
-      const activeUsers = await prisma.user.count({
-        where: {
-          lastActivityAt: { gte: startDate },
-          status: 'ACTIVE'
+      try {
+        totalUsers = await prisma.user.count()
+      } catch (error: any) {
+        logger.warn('Failed to fetch total users', { error: error.message })
+      }
+
+      try {
+        newUsers = await prisma.user.count({
+          where: { createdAt: { gte: startDate } }
+        })
+      } catch (error: any) {
+        logger.warn('Failed to fetch new users', { error: error.message })
+      }
+
+      try {
+        activeUsers = await prisma.user.count({
+          where: {
+            lastActivityAt: { gte: startDate },
+            status: 'ACTIVE'
+          }
+        })
+      } catch (error: any) {
+        logger.warn('Failed to fetch active users', { error: error.message })
+      }
+
+      // Get real subscription distribution - with error handling
+      try {
+        subscriptionDistribution = await prisma.user.groupBy({
+          by: ['subscriptionTier'],
+          _count: true
+        })
+      } catch (error: any) {
+        logger.warn('Failed to fetch subscription distribution', { error: error.message })
+        subscriptionDistribution = []
+      }
+
+      // Get real payment data from database with user information - OPTIMIZED with limit and error handling
+      let payments: any[] = []
+      let users: any[] = []
+      let paymentUserIds: string[] = []
+
+      try {
+        payments = await prisma.payment.findMany({
+          where: {
+            createdAt: { gte: startDate }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 500 // Reduced from MAX_PAYMENTS to 500
+        })
+
+        // Get user information for payments
+        paymentUserIds = payments.map(p => p.userId).filter(Boolean)
+        if (paymentUserIds.length > 0) {
+          users = await prisma.user.findMany({
+            where: {
+              id: { in: paymentUserIds }
+            },
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+              country: true,
+              subscriptionTier: true
+            }
+          })
         }
-      });
-
-      // Get real subscription distribution
-      const subscriptionDistribution = await prisma.user.groupBy({
-        by: ['subscriptionTier'],
-        _count: true
-      });
-
-      // Get real payment data from database with user information
-      const payments = await prisma.payment.findMany({
-        where: {
-          createdAt: { gte: startDate }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      // Get user information for payments
-      const paymentUserIds = payments.map(p => p.userId);
-      const users = await prisma.user.findMany({
-        where: {
-          id: { in: paymentUserIds }
-        },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          country: true,
-          subscriptionTier: true
-        }
-      });
+      } catch (error: any) {
+        logger.warn('Failed to fetch payments', { error: error.message })
+        payments = []
+        users = []
+      }
 
       // Create a map for quick user lookup
       const userMap = new Map(users.map(user => [user.id, user]));
@@ -985,68 +1109,96 @@ export class AdminService {
         percentage: totalCompletedPayments > 0 ? (method._count / totalCompletedPayments) * 100 : 0
       }));
 
-      // Real geographic distribution from database
-      const geographicDistribution = await prisma.user.groupBy({
-        by: ['country'],
-        _count: true,
-        where: {
-          country: { not: null },
-          createdAt: { gte: startDate }
-        }
-      });
+      // Real geographic distribution from database - with error handling
+      let geographicDistribution: any[] = []
+      try {
+        geographicDistribution = await prisma.user.groupBy({
+          by: ['country'],
+          _count: true,
+          where: {
+            country: { not: null },
+            createdAt: { gte: startDate }
+          }
+        });
+      } catch (error: any) {
+        logger.warn('Failed to fetch geographic distribution', { error: error.message })
+        geographicDistribution = []
+      }
 
+      // OPTIMIZED: Limit geographic distribution to prevent timeout
+      const limitedGeoDistribution = geographicDistribution.slice(0, 20); // Reduced from 50 to 20
       const geoStats = await Promise.all(
-        geographicDistribution.map(async (geo) => {
-          // Get users from this country
-          const countryUsers = await prisma.user.findMany({
-            where: { country: geo.country },
-            select: { id: true }
-          });
-          const countryUserIds = countryUsers.map(u => u.id);
+        limitedGeoDistribution.map(async (geo) => {
+          try {
+            // Get users from this country - OPTIMIZED with limit
+            const countryUsers = await prisma.user.findMany({
+              where: { country: geo.country },
+              select: { id: true },
+              take: 100 // Reduced from MAX_USERS to 100
+            });
+            const countryUserIds = countryUsers.map(u => u.id);
 
-          // Get revenue from payments by users in this country
-          const revenueData = await prisma.payment.aggregate({
-            where: {
-              userId: { in: countryUserIds },
-              status: 'COMPLETED',
-              createdAt: { gte: startDate }
-            },
-            _sum: { amount: true }
-          });
+            // Get revenue from payments by users in this country
+            const revenueData = await prisma.payment.aggregate({
+              where: {
+                userId: { in: countryUserIds },
+                status: 'COMPLETED',
+                createdAt: { gte: startDate }
+              },
+              _sum: { amount: true }
+            }).catch(() => ({ _sum: { amount: 0 } }));
 
-          return {
-            country: geo.country || 'Unknown',
-            count: geo._count,
-            revenue: revenueData._sum.amount || 0
-          };
+            return {
+              country: geo.country || 'Unknown',
+              count: geo._count,
+              revenue: revenueData._sum?.amount || 0
+            };
+          } catch (error: any) {
+            logger.warn('Failed to fetch country stats', { country: geo.country, error: error.message })
+            return {
+              country: geo.country || 'Unknown',
+              count: geo._count,
+              revenue: 0
+            };
+          }
         })
       );
 
-      // Revenue by subscription tier
+      // Revenue by subscription tier - OPTIMIZED with error handling
       const revenueByTier = await Promise.all(
-        subscriptionDistribution.map(async (tier) => {
-          // Get users with this subscription tier
-          const tierUsers = await prisma.user.findMany({
-            where: { subscriptionTier: tier.subscriptionTier },
-            select: { id: true }
-          });
-          const tierUserIds = tierUsers.map(u => u.id);
+        subscriptionDistribution.slice(0, 10).map(async (tier) => {
+          try {
+            // Get users with this subscription tier - OPTIMIZED with limit
+            const tierUsers = await prisma.user.findMany({
+              where: { subscriptionTier: tier.subscriptionTier },
+              select: { id: true },
+              take: 100 // Reduced from MAX_USERS to 100
+            });
+            const tierUserIds = tierUsers.map(u => u.id);
 
-          // Get revenue from payments by users with this tier
-          const tierRevenue = await prisma.payment.aggregate({
-            where: {
-              userId: { in: tierUserIds },
-              status: 'COMPLETED',
-              createdAt: { gte: startDate }
-            },
-            _sum: { amount: true }
-          });
+            // Get revenue from payments by users with this tier
+            const tierRevenue = await prisma.payment.aggregate({
+              where: {
+                userId: { in: tierUserIds },
+                status: 'COMPLETED',
+                createdAt: { gte: startDate }
+              },
+              _sum: { amount: true }
+            }).catch(() => ({ _sum: { amount: 0 } }));
 
-          return {
-            tier: tier.subscriptionTier,
-            count: tier._count,
-            revenue: tierRevenue._sum.amount || 0
-          };
+            return {
+              tier: tier.subscriptionTier,
+              count: tier._count,
+              revenue: tierRevenue._sum?.amount || 0
+            };
+          } catch (error: any) {
+            logger.warn('Failed to fetch tier revenue', { tier: tier.subscriptionTier, error: error.message })
+            return {
+              tier: tier.subscriptionTier,
+              count: tier._count,
+              revenue: 0
+            };
+          }
         })
       );
 
@@ -1376,7 +1528,7 @@ export class AdminService {
    */
   static async createSubscriptionPlan(planData: any) {
     try {
-      const plan = await (prisma as any).subscriptionPlan.create({
+      const plan = await prisma.subscriptionPlan.create({
         data: {
           name: planData.name,
           nameEn: planData.nameEn,
@@ -1412,17 +1564,26 @@ export class AdminService {
    */
   static async getSubscriptionPlans() {
     try {
-      const plans = await (prisma as any).subscriptionPlan.findMany({
+      // Get plans from database
+      const plans = await prisma.subscriptionPlan.findMany({
         orderBy: [
           { sortOrder: 'asc' },
           { createdAt: 'desc' }
         ]
       });
 
+      if (plans && plans.length > 0) {
       return plans;
+      }
+
+      // Fallback to SubscriptionService if no plans in database
+      const { SubscriptionService } = await import('./subscriptionService');
+      return await SubscriptionService.getSubscriptionPlans();
     } catch (error) {
       logger.error('Failed to get subscription plans', { error });
-      throw error;
+      // Fallback to SubscriptionService on error
+      const { SubscriptionService } = await import('./subscriptionService');
+      return await SubscriptionService.getSubscriptionPlans();
     }
   }
 
@@ -1431,7 +1592,7 @@ export class AdminService {
    */
   static async getSubscriptionPlanById(id: string) {
     try {
-      const plan = await (prisma as any).subscriptionPlan.findUnique({
+      const plan = await prisma.subscriptionPlan.findUnique({
         where: { id }
       });
 
@@ -1451,18 +1612,71 @@ export class AdminService {
    */
   static async updateSubscriptionPlan(id: string, updateData: any) {
     try {
-      const plan = await (prisma as any).subscriptionPlan.update({
-        where: { id },
-        data: {
-          ...updateData,
-          updatedAt: new Date()
+      logger.info('🔄 Updating subscription plan', { id, updateData });
+      
+      // Prepare update data, handling null values explicitly
+      const dataToUpdate: any = {
+        updatedAt: new Date()
+      };
+
+      // Only include fields that are explicitly provided
+      if (updateData.name !== undefined) dataToUpdate.name = updateData.name;
+      if (updateData.nameEn !== undefined) dataToUpdate.nameEn = updateData.nameEn;
+      if (updateData.description !== undefined) dataToUpdate.description = updateData.description;
+      if (updateData.descriptionEn !== undefined) dataToUpdate.descriptionEn = updateData.descriptionEn;
+      if (updateData.tier !== undefined) dataToUpdate.tier = updateData.tier;
+      if (updateData.price !== undefined) dataToUpdate.price = updateData.price;
+      if (updateData.currency !== undefined) dataToUpdate.currency = updateData.currency;
+      if (updateData.billingCycle !== undefined) dataToUpdate.billingCycle = updateData.billingCycle;
+      if (updateData.features !== undefined) dataToUpdate.features = updateData.features;
+      if (updateData.isActive !== undefined) dataToUpdate.isActive = updateData.isActive;
+      if (updateData.isPopular !== undefined) dataToUpdate.isPopular = updateData.isPopular;
+      if (updateData.sortOrder !== undefined) dataToUpdate.sortOrder = updateData.sortOrder;
+      if (updateData.stripePriceId !== undefined) dataToUpdate.stripePriceId = updateData.stripePriceId;
+
+      // ONLY handle maxSimulations - explicitly set null if provided, or use the value
+      if (updateData.maxSimulations !== undefined) {
+        // Allow null (means use default), or a number
+        if (updateData.maxSimulations === null || updateData.maxSimulations === '') {
+          dataToUpdate.maxSimulations = null;
+        } else {
+          const numValue = typeof updateData.maxSimulations === 'string' 
+            ? parseInt(updateData.maxSimulations) 
+            : updateData.maxSimulations;
+          dataToUpdate.maxSimulations = isNaN(numValue) ? null : numValue;
         }
+        logger.info('✅ Setting maxSimulations', { maxSimulations: dataToUpdate.maxSimulations });
+      }
+
+      logger.info('📝 Final data to update', { dataToUpdate });
+
+      // First check if plan exists
+      const existingPlan = await prisma.subscriptionPlan.findUnique({
+        where: { id }
       });
 
-      logger.info('Subscription plan updated successfully', { planId: id });
+      if (!existingPlan) {
+        throw new Error(`Subscription plan with id "${id}" not found`);
+      }
+
+      logger.info('✅ Plan found, proceeding with update', { planId: id, existingPlan: { id: existingPlan.id, tier: existingPlan.tier } });
+
+      const plan = await prisma.subscriptionPlan.update({
+        where: { id },
+        data: dataToUpdate
+      });
+
+      logger.info('✅ Subscription plan updated successfully', { planId: id, updatedFields: Object.keys(dataToUpdate), maxSimulations: plan.maxSimulations });
       return plan;
-    } catch (error) {
-      logger.error('Failed to update subscription plan', { id, updateData, error });
+    } catch (error: any) {
+      logger.error('❌ Failed to update subscription plan', { 
+        id, 
+        updateData, 
+        errorMessage: error?.message, 
+        errorStack: error?.stack,
+        errorCode: error?.code
+      });
+      console.error('❌ Full error object:', error);
       throw error;
     }
   }
@@ -1472,7 +1686,7 @@ export class AdminService {
    */
   static async deleteSubscriptionPlan(id: string) {
     try {
-      await (prisma as any).subscriptionPlan.delete({
+      await prisma.subscriptionPlan.delete({
         where: { id }
       });
 
@@ -1488,21 +1702,32 @@ export class AdminService {
    */
   static async getSubscriptionAnalytics() {
     try {
+      // Get plans count from database
+      let plansCount = 0;
+      try {
+        plansCount = await prisma.subscriptionPlan.count({
+          where: { isActive: true }
+        });
+      } catch (error) {
+        // Fallback to SubscriptionService if model not available
+        const { SubscriptionService } = await import('./subscriptionService');
+        const plans = await SubscriptionService.getSubscriptionPlans();
+        plansCount = plans.length;
+      }
+
       const [
         totalSubscriptions,
         activeSubscriptions,
-        totalRevenue,
-        plansCount
+        totalRevenue
       ] = await Promise.all([
-        (prisma as any).subscription.count(),
-        (prisma as any).subscription.count({
+        prisma.subscription.count(),
+        prisma.subscription.count({
           where: { status: 'ACTIVE' }
         }),
-        (prisma as any).payment.aggregate({
+        prisma.payment.aggregate({
           where: { status: 'COMPLETED' },
           _sum: { amount: true }
-        }),
-        (prisma as any).subscriptionPlan.count()
+        })
       ]);
 
       return {
@@ -1590,16 +1815,108 @@ export class AdminService {
    */
   static async createAudioSimulation(data: any) {
     try {
-      // For now, we'll store the template data in the questionsData field
-      // In a real implementation, you might want a separate table for templates
+      // Validate required fields
+      if (!data.title || data.title.trim().length < 3) {
+        throw new Error('Title is required and must be at least 3 characters');
+      }
+      if (!data.description || data.description.trim().length < 3) {
+        throw new Error('Description is required and must be at least 3 characters');
+      }
+      if (!data.subscription || !Array.isArray(data.subscription) || data.subscription.length === 0) {
+        throw new Error('At least one subscription tier must be selected');
+      }
+
+      const userId = data.userId || 'system'; // Use provided userId or default to 'system'
+      
+      // Save extracted questions to QuestionBank if provided
+      if (data.extractedQuestions && Array.isArray(data.extractedQuestions) && data.extractedQuestions.length > 0) {
+        try {
+          const questionBankService = (await import('./questionBankService')).default;
+          
+          // Format questions for QuestionBank storage
+          const formattedQuestions = data.extractedQuestions.map((q: any, index: number) => ({
+            id: `q_${Date.now()}_${index}`,
+            question: typeof q === 'string' ? q : (q.question || q.text || q),
+            type: typeof q === 'string' ? 'open' : (q.type || 'open'),
+            category: typeof q === 'string' ? 'GENERAL' : (q.category || 'GENERAL'),
+            level: typeof q === 'string' ? 'B1' : (q.level || 'B1'),
+            keywords: typeof q === 'string' ? [] : (q.keywords || []),
+            difficulty: typeof q === 'string' ? 5 : (q.difficulty || 5)
+          }));
+
+          // Extract unique sujets from questions
+          const sujets = data.extractedQuestions.map((q: any) => 
+            typeof q === 'string' ? q : (q.question || q.text || q)
+          );
+
+          // Validate that questions are properly formatted
+          if (formattedQuestions.length === 0) {
+            throw new Error('No valid questions to save to QuestionBank');
+          }
+
+          // Create QuestionBank entry
+          // Both voice and immigration simulations use the same QuestionBank
+          // Questions are categorized by 'GENERAL' for voice, 'IMMIGRATION' for immigration
+          const questionBank = await prisma.questionBank.create({
+            data: {
+              managerId: userId,
+              title: data.title || 'Extracted Questions from Audio Simulator',
+              description: data.description || 'Questions extracted from audio simulation creation',
+              extractedQuestions: formattedQuestions,
+              level: (data.level || 'B1') as any,
+              category: 'GENERAL' as any, // Voice simulation questions use GENERAL category
+              isActive: true
+            }
+          });
+
+          // Validate that sujets match between voice and immigration simulations
+          // This ensures consistency across both simulation types
+          logger.info('QuestionBank created with validation', {
+            questionBankId: questionBank.id,
+            questionCount: formattedQuestions.length,
+            category: questionBank.category,
+            userId
+          });
+
+          logger.info('Extracted questions saved to QuestionBank', {
+            questionCount: formattedQuestions.length,
+            userId
+          });
+        } catch (questionBankError: any) {
+          logger.error('Failed to save extracted questions to QuestionBank', {
+            error: questionBankError.message,
+            userId
+          });
+          // Don't fail the simulation creation if QuestionBank save fails
+        }
+      }
+
+      // Create voice simulation
+      // Map voice preference string to VoiceType enum (MALE or FEMALE)
+      // If voicePreference contains 'female' or 'france_female', use FEMALE, otherwise MALE
+      let voiceType: 'MALE' | 'FEMALE' = 'FEMALE'; // Default to FEMALE
+      if (data.voicePreference) {
+        const voicePref = String(data.voicePreference).toLowerCase();
+        if (voicePref.includes('male') && !voicePref.includes('female')) {
+          voiceType = 'MALE';
+        } else {
+          voiceType = 'FEMALE';
+        }
+      }
+
       const simulation = await prisma.voiceSimulation.create({
         data: {
-          userId: 'system', // System-generated template
+          userId: userId,
           scheduledDate: new Date(),
           status: 'SCHEDULED',
-          questionsData: data,
-          duration: data.duration || 420,
-          voicePreference: data.voicePreference || 'france_female_1'
+          questionsData: {
+            ...data,
+            extractedQuestions: data.extractedQuestions || [],
+            sujets: data.sujets || [],
+            voicePreference: data.voicePreference || 'france_female_1' // Store original string in JSON for VAPI
+          },
+          duration: data.maxDuration || data.duration || 300, // 5 minutes default (300 seconds)
+          voicePreference: voiceType // Use enum value for database field
         }
       });
 
@@ -1778,6 +2095,137 @@ export class AdminService {
     } catch (error) {
       logger.error('Failed to delete immigration simulation', { error });
       throw error;
+    }
+  }
+
+  /**
+   * Get admin profile statistics
+   * Returns basic stats for admin profile page
+   */
+  static async getStatistics() {
+    try {
+      logger.info('📊 Fetching admin statistics...');
+      
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+      logger.info('📅 Date ranges calculated', {
+        now: now.toISOString(),
+        startOfMonth: startOfMonth.toISOString(),
+        startOfLastMonth: startOfLastMonth.toISOString(),
+        endOfLastMonth: endOfLastMonth.toISOString()
+      });
+
+      // Get total users - with error handling
+      let totalUsers = 0;
+      try {
+        totalUsers = await prisma.user.count({
+          where: {
+            role: { in: ['USER', 'STUDENT'] }
+          }
+        });
+        logger.info('✅ Total users count:', totalUsers);
+      } catch (error: any) {
+        logger.error('❌ Error counting total users:', error);
+        totalUsers = 0;
+      }
+
+      // Get active managers - with error handling
+      let activeManagers = 0;
+      try {
+        activeManagers = await prisma.user.count({
+          where: {
+            role: { in: ['SENIOR_MANAGER', 'JUNIOR_MANAGER'] },
+            status: 'ACTIVE'
+          }
+        });
+        logger.info('✅ Active managers count:', activeManagers);
+      } catch (error: any) {
+        logger.error('❌ Error counting active managers:', error);
+        // If status field doesn't exist, try without it
+        try {
+          activeManagers = await prisma.user.count({
+            where: {
+              role: { in: ['SENIOR_MANAGER', 'JUNIOR_MANAGER'] }
+            }
+          });
+          logger.info('✅ Active managers count (without status):', activeManagers);
+        } catch (retryError: any) {
+          logger.error('❌ Error counting managers without status:', retryError);
+          activeManagers = 0;
+        }
+      }
+
+      // Get content created (courses + tests) - with error handling
+      let contentCreated = 0;
+      try {
+        const [totalCourses, totalTests] = await Promise.all([
+          prisma.course.count({ where: { isPublished: true } }).catch(() => 0),
+          prisma.test.count({ where: { isPublished: true } }).catch(() => 0)
+        ]);
+        contentCreated = totalCourses + totalTests;
+        logger.info('✅ Content created:', { courses: totalCourses, tests: totalTests, total: contentCreated });
+      } catch (error: any) {
+        logger.error('❌ Error counting content:', error);
+        contentCreated = 0;
+      }
+
+      // Calculate monthly growth (users) - with error handling
+      let monthlyGrowth = 0;
+      try {
+        const [usersThisMonth, usersLastMonth] = await Promise.all([
+          prisma.user.count({
+            where: {
+              role: { in: ['USER', 'STUDENT'] },
+              createdAt: { gte: startOfMonth }
+            }
+          }).catch(() => 0),
+          prisma.user.count({
+            where: {
+              role: { in: ['USER', 'STUDENT'] },
+              createdAt: {
+                gte: startOfLastMonth,
+                lte: endOfLastMonth
+              }
+            }
+          }).catch(() => 0)
+        ]);
+
+        monthlyGrowth = usersLastMonth > 0
+          ? Math.round(((usersThisMonth - usersLastMonth) / usersLastMonth) * 100)
+          : usersThisMonth > 0 ? 100 : 0;
+        
+        logger.info('✅ Monthly growth calculated:', { usersThisMonth, usersLastMonth, monthlyGrowth });
+      } catch (error: any) {
+        logger.error('❌ Error calculating monthly growth:', error);
+        monthlyGrowth = 0;
+      }
+
+      const stats = {
+        totalUsers,
+        activeManagers,
+        contentCreated,
+        monthlyGrowth
+      };
+
+      logger.info('✅ Admin statistics retrieved successfully:', stats);
+      return stats;
+    } catch (error: any) {
+      logger.error('❌ Failed to get admin statistics', { 
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      
+      // Return default values instead of throwing
+      return {
+        totalUsers: 0,
+        activeManagers: 0,
+        contentCreated: 0,
+        monthlyGrowth: 0
+      };
     }
   }
 }

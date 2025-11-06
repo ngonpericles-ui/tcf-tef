@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Trash2, Save, Eye, ArrowLeft, BookOpen, CheckCircle, Sparkles, Loader, Upload, X, Mic, Volume2, Clock, Settings, Brain, FileText } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api-client"
+import axios from "axios"
+import { UploadProgressCard } from "@/components/upload-progress-card"
 
 export default function AudioSimulatorCreator() {
   const router = useRouter()
@@ -22,7 +24,7 @@ export default function AudioSimulatorCreator() {
     description: "",
     level: "",
     subscription: "",
-    duration: "",
+    duration: "7", // Default 7 minutes (will be converted to 420 seconds)
     category: "GENERAL", // Default to GENERAL for voice simulation
     instructions: "",
   })
@@ -41,10 +43,14 @@ export default function AudioSimulatorCreator() {
   const [audioPreview, setAudioPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
+  
+  
+  // Upload progress tracking
+  const [uploadProgressData, setUploadProgressData] = useState<{ fileId: string; progress: number; status: 'uploading' | 'completed' | 'error'; error?: string } | null>(null)
 
   // Voice simulation specific state
   const [selectedSujets, setSelectedSujets] = useState<string[]>([])
-  const [maxDuration, setMaxDuration] = useState(7) // in minutes
+  const [maxDuration, setMaxDuration] = useState(5) // in minutes
   const [extractedSujets, setExtractedSujets] = useState<string[]>([])
   const [availableSujets, setAvailableSujets] = useState<string[]>([])
   const [isLoadingSujets, setIsLoadingSujets] = useState(false)
@@ -115,15 +121,24 @@ export default function AudioSimulatorCreator() {
 
     setUploadedFile(file)
     
-    // Create preview for text files
-    if (file.type === 'text/plain' || file.type === 'application/pdf') {
+    // Create preview - show file info instead of reading content (especially for PDFs)
+    // Reading PDFs as text causes rendering issues
+    const fileInfo = `${file.name} (${formatFileSize(file.size)})`
+    setFilePreview(fileInfo)
+    
+    // Only read text files for preview
+    if (file.type === 'text/plain') {
       const reader = new FileReader()
       reader.onload = (e) => {
-        setFilePreview(e.target?.result as string)
+        const text = e.target?.result as string
+        // Limit preview text to avoid rendering issues
+        const previewText = text.length > 500 ? text.substring(0, 500) + '...' : text
+        setFilePreview(`${fileInfo}\n\nAperçu:\n${previewText}`)
+      }
+      reader.onerror = () => {
+        setFilePreview(fileInfo)
       }
       reader.readAsText(file)
-    } else {
-      setFilePreview(`Fichier: ${file.name} (${formatFileSize(file.size)})`)
     }
   }
 
@@ -177,6 +192,19 @@ export default function AudioSimulatorCreator() {
     }
 
     setIsGeneratingQuestions(true)
+    
+    const fileToUpload = uploadedFile || uploadedAudio
+    const fileId = Math.random().toString(36).substring(2, 11)
+    
+    // Initialize progress
+    if (fileToUpload) {
+      setUploadProgressData({
+        fileId,
+        progress: 0,
+        status: 'uploading'
+      })
+    }
+
     try {
       const formData = new FormData()
       
@@ -184,6 +212,7 @@ export default function AudioSimulatorCreator() {
           formData.append('lessonTitle', simulator.title || 'Simulation Audio')
           formData.append('courseTitle', 'Simulation Vocale')
           formData.append('category', 'GENERAL')
+      formData.append('questionCount', '80') // Generate 80+ detailed questions for 5-minute simulation
           formData.append('prompt', aiPrompt)
 
       if (uploadedFile) {
@@ -194,21 +223,66 @@ export default function AudioSimulatorCreator() {
         formData.append('audio', uploadedAudio)
       }
 
-      const response = await apiClient.post('/ai/generate-questions-from-file', formData, {
+      const apiUrl = typeof window !== 'undefined'
+        ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+
+      const token = typeof window !== 'undefined'
+        ? (localStorage.getItem('access_token') || 
+           localStorage.getItem('tcf_tef_admin_session') ||
+           localStorage.getItem('tcf_tef_session'))
+        : null
+
+      // Upload with progress tracking
+      const response = await axios.post(`${apiUrl}/ai/generate-questions-from-file`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        timeout: 0, // No timeout
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && progressEvent.total > 0) {
+            const loaded = progressEvent.loaded || 0
+            const total = progressEvent.total || 1
+            const calculatedProgress = Math.min(Math.max(0, Math.round((loaded / total) * 100)), 99)
+            
+            setUploadProgressData({
+              fileId,
+              progress: calculatedProgress,
+              status: 'uploading'
+            })
+          }
         }
       })
 
+      // Update progress to completed
+      if (fileToUpload) {
+        setUploadProgressData({
+          fileId,
+          progress: 100,
+          status: 'completed'
+        })
+      }
+
            if ((response.data as any)?.success) {
-             const questions = (response.data as any).data.questions
-             setExtractedSujets(questions.map((q: any) => q.question))
-             toast.success(`Sujets extraits avec succès - VAPI gérera automatiquement les questions et la difficulté`)
+        const questions = (response.data as any).data.questions || []
+        // Extract sujets from formatted questions (handle both string and object formats)
+        const sujets = questions.map((q: any) => 
+          typeof q === 'string' ? q : (q.question || q.questionText || q.text || q)
+        )
+        setExtractedSujets(sujets)
+        toast.success(`${sujets.length} sujets extraits avec succès - VAPI gérera automatiquement les questions et la difficulté`)
            } else {
              toast.error('Erreur lors de l\'extraction des sujets')
            }
     } catch (error) {
       console.error('Error extracting topics:', error)
+      setUploadProgressData({
+        fileId: fileId || 'unknown',
+        progress: 0,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Upload error'
+      })
       toast.error('Erreur lors de l\'extraction des sujets')
     } finally {
       setIsGeneratingQuestions(false)
@@ -217,32 +291,54 @@ export default function AudioSimulatorCreator() {
 
   // Save audio simulation
   const handleSaveSimulation = async () => {
-    if (!simulator.title || !simulator.description || selectedSubscriptions.length === 0) {
-      toast.error('Veuillez remplir tous les champs obligatoires')
+    if (!simulator.title || !simulator.title.trim() || selectedSubscriptions.length === 0) {
+      toast.error('Veuillez remplir tous les champs obligatoires (Titre et Abonnements)')
       return
     }
 
+    // Ensure description is not empty (at least 1 character)
+    const description = simulator.description?.trim() || 'Simulation audio créée via l\'interface admin'
+
     try {
+      // Convert duration from minutes to seconds
+      // Backend validation expects: min 60 seconds (1 min), max 1800 seconds (30 min)
+      const durationMinutes = parseInt(simulator.duration) || 7 // Default 7 minutes
+      const durationSeconds = durationMinutes * 60 // Convert to seconds
+      
+      // Validate duration is within backend limits (60-1800 seconds)
+      if (durationSeconds < 60 || durationSeconds > 1800) {
+        toast.error('La durée doit être entre 1 et 30 minutes')
+        return
+      }
+
       const simulationData = {
-        title: simulator.title,
-        description: simulator.description,
+        title: simulator.title.trim(),
+        description: description, // Ensure at least 1 character
         subscription: selectedSubscriptions,
-        duration: parseInt(simulator.duration) || 420,
+        duration: durationSeconds, // Send in seconds (validation expects: min 60, max 1800)
         category: 'GENERAL',
-        instructions: simulator.instructions,
+        instructions: simulator.instructions || '',
         // Voice preference is selected by students during booking
         maxDuration: maxDuration * 60, // Convert to seconds
-        sujets: selectedSujets,
-        extractedQuestions: extractedSujets
+        sujets: selectedSujets || [],
+        extractedQuestions: extractedSujets || []
       }
+
+      console.log('📤 Sending simulation data:', simulationData)
 
       const response = await apiClient.post('/admin/audio-simulations', simulationData)
       
-      if ((response.data as any)?.success) {
+      // apiClient.post() returns response.data directly, which is the ApiResponse object
+      // So we check response.success, not response.data.success
+      console.log('📥 Response received:', response)
+      
+      if (response?.success) {
         toast.success('Simulation audio créée avec succès')
         router.push('/admin/content')
       } else {
-        toast.error('Erreur lors de la création de la simulation')
+        console.error('❌ Response indicates failure:', response)
+        const errorMessage = (response as any)?.error?.message || response?.message || 'Erreur lors de la création de la simulation'
+        toast.error(errorMessage)
       }
     } catch (error) {
       console.error('Error saving simulation:', error)
@@ -319,10 +415,13 @@ export default function AudioSimulatorCreator() {
                     type="number"
                     value={simulator.duration}
                     onChange={(e) => setSimulator(prev => ({ ...prev, duration: e.target.value }))}
-                    placeholder="420"
-                    min="60"
-                    max="1800"
+                    placeholder="7"
+                    min="1"
+                    max="30"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Durée en minutes (sera convertie en secondes automatiquement)
+                  </p>
                 </div>
               </div>
 
@@ -364,7 +463,7 @@ export default function AudioSimulatorCreator() {
                   id="maxDuration"
                   type="number"
                   value={maxDuration}
-                  onChange={(e) => setMaxDuration(parseInt(e.target.value) || 7)}
+                    onChange={(e) => setMaxDuration(parseInt(e.target.value) || 5)}
                   min="1"
                   max="30"
                 />
@@ -498,9 +597,19 @@ export default function AudioSimulatorCreator() {
                     </Button>
                   </div>
                 </div>
-                {filePreview && (
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                    <span className="text-sm">{filePreview}</span>
+                {uploadedFile && (
+                  <div className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-3 flex-1">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {uploadedFile.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatFileSize(uploadedFile.size)} • {uploadedFile.type || 'Fichier'}
+                        </p>
+                      </div>
+                    </div>
                     <Button variant="ghost" size="sm" onClick={clearFile}>
                       <X className="h-4 w-4" />
                     </Button>
@@ -538,14 +647,32 @@ export default function AudioSimulatorCreator() {
                     </Button>
                   </div>
                 </div>
-                {audioPreview && (
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                    <audio controls className="flex-1">
-                      <source src={audioPreview} />
-                    </audio>
+                {uploadedAudio && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center gap-3 flex-1">
+                        <Volume2 className="h-5 w-5 text-green-600" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {uploadedAudio.name}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {formatFileSize(uploadedAudio.size)} • {uploadedAudio.type || 'Audio'}
+                          </p>
+                        </div>
+                      </div>
                     <Button variant="ghost" size="sm" onClick={clearAudio}>
                       <X className="h-4 w-4" />
                     </Button>
+                    </div>
+                    {audioPreview && (
+                      <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                        <audio controls className="w-full">
+                          <source src={audioPreview} type={uploadedAudio.type} />
+                          Votre navigateur ne supporte pas l'élément audio.
+                        </audio>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -564,6 +691,37 @@ export default function AudioSimulatorCreator() {
                 </p>
               </div>
 
+              {/* Upload Progress Card */}
+              {uploadProgressData && (uploadedFile || uploadedAudio) && (
+                <Card className="bg-card border-gray-200 dark:border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-foreground flex items-center">
+                      <Upload className="w-5 h-5 mr-2" />
+                      Progression du téléchargement
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <UploadProgressCard
+                      upload={uploadProgressData}
+                      file={{
+                        id: uploadProgressData.fileId,
+                        file: uploadedFile || uploadedAudio!,
+                        name: (uploadedFile || uploadedAudio)?.name || 'file',
+                        size: (uploadedFile || uploadedAudio)?.size || 0,
+                        type: (uploadedFile || uploadedAudio)?.type || 'application/octet-stream'
+                      }}
+                      onRemove={() => {
+                        setUploadProgressData(null)
+                        setUploadedFile(null)
+                        setUploadedAudio(null)
+                      }}
+                      onPause={() => {}}
+                      onResume={() => {}}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="space-y-4">
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-start">
@@ -577,7 +735,7 @@ export default function AudioSimulatorCreator() {
                       <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
                         <p>• VAPI génère automatiquement le nombre de questions optimal</p>
                         <p>• Commence par des questions faciles et progresse vers le difficile</p>
-                        <p>• Gère intelligemment les 7 minutes disponibles par étudiant</p>
+                        <p>• Gère intelligemment les 5 minutes disponibles par étudiant</p>
                         <p>• S'adapte au niveau et aux réponses de l'étudiant en temps réel</p>
                       </div>
                     </div>

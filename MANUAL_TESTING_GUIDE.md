@@ -13,18 +13,18 @@ npm run dev
 
 # Terminal 2 - Frontend
 cd /home/gotti/Desktop/frontend
-npm run dev -- -p 3002
+npm run dev
 ```
 
 ### Access Platform
-- Frontend: http://localhost:3002
+- Frontend: http://localhost:3000
 - Backend: http://localhost:3001
 
 ---
 
 ## ✅ TEST 1: Duration Field (VIDEO Only)
 
-**URL**: http://localhost:3002/admin/content
+**URL**: http://localhost:3000/admin/content
 
 **Steps**:
 1. Navigate to Admin Content page
@@ -41,7 +41,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 2: View/Voir Button
 
-**URL**: http://localhost:3002/admin/content
+**URL**: http://localhost:3000/admin/content
 
 **Steps**:
 1. Click "more options" (three dots) on any content card
@@ -56,7 +56,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 3: Questionnaire Expression Orale
 
-**URL**: http://localhost:3002/admin/content/questionnaire
+**URL**: http://localhost:3000/admin/content/questionnaire
 
 **Steps**:
 1. Create new questionnaire
@@ -73,7 +73,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 4: Simulation Builder - Exam Types
 
-**URL**: http://localhost:3002/admin/content/simulation/builder
+**URL**: http://localhost:3000/admin/content/simulation/builder
 
 **Steps**:
 1. Go to Configuration section
@@ -89,7 +89,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 5: AI Generation - File Upload
 
-**URL**: http://localhost:3002/admin/content/simulation/builder
+**URL**: http://localhost:3000/admin/content/simulation/builder
 
 **Steps**:
 1. Upload a PDF file for a section
@@ -105,7 +105,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 6: Audio Simulator - Voice Options
 
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 
 **Steps**:
 1. Navigate to Audio Simulator page
@@ -126,7 +126,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 7: Audio Simulator - Sujets Selection
 
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 
 **Steps**:
 1. Look for "Sélectionner un Sujet" dropdown
@@ -142,7 +142,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 8: Audio Simulator - Duration Display
 
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 
 **Steps**:
 1. Look for "Durée" section
@@ -157,7 +157,7 @@ npm run dev -- -p 3002
 
 ## ✅ TEST 9: Audio Extraction
 
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 
 **Steps**:
 1. Upload an audio file
@@ -205,7 +205,7 @@ npm run dev
 ### Frontend Not Loading
 ```bash
 cd /home/gotti/Desktop/frontend
-npm run dev -- -p 3002
+npm run dev
 ```
 
 ---

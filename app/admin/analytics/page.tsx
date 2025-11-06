@@ -116,16 +116,78 @@ export default function AdminAnalyticsPage() {
         ...(selectedCountry !== "all" && { country: selectedCountry }),
       })
 
-      const response = await apiClient.get(`/admin/analytics?${params}`)
-      if ((response.data as any)?.success) {
-        setAnalyticsData((response.data as any).data)
+      // FIXED: Add timeout and better error handling
+      const response = await apiClient.get(`/admin/analytics?${params.toString()}`, {
+        timeout: 60000 // 60 seconds timeout
+      })
+      
+      // apiClient.get() returns response.data which is ApiResponse<T> = { success: boolean, data: T, message?: string }
+      // So response is already { success, data, message }
+      const responseData = response as any
+      
+      console.log('📊 Analytics response structure:', {
+        hasResponse: !!response,
+        responseKeys: Object.keys(response || {}),
+        hasSuccess: !!responseData?.success,
+        hasData: !!responseData?.data,
+        dataType: typeof responseData?.data,
+        dataKeys: responseData?.data ? Object.keys(responseData.data) : [],
+        dataIsObject: responseData?.data && typeof responseData.data === 'object' && !Array.isArray(responseData.data)
+      })
+      
+      // Check if response has success and data properties
+      if (responseData?.success && responseData?.data) {
+        // Data is in responseData.data - this is the correct structure
+        const analyticsData = responseData.data
+        
+        // Verify analyticsData has expected properties
+        if (typeof analyticsData === 'object' && analyticsData !== null && !Array.isArray(analyticsData)) {
+          // Check if it has at least one expected analytics property
+          const hasAnalyticsProps = 'totalRevenue' in analyticsData || 
+                                   'totalTransactions' in analyticsData || 
+                                   'userStats' in analyticsData ||
+                                   'payments' in analyticsData
+          
+          if (hasAnalyticsProps) {
+            setAnalyticsData(analyticsData)
+          } else {
+            console.warn('Analytics data missing expected properties', { 
+              analyticsDataKeys: Object.keys(analyticsData),
+              analyticsData 
+            })
+            throw new Error('Analytics data missing expected properties')
+          }
+        } else {
+          console.warn('Analytics data is not a valid object', { 
+            type: typeof analyticsData,
+            isArray: Array.isArray(analyticsData),
+            analyticsData 
+          })
+          throw new Error('Analytics data is not a valid object')
+        }
+      } else if (responseData?.success && !responseData?.data && responseData?.totalRevenue !== undefined) {
+        // Data might be directly in responseData (no nested data property)
+        setAnalyticsData(responseData)
       } else {
-        throw new Error('Failed to fetch analytics data')
+        console.warn('Analytics response missing data, using fallback', { 
+          response: responseData,
+          success: responseData?.success,
+          hasData: !!responseData?.data,
+          dataKeys: responseData?.data ? Object.keys(responseData.data) : []
+        })
+        throw new Error('Failed to fetch analytics data: Invalid response structure')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching analytics:', error)
-      toast.error(t("Erreur lors du chargement des données", "Error loading data"))
-      // Set empty data structure on error
+      
+      // More specific error messages
+      const errorMessage = error?.response?.data?.error?.message || 
+                          error?.message || 
+                          t("Erreur lors du chargement des données", "Error loading data")
+      
+      toast.error(errorMessage)
+      
+      // Set empty data structure on error to prevent crashes
       setAnalyticsData({
         totalRevenue: 0,
         monthlyRevenue: 0,

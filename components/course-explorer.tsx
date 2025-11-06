@@ -1,144 +1,93 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
-import { BookOpen, Headphones, PenSquare, Brain, GraduationCap, Mic, FileText, ArrowRight, Star, Clock, Users } from "lucide-react"
+import { useState, useEffect } from "react"
+import { BookOpen, Clock, Users, ArrowRight, Play } from "lucide-react"
 import Link from "next/link"
 import { useLang } from "./language-provider"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { apiClient } from "@/lib/api-client"
+import { useAuth } from "@/contexts/AuthContext"
 
-const baseTiles = [
-  {
-    key: "grammar",
-    icon: GraduationCap,
-    color: "#8E44AD",
-    filter: "grammaire",
-    category: "GRAMMAR",
-    courses: 0,
-    level: "A1-C2",
-    description: { fr: "Maîtrisez la grammaire française", en: "Master French grammar" }
-  },
-  {
-    key: "listening",
-    icon: Headphones,
-    color: "#007BFF",
-    filter: "comprehension-orale",
-    category: "LISTENING",
-    courses: 0,
-    level: "A2-C1",
-    description: { fr: "Développez votre compréhension orale", en: "Develop your listening skills" }
-  },
-  {
-    key: "reading",
-    icon: FileText,
-    color: "#16A085",
-    filter: "comprehension-ecrite",
-    category: "READING",
-    courses: 0,
-    level: "A1-C2",
-    description: { fr: "Améliorez votre lecture", en: "Improve your reading" }
-  },
-  {
-    key: "vocab",
-    icon: BookOpen,
-    color: "#2ECC71",
-    filter: "vocabulaire",
-    category: "VOCABULARY",
-    courses: 0,
-    level: "A1-C2",
-    description: { fr: "Enrichissez votre vocabulaire", en: "Expand your vocabulary" }
-  },
-  {
-    key: "writing",
-    icon: PenSquare,
-    color: "#F39C12",
-    filter: "expression-ecrite",
-    category: "WRITING",
-    courses: 0,
-    level: "B1-C2",
-    description: { fr: "Perfectionnez votre écriture", en: "Perfect your writing" }
-  },
-  {
-    key: "oral",
-    icon: Mic,
-    color: "#9B59B6",
-    filter: "expression-orale",
-    category: "ORAL",
-    courses: 0,
-    level: "A2-C2",
-    description: { fr: "Parlez avec confiance", en: "Speak with confidence" }
-  },
-  {
-    key: "sims",
-    icon: Brain,
-    color: "#E74C3C",
-    filter: "tcf-tef",
-    category: "TCF_TEF",
-    courses: 0,
-    level: "B1-C2",
-    description: { fr: "Méthodologie complète TCF/TEF", en: "Complete TCF/TEF methodology" }
-  },
-] as const
+interface InProgressCourse {
+  id: string
+  title: string
+  description: string
+  category: string
+  level: string
+  thumbnail?: string
+  progress?: {
+    percentage: number
+    completedLessons: number
+    totalLessons: number
+  }
+  duration?: number
+  _count?: {
+    lessons_data?: number
+  }
+}
 
 export default function CourseExplorer() {
   const { t, lang } = useLang()
-  const [tiles, setTiles] = useState(baseTiles)
+  const { isAuthenticated } = useAuth()
+  const [inProgressCourses, setInProgressCourses] = useState<InProgressCourse[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Fetch course counts for each category
   useEffect(() => {
-    const fetchCourseCounts = async () => {
+    const fetchInProgressCourses = async () => {
+      if (!isAuthenticated) {
+        setLoading(false)
+        return
+      }
+
       try {
-        console.log('🔄 Fetching courses for explorer...')
-        const response = await apiClient.get('/courses')
-        console.log('📡 Explorer API Response:', response)
-        if ((response as any).success) {
-          const courses = (response as any).data || []
-          console.log('📚 Courses fetched:', courses.length)
-
-          // Count courses by category
-          const categoryCounts: Record<string, number> = {}
-          courses.forEach((course: any) => {
-            const category = course.category
-            categoryCounts[category] = (categoryCounts[category] || 0) + 1
+        setLoading(true)
+        // Fetch enrolled courses
+        const response = await apiClient.get('/courses/enrolled?limit=8')
+        
+        if (response.success && response.data) {
+          const courses = response.data.courses || response.data || []
+          
+          // Filter for in-progress courses (progress > 0 and < 100)
+          const inProgress = courses.filter((course: any) => {
+            const progressPercentage = course.progress?.percentage || 
+                                     course.userProgress?.progressPercentage || 
+                                     0
+            return progressPercentage > 0 && progressPercentage < 100
           })
-          console.log('📊 Category counts:', categoryCounts)
-
-          // Update tiles with actual course counts
-          const updatedTiles = baseTiles.map(tile => ({
-            ...tile,
-            courses: categoryCounts[tile.category] || 0
-          }))
-          console.log('✅ Updated tiles:', updatedTiles)
-          setTiles(updatedTiles as any)
-        } else {
-          console.error('❌ API response not successful')
+          
+          setInProgressCourses(inProgress)
         }
       } catch (error) {
-        console.error('❌ Error fetching course counts:', error)
-        // Keep default tiles if fetch fails
+        console.error('Error fetching in-progress courses:', error)
+        setInProgressCourses([])
+      } finally {
+        setLoading(false)
       }
     }
 
-    fetchCourseCounts()
-  }, [])
+    fetchInProgressCourses()
+  }, [isAuthenticated])
 
-  const memoizedTiles = useMemo(() => tiles, [tiles])
-  
+  if (!isAuthenticated) {
+    return null
+  }
+
   return (
-    <section id="cours" aria-labelledby="explorer-title" className="py-10">
+    <section id="cours" aria-labelledby="continuer-title" className="py-10">
       <div className="flex items-center justify-between mb-6">
         <div>
-      <h2
-        id="explorer-title"
+          <h2
+            id="continuer-title"
             className="text-2xl md:text-3xl font-bold font-[var(--font-poppins)] mb-2 text-foreground"
-      >
-        {t("explorer.title")}
-      </h2>
+          >
+            {lang === "fr" ? "Continuer les parcours" : "Continue Learning"}
+          </h2>
           <p className="text-muted-foreground">
             {lang === "fr" 
-              ? "Découvrez nos parcours d'apprentissage structurés et progressifs"
-              : "Discover our structured and progressive learning paths"
+              ? "Reprenez où vous vous êtes arrêté"
+              : "Resume where you left off"
             }
           </p>
         </div>
@@ -150,90 +99,112 @@ export default function CourseExplorer() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {memoizedTiles.map(({ key, icon: Icon, color, filter, courses, level, description }) => (
-          <Link key={key} href="/cours">
-            <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden">
-              <div className="relative">
-                <div className="absolute top-0 left-0 w-full h-1 rounded-t-lg" style={{ backgroundColor: color }} />
-                <CardContent className="p-6">
-                  <div className="space-y-4">
-                    {/* Icon and Level Badge */}
-                    <div className="flex items-center justify-between">
-                      <div 
-                        className="p-3 rounded-xl bg-opacity-10"
-                        style={{ backgroundColor: `${color}20` }}
-                      >
-                        <Icon className="h-6 w-6" style={{ color }} />
-                      </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {level}
-                      </Badge>
-                    </div>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-32 bg-muted rounded-lg mb-4" />
+                <div className="h-4 bg-muted rounded mb-2" />
+                <div className="h-3 bg-muted rounded w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : inProgressCourses.length === 0 ? (
+        <Card className="p-12 text-center">
+          <CardContent>
+            <BookOpen className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-xl font-semibold mb-2 text-foreground">
+              {lang === "fr" ? "Pas de cours pour le moment" : "No courses at the moment"}
+            </h3>
+            <p className="text-muted-foreground mb-6">
+              {lang === "fr" 
+                ? "Commencez un nouveau parcours pour le voir apparaître ici"
+                : "Start a new course to see it appear here"
+              }
+            </p>
+            <Link href="/cours">
+              <button className="px-6 py-3 bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-white rounded-lg font-medium transition-all">
+                {lang === "fr" ? "Explorer les cours" : "Explore Courses"}
+              </button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {inProgressCourses.map((course) => {
+            const progressPercentage = course.progress?.percentage || 0
+            const totalLessons = course.progress?.totalLessons || course._count?.lessons_data || 0
+            const completedLessons = course.progress?.completedLessons || 0
 
-                    {/* Title and Description */}
-                    <div>
-                      <h3 className="font-semibold text-lg mb-2 text-foreground">
-                        {t(`explorer.${key}`)}
-                      </h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        {lang === "fr" ? description.fr : description.en}
-                      </p>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-1">
-                        <BookOpen className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          {courses} {lang === "fr" ? "cours" : "courses"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          0
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          {lang === "fr" ? "Progression" : "Progress"}
-                        </span>
-                        <span className="font-medium">
-                          0%
-                        </span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div 
-                          className="h-2 rounded-full transition-all duration-500"
-                          style={{ 
-                            backgroundColor: color,
-                            width: `0%`
-                          }}
+            return (
+              <Link key={course.id} href={`/cours/${course.id}`}>
+                <Card className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden h-full flex flex-col">
+                  <div className="relative">
+                    {course.thumbnail ? (
+                      <div className="relative h-40 w-full overflow-hidden">
+                        <img 
+                          src={course.thumbnail} 
+                          alt={course.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
+                      </div>
+                    ) : (
+                      <div className="h-40 w-full bg-gradient-to-br from-[#2ECC71]/20 to-[#007BFF]/20 flex items-center justify-center">
+                        <BookOpen className="h-12 w-12 text-[#2ECC71]" />
+                      </div>
+                    )}
+                  </div>
+                  <CardContent className="p-6 flex-1 flex flex-col">
+                    <div className="flex-1">
+                      {/* Category Badge */}
+                      <Badge variant="secondary" className="mb-3 text-xs">
+                        {course.category}
+                      </Badge>
+
+                      {/* Title */}
+                      <h3 className="font-semibold text-lg mb-2 text-foreground line-clamp-2">
+                        {course.title}
+                      </h3>
+
+                      {/* Description */}
+                      <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                        {course.description}
+                      </p>
+
+                      {/* Progress */}
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {lang === "fr" ? "Progression" : "Progress"}
+                          </span>
+                          <span className="font-medium">
+                            {Math.round(progressPercentage)}%
+                          </span>
+                        </div>
+                        <Progress value={progressPercentage} className="h-2" />
+                        <div className="text-xs text-muted-foreground">
+                          {completedLessons} / {totalLessons} {lang === "fr" ? "leçons" : "lessons"}
+                        </div>
                       </div>
                     </div>
 
                     {/* Continue Button */}
                     <button 
-                      className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-background hover:bg-muted transition-all text-sm font-medium group-hover:border-opacity-80"
-                      style={{ borderColor: `${color}30` }}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-white transition-all text-sm font-medium group-hover:shadow-md"
                     >
-                      <Clock className="h-4 w-4" style={{ color }} />
+                      <Play className="h-4 w-4" />
                       {lang === "fr" ? "Continuer" : "Continue"}
                       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                     </button>
-                </div>
-                </CardContent>
-              </div>
-            </Card>
-          </Link>
-        ))}
-      </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }

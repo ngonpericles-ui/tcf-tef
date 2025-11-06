@@ -169,9 +169,9 @@ export default function WelcomePage() {
                 <Moon className="h-4 w-4" />
               ))}
             </button>
-            <Link href="/inscription">
+            <Link href="/connexion">
               <Button className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-medium">
-              {t("Inscription", "Sign up")}
+              {t("Connexion", "Login")}
               </Button>
             </Link>
           </div>
@@ -214,20 +214,22 @@ export default function WelcomePage() {
                 
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 animate-fade-in-up" style={{ animationDelay: "0.9s" }}>
-                <Link href="/inscription">
                   <Button
                     size="lg"
-                    className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold px-8 py-4 text-lg relative overflow-hidden group transition-all duration-300 hover:scale-105"
+                  className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold px-8 py-4 text-lg relative overflow-hidden group transition-all duration-300 hover:scale-105 w-full sm:w-auto"
+                  onClick={() => router.push("/inscription")}
                   >
                     <span className="relative z-10">{t("Commencer gratuitement", "Start for free")}</span>
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                   </Button>
-                </Link>
-                <Link href="/about">
-                  <Button size="lg" variant="outline" className="rounded-full border-2 bg-transparent hover:bg-accent py-4 text-lg">
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="rounded-full border-2 bg-transparent hover:bg-accent py-4 text-lg w-full sm:w-auto"
+                  onClick={() => router.push("/about")}
+                >
                     {t("En savoir plus", "Learn more")} →
                   </Button>
-              </Link>
               </div>
 
               {/* Enhanced Stats */}
@@ -734,11 +736,13 @@ export default function WelcomePage() {
             <p className="text-xl text-muted-foreground mb-12">
               {t("Rejoignez la révolution de l'apprentissage du français", "Join the revolution of French learning")}
             </p>
-            <Link href="/inscription">
-              <Button size="lg" className="rounded-full bg-gray-800 hover:bg-gray-900 text-white font-semibold px-12 py-6 text-lg">
+            <Button 
+              size="lg" 
+              className="rounded-full bg-gray-800 hover:bg-gray-900 text-white font-semibold px-12 py-6 text-lg"
+              onClick={() => router.push("/inscription")}
+            >
                 {t("Commencer gratuitement", "Start for free")}
               </Button>
-            </Link>
           </div>
         </div>
       </section>

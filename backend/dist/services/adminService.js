@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const client_1 = require("@prisma/client");
-const password_1 = require("../utils/password");
-const logger_1 = require("../utils/logger");
+const password_1 = require("@/utils/password");
+const logger_1 = require("@/utils/logger");
 class AdminService {
     static async getDashboardData(timeframe, metrics) {
         const now = new Date();
@@ -544,6 +577,7 @@ class AdminService {
                 firstName: true,
                 lastName: true,
                 email: true,
+                phone: true,
                 role: true,
                 status: true,
                 createdAt: true,
@@ -570,6 +604,7 @@ class AdminService {
                 firstName: managerData.firstName,
                 lastName: managerData.lastName,
                 role: managerData.role,
+                phone: managerData.phone || null,
                 status: 'ACTIVE',
                 subscriptionTier: 'FREE'
             }
@@ -597,9 +632,32 @@ class AdminService {
         if (!oldManager) {
             throw new Error('Manager not found');
         }
+        const updatePayload = {
+            firstName: updateData.firstName,
+            lastName: updateData.lastName,
+            email: updateData.email,
+        };
+        if (updateData.hasOwnProperty('phone')) {
+            updatePayload.phone = (updateData.phone && updateData.phone.trim()) ? updateData.phone.trim() : null;
+        }
+        if (updateData.password) {
+            const { PasswordService } = await Promise.resolve().then(() => __importStar(require('./passwordService')));
+            updatePayload.passwordHash = await PasswordService.hashPassword(updateData.password);
+        }
+        if (updateData.role) {
+            updatePayload.role = updateData.role;
+        }
+        if (updateData.status) {
+            updatePayload.status = updateData.status;
+        }
+        Object.keys(updatePayload).forEach(key => {
+            if (updatePayload[key] === undefined) {
+                delete updatePayload[key];
+            }
+        });
         const manager = await connection_1.prisma.user.update({
             where: { id: managerId },
-            data: updateData
+            data: updatePayload
         });
         await connection_1.prisma.auditLog.create({
             data: {
@@ -608,10 +666,43 @@ class AdminService {
                 resource: 'users',
                 resourceId: managerId,
                 oldValues: oldManager,
-                newValues: updateData
+                newValues: updatePayload
             }
         });
         return manager;
+    }
+    static async deleteManager(managerId, deletedById) {
+        try {
+            const manager = await connection_1.prisma.user.findUnique({
+                where: { id: managerId }
+            });
+            if (!manager) {
+                logger_1.logger.warn('Manager not found for deletion', { managerId, deletedById });
+                throw new Error('Manager not found');
+            }
+            if (manager.role !== 'JUNIOR_MANAGER' && manager.role !== 'SENIOR_MANAGER') {
+                logger_1.logger.warn('Attempted to delete non-manager user', { managerId, role: manager.role, deletedById });
+                throw new Error('User is not a manager');
+            }
+            await connection_1.prisma.user.delete({
+                where: { id: managerId }
+            });
+            await connection_1.prisma.auditLog.create({
+                data: {
+                    userId: deletedById,
+                    action: 'DELETE',
+                    resource: 'users',
+                    resourceId: managerId,
+                    oldValues: manager
+                }
+            });
+            logger_1.logger.info('Manager deleted successfully', { managerId, deletedById, managerEmail: manager.email });
+            return { success: true };
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to delete manager', { managerId, deletedById, error: error.message });
+            throw error;
+        }
     }
     static async getManagerPerformance(managerId, period) {
         const startDate = this.getStartDate(period);
@@ -666,41 +757,81 @@ class AdminService {
     static async getAnalytics(category, timeframe = '30d', filters) {
         const startDate = this.getStartDate(timeframe);
         const endDate = new Date();
+        const MAX_PAYMENTS = 1000;
+        const MAX_USERS = 5000;
         try {
-            const totalUsers = await connection_1.prisma.user.count();
-            const newUsers = await connection_1.prisma.user.count({
-                where: { createdAt: { gte: startDate } }
-            });
-            const activeUsers = await connection_1.prisma.user.count({
-                where: {
-                    lastActivityAt: { gte: startDate },
-                    status: 'ACTIVE'
+            let totalUsers = 0;
+            let newUsers = 0;
+            let activeUsers = 0;
+            let subscriptionDistribution = [];
+            try {
+                totalUsers = await connection_1.prisma.user.count();
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to fetch total users', { error: error.message });
+            }
+            try {
+                newUsers = await connection_1.prisma.user.count({
+                    where: { createdAt: { gte: startDate } }
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to fetch new users', { error: error.message });
+            }
+            try {
+                activeUsers = await connection_1.prisma.user.count({
+                    where: {
+                        lastActivityAt: { gte: startDate },
+                        status: 'ACTIVE'
+                    }
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to fetch active users', { error: error.message });
+            }
+            try {
+                subscriptionDistribution = await connection_1.prisma.user.groupBy({
+                    by: ['subscriptionTier'],
+                    _count: true
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to fetch subscription distribution', { error: error.message });
+                subscriptionDistribution = [];
+            }
+            let payments = [];
+            let users = [];
+            let paymentUserIds = [];
+            try {
+                payments = await connection_1.prisma.payment.findMany({
+                    where: {
+                        createdAt: { gte: startDate }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    take: 500
+                });
+                paymentUserIds = payments.map(p => p.userId).filter(Boolean);
+                if (paymentUserIds.length > 0) {
+                    users = await connection_1.prisma.user.findMany({
+                        where: {
+                            id: { in: paymentUserIds }
+                        },
+                        select: {
+                            id: true,
+                            email: true,
+                            firstName: true,
+                            lastName: true,
+                            country: true,
+                            subscriptionTier: true
+                        }
+                    });
                 }
-            });
-            const subscriptionDistribution = await connection_1.prisma.user.groupBy({
-                by: ['subscriptionTier'],
-                _count: true
-            });
-            const payments = await connection_1.prisma.payment.findMany({
-                where: {
-                    createdAt: { gte: startDate }
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-            const paymentUserIds = payments.map(p => p.userId);
-            const users = await connection_1.prisma.user.findMany({
-                where: {
-                    id: { in: paymentUserIds }
-                },
-                select: {
-                    id: true,
-                    email: true,
-                    firstName: true,
-                    lastName: true,
-                    country: true,
-                    subscriptionTier: true
-                }
-            });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to fetch payments', { error: error.message });
+                payments = [];
+                users = [];
+            }
             const userMap = new Map(users.map(user => [user.id, user]));
             const revenueData = await connection_1.prisma.payment.aggregate({
                 where: {
@@ -765,53 +896,83 @@ class AdminService {
                 count: method._count,
                 percentage: totalCompletedPayments > 0 ? (method._count / totalCompletedPayments) * 100 : 0
             }));
-            const geographicDistribution = await connection_1.prisma.user.groupBy({
-                by: ['country'],
-                _count: true,
-                where: {
-                    country: { not: null },
-                    createdAt: { gte: startDate }
+            let geographicDistribution = [];
+            try {
+                geographicDistribution = await connection_1.prisma.user.groupBy({
+                    by: ['country'],
+                    _count: true,
+                    where: {
+                        country: { not: null },
+                        createdAt: { gte: startDate }
+                    }
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to fetch geographic distribution', { error: error.message });
+                geographicDistribution = [];
+            }
+            const limitedGeoDistribution = geographicDistribution.slice(0, 20);
+            const geoStats = await Promise.all(limitedGeoDistribution.map(async (geo) => {
+                try {
+                    const countryUsers = await connection_1.prisma.user.findMany({
+                        where: { country: geo.country },
+                        select: { id: true },
+                        take: 100
+                    });
+                    const countryUserIds = countryUsers.map(u => u.id);
+                    const revenueData = await connection_1.prisma.payment.aggregate({
+                        where: {
+                            userId: { in: countryUserIds },
+                            status: 'COMPLETED',
+                            createdAt: { gte: startDate }
+                        },
+                        _sum: { amount: true }
+                    }).catch(() => ({ _sum: { amount: 0 } }));
+                    return {
+                        country: geo.country || 'Unknown',
+                        count: geo._count,
+                        revenue: revenueData._sum?.amount || 0
+                    };
                 }
-            });
-            const geoStats = await Promise.all(geographicDistribution.map(async (geo) => {
-                const countryUsers = await connection_1.prisma.user.findMany({
-                    where: { country: geo.country },
-                    select: { id: true }
-                });
-                const countryUserIds = countryUsers.map(u => u.id);
-                const revenueData = await connection_1.prisma.payment.aggregate({
-                    where: {
-                        userId: { in: countryUserIds },
-                        status: 'COMPLETED',
-                        createdAt: { gte: startDate }
-                    },
-                    _sum: { amount: true }
-                });
-                return {
-                    country: geo.country || 'Unknown',
-                    count: geo._count,
-                    revenue: revenueData._sum.amount || 0
-                };
+                catch (error) {
+                    logger_1.logger.warn('Failed to fetch country stats', { country: geo.country, error: error.message });
+                    return {
+                        country: geo.country || 'Unknown',
+                        count: geo._count,
+                        revenue: 0
+                    };
+                }
             }));
-            const revenueByTier = await Promise.all(subscriptionDistribution.map(async (tier) => {
-                const tierUsers = await connection_1.prisma.user.findMany({
-                    where: { subscriptionTier: tier.subscriptionTier },
-                    select: { id: true }
-                });
-                const tierUserIds = tierUsers.map(u => u.id);
-                const tierRevenue = await connection_1.prisma.payment.aggregate({
-                    where: {
-                        userId: { in: tierUserIds },
-                        status: 'COMPLETED',
-                        createdAt: { gte: startDate }
-                    },
-                    _sum: { amount: true }
-                });
-                return {
-                    tier: tier.subscriptionTier,
-                    count: tier._count,
-                    revenue: tierRevenue._sum.amount || 0
-                };
+            const revenueByTier = await Promise.all(subscriptionDistribution.slice(0, 10).map(async (tier) => {
+                try {
+                    const tierUsers = await connection_1.prisma.user.findMany({
+                        where: { subscriptionTier: tier.subscriptionTier },
+                        select: { id: true },
+                        take: 100
+                    });
+                    const tierUserIds = tierUsers.map(u => u.id);
+                    const tierRevenue = await connection_1.prisma.payment.aggregate({
+                        where: {
+                            userId: { in: tierUserIds },
+                            status: 'COMPLETED',
+                            createdAt: { gte: startDate }
+                        },
+                        _sum: { amount: true }
+                    }).catch(() => ({ _sum: { amount: 0 } }));
+                    return {
+                        tier: tier.subscriptionTier,
+                        count: tier._count,
+                        revenue: tierRevenue._sum?.amount || 0
+                    };
+                }
+                catch (error) {
+                    logger_1.logger.warn('Failed to fetch tier revenue', { tier: tier.subscriptionTier, error: error.message });
+                    return {
+                        tier: tier.subscriptionTier,
+                        count: tier._count,
+                        revenue: 0
+                    };
+                }
             }));
             const totalVisitors = await connection_1.prisma.analyticsEvent.count({
                 where: {
@@ -1136,11 +1297,16 @@ class AdminService {
                     { createdAt: 'desc' }
                 ]
             });
-            return plans;
+            if (plans && plans.length > 0) {
+                return plans;
+            }
+            const { SubscriptionService } = await Promise.resolve().then(() => __importStar(require('./subscriptionService')));
+            return await SubscriptionService.getSubscriptionPlans();
         }
         catch (error) {
             logger_1.logger.error('Failed to get subscription plans', { error });
-            throw error;
+            const { SubscriptionService } = await Promise.resolve().then(() => __importStar(require('./subscriptionService')));
+            return await SubscriptionService.getSubscriptionPlans();
         }
     }
     static async getSubscriptionPlanById(id) {
@@ -1160,18 +1326,72 @@ class AdminService {
     }
     static async updateSubscriptionPlan(id, updateData) {
         try {
+            logger_1.logger.info('🔄 Updating subscription plan', { id, updateData });
+            const dataToUpdate = {
+                updatedAt: new Date()
+            };
+            if (updateData.name !== undefined)
+                dataToUpdate.name = updateData.name;
+            if (updateData.nameEn !== undefined)
+                dataToUpdate.nameEn = updateData.nameEn;
+            if (updateData.description !== undefined)
+                dataToUpdate.description = updateData.description;
+            if (updateData.descriptionEn !== undefined)
+                dataToUpdate.descriptionEn = updateData.descriptionEn;
+            if (updateData.tier !== undefined)
+                dataToUpdate.tier = updateData.tier;
+            if (updateData.price !== undefined)
+                dataToUpdate.price = updateData.price;
+            if (updateData.currency !== undefined)
+                dataToUpdate.currency = updateData.currency;
+            if (updateData.billingCycle !== undefined)
+                dataToUpdate.billingCycle = updateData.billingCycle;
+            if (updateData.features !== undefined)
+                dataToUpdate.features = updateData.features;
+            if (updateData.isActive !== undefined)
+                dataToUpdate.isActive = updateData.isActive;
+            if (updateData.isPopular !== undefined)
+                dataToUpdate.isPopular = updateData.isPopular;
+            if (updateData.sortOrder !== undefined)
+                dataToUpdate.sortOrder = updateData.sortOrder;
+            if (updateData.stripePriceId !== undefined)
+                dataToUpdate.stripePriceId = updateData.stripePriceId;
+            if (updateData.maxSimulations !== undefined) {
+                if (updateData.maxSimulations === null || updateData.maxSimulations === '') {
+                    dataToUpdate.maxSimulations = null;
+                }
+                else {
+                    const numValue = typeof updateData.maxSimulations === 'string'
+                        ? parseInt(updateData.maxSimulations)
+                        : updateData.maxSimulations;
+                    dataToUpdate.maxSimulations = isNaN(numValue) ? null : numValue;
+                }
+                logger_1.logger.info('✅ Setting maxSimulations', { maxSimulations: dataToUpdate.maxSimulations });
+            }
+            logger_1.logger.info('📝 Final data to update', { dataToUpdate });
+            const existingPlan = await connection_1.prisma.subscriptionPlan.findUnique({
+                where: { id }
+            });
+            if (!existingPlan) {
+                throw new Error(`Subscription plan with id "${id}" not found`);
+            }
+            logger_1.logger.info('✅ Plan found, proceeding with update', { planId: id, existingPlan: { id: existingPlan.id, tier: existingPlan.tier } });
             const plan = await connection_1.prisma.subscriptionPlan.update({
                 where: { id },
-                data: {
-                    ...updateData,
-                    updatedAt: new Date()
-                }
+                data: dataToUpdate
             });
-            logger_1.logger.info('Subscription plan updated successfully', { planId: id });
+            logger_1.logger.info('✅ Subscription plan updated successfully', { planId: id, updatedFields: Object.keys(dataToUpdate), maxSimulations: plan.maxSimulations });
             return plan;
         }
         catch (error) {
-            logger_1.logger.error('Failed to update subscription plan', { id, updateData, error });
+            logger_1.logger.error('❌ Failed to update subscription plan', {
+                id,
+                updateData,
+                errorMessage: error?.message,
+                errorStack: error?.stack,
+                errorCode: error?.code
+            });
+            console.error('❌ Full error object:', error);
             throw error;
         }
     }
@@ -1189,7 +1409,18 @@ class AdminService {
     }
     static async getSubscriptionAnalytics() {
         try {
-            const [totalSubscriptions, activeSubscriptions, totalRevenue, plansCount] = await Promise.all([
+            let plansCount = 0;
+            try {
+                plansCount = await connection_1.prisma.subscriptionPlan.count({
+                    where: { isActive: true }
+                });
+            }
+            catch (error) {
+                const { SubscriptionService } = await Promise.resolve().then(() => __importStar(require('./subscriptionService')));
+                const plans = await SubscriptionService.getSubscriptionPlans();
+                plansCount = plans.length;
+            }
+            const [totalSubscriptions, activeSubscriptions, totalRevenue] = await Promise.all([
                 connection_1.prisma.subscription.count(),
                 connection_1.prisma.subscription.count({
                     where: { status: 'ACTIVE' }
@@ -1197,8 +1428,7 @@ class AdminService {
                 connection_1.prisma.payment.aggregate({
                     where: { status: 'COMPLETED' },
                     _sum: { amount: true }
-                }),
-                connection_1.prisma.subscriptionPlan.count()
+                })
             ]);
             return {
                 totalSubscriptions,
@@ -1426,6 +1656,121 @@ class AdminService {
         catch (error) {
             logger_1.logger.error('Failed to delete immigration simulation', { error });
             throw error;
+        }
+    }
+    static async getStatistics() {
+        try {
+            logger_1.logger.info('📊 Fetching admin statistics...');
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+            logger_1.logger.info('📅 Date ranges calculated', {
+                now: now.toISOString(),
+                startOfMonth: startOfMonth.toISOString(),
+                startOfLastMonth: startOfLastMonth.toISOString(),
+                endOfLastMonth: endOfLastMonth.toISOString()
+            });
+            let totalUsers = 0;
+            try {
+                totalUsers = await connection_1.prisma.user.count({
+                    where: {
+                        role: { in: ['USER', 'STUDENT'] }
+                    }
+                });
+                logger_1.logger.info('✅ Total users count:', totalUsers);
+            }
+            catch (error) {
+                logger_1.logger.error('❌ Error counting total users:', error);
+                totalUsers = 0;
+            }
+            let activeManagers = 0;
+            try {
+                activeManagers = await connection_1.prisma.user.count({
+                    where: {
+                        role: { in: ['SENIOR_MANAGER', 'JUNIOR_MANAGER'] },
+                        status: 'ACTIVE'
+                    }
+                });
+                logger_1.logger.info('✅ Active managers count:', activeManagers);
+            }
+            catch (error) {
+                logger_1.logger.error('❌ Error counting active managers:', error);
+                try {
+                    activeManagers = await connection_1.prisma.user.count({
+                        where: {
+                            role: { in: ['SENIOR_MANAGER', 'JUNIOR_MANAGER'] }
+                        }
+                    });
+                    logger_1.logger.info('✅ Active managers count (without status):', activeManagers);
+                }
+                catch (retryError) {
+                    logger_1.logger.error('❌ Error counting managers without status:', retryError);
+                    activeManagers = 0;
+                }
+            }
+            let contentCreated = 0;
+            try {
+                const [totalCourses, totalTests] = await Promise.all([
+                    connection_1.prisma.course.count({ where: { isPublished: true } }).catch(() => 0),
+                    connection_1.prisma.test.count({ where: { isPublished: true } }).catch(() => 0)
+                ]);
+                contentCreated = totalCourses + totalTests;
+                logger_1.logger.info('✅ Content created:', { courses: totalCourses, tests: totalTests, total: contentCreated });
+            }
+            catch (error) {
+                logger_1.logger.error('❌ Error counting content:', error);
+                contentCreated = 0;
+            }
+            let monthlyGrowth = 0;
+            try {
+                const [usersThisMonth, usersLastMonth] = await Promise.all([
+                    connection_1.prisma.user.count({
+                        where: {
+                            role: { in: ['USER', 'STUDENT'] },
+                            createdAt: { gte: startOfMonth }
+                        }
+                    }).catch(() => 0),
+                    connection_1.prisma.user.count({
+                        where: {
+                            role: { in: ['USER', 'STUDENT'] },
+                            createdAt: {
+                                gte: startOfLastMonth,
+                                lte: endOfLastMonth
+                            }
+                        }
+                    }).catch(() => 0)
+                ]);
+                monthlyGrowth = usersLastMonth > 0
+                    ? Math.round(((usersThisMonth - usersLastMonth) / usersLastMonth) * 100)
+                    : usersThisMonth > 0 ? 100 : 0;
+                logger_1.logger.info('✅ Monthly growth calculated:', { usersThisMonth, usersLastMonth, monthlyGrowth });
+            }
+            catch (error) {
+                logger_1.logger.error('❌ Error calculating monthly growth:', error);
+                monthlyGrowth = 0;
+            }
+            const stats = {
+                totalUsers,
+                activeManagers,
+                contentCreated,
+                monthlyGrowth
+            };
+            logger_1.logger.info('✅ Admin statistics retrieved successfully:', stats);
+            return stats;
+        }
+        catch (error) {
+            logger_1.logger.error('❌ Failed to get admin statistics', {
+                error: error.message,
+                stack: error.stack,
+                name: error.name
+            });
+            return {
+                totalUsers: 0,
+                activeManagers: 0,
+                contentCreated: 0,
+                monthlyGrowth: 0
+            };
         }
     }
 }

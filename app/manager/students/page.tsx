@@ -31,7 +31,9 @@ export default function StudentManagement() {
     const roleParam = params.get("role")
     const stored = localStorage.getItem("managerRole")
     const role = (roleParam || stored || "junior").toLowerCase()
-    setCurrentManager(["junior", "content", "senior"].includes(role) ? role : "junior")
+    // Keep admin role as admin, don't normalize to senior
+    const normalizedRole = role
+    setCurrentManager(["junior", "content", "senior", "admin"].includes(normalizedRole) ? normalizedRole : "junior")
   }, [])
 
   // Fetch students from backend
@@ -55,8 +57,8 @@ export default function StudentManagement() {
 
         if (response.success && response.data) {
           const studentsData = Array.isArray(response.data) ? response.data :
-                              Array.isArray(response.data.users) ? response.data.users :
-                              Array.isArray(response.data.data) ? response.data.data : []
+                              Array.isArray((response.data as any).users) ? (response.data as any).users :
+                              Array.isArray((response.data as any).data) ? (response.data as any).data : []
 
           // Transform data to match component expectations
           const transformedStudents = studentsData.map((student: any) => ({
@@ -134,6 +136,7 @@ export default function StudentManagement() {
         return ["A1", "A2", "B1"]
       case "content":
       case "senior":
+      case "admin":
         return ["A1", "A2", "B1", "B2", "C1", "C2"]
       default:
         return ["A1", "A2", "B1"]
@@ -146,6 +149,7 @@ export default function StudentManagement() {
         return ["Free", "Essential"]
       case "content":
       case "senior":
+      case "admin":
         return ["Free", "Essential", "Premium", "Pro+"]
       default:
         return ["Free", "Essential"]
@@ -187,8 +191,13 @@ export default function StudentManagement() {
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
-              const url = new URL("/manager/messages/bulk", window.location.origin)
-              url.searchParams.set("role", currentManager)
+              // Check if user is admin and redirect to admin section
+              const originalRole = localStorage.getItem("managerRole") || currentManager
+              const baseUrl = originalRole === "admin" ? "/admin/messages/bulk" : "/manager/messages/bulk"
+              const url = new URL(baseUrl, window.location.origin)
+              if (originalRole !== "admin") {
+                url.searchParams.set("role", originalRole)
+              }
               window.location.href = url.toString()
             }}
           >
@@ -426,10 +435,15 @@ export default function StudentManagement() {
                     size="sm"
                     className="bg-blue-600 hover:bg-blue-700"
                     onClick={() => {
-                      const url = new URL("/manager/messages/compose", window.location.origin)
+                      // Check if user is admin and redirect to admin section
+                      const originalRole = localStorage.getItem("managerRole") || currentManager
+                      const baseUrl = originalRole === "admin" ? "/admin/messages/compose" : "/manager/messages/compose"
+                      const url = new URL(baseUrl, window.location.origin)
                       url.searchParams.set("to", student.id)
                       url.searchParams.set("name", student.name)
-                      url.searchParams.set("role", currentManager)
+                      if (originalRole !== "admin") {
+                        url.searchParams.set("role", originalRole)
+                      }
                       window.location.href = url.toString()
                     }}
                   >

@@ -15,13 +15,13 @@ npm run dev
 ### Terminal 2 - Start Frontend
 ```bash
 cd /home/gotti/Desktop/frontend
-npm run dev -- -p 3002
+npm run dev
 ```
 ✅ Wait for: "✓ Ready in X.Xs"
 
 ### Open Browser
 ```
-http://localhost:3002
+http://localhost:3000
 ```
 
 ---
@@ -29,37 +29,37 @@ http://localhost:3002
 ## 🧪 QUICK TESTS (5 minutes each)
 
 ### TEST 1: Duration Field ⏱️
-**URL**: http://localhost:3002/admin/content
+**URL**: http://localhost:3000/admin/content
 - Look at content cards
 - ✅ VIDEO content shows duration
 - ❌ Other content types don't show duration
 
 ### TEST 2: View Button 👁️
-**URL**: http://localhost:3002/admin/content
+**URL**: http://localhost:3000/admin/content
 - Click "..." on any card
 - Click "Voir"
 - ✅ File opens in new tab
 
 ### TEST 3: Expression Orale 🎤
-**URL**: http://localhost:3002/admin/content/questionnaire
+**URL**: http://localhost:3000/admin/content/questionnaire
 - Select "Expression Orale" category
 - ✅ AI generation section is HIDDEN
 - ✅ Only expression orale section visible
 
 ### TEST 4: Exam Types 📝
-**URL**: http://localhost:3002/admin/content/simulation/builder
+**URL**: http://localhost:3000/admin/content/simulation/builder
 - Click "Type d'examen" dropdown
 - ✅ See: TCF, TEF, Épreuve typique
 
 ### TEST 5: AI Generation 🤖
-**URL**: http://localhost:3002/admin/content/simulation/builder
+**URL**: http://localhost:3000/admin/content/simulation/builder
 - Upload a PDF
 - Click "Générer avec AI"
 - ✅ No 400 error
 - ✅ Questions generated
 
 ### TEST 6: Voice Options 🎵
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 - Look for "Sélection de la Voix" dropdown
 - ✅ See 8 voice options:
   - France Female 1 & 2
@@ -68,12 +68,12 @@ http://localhost:3002
   - Belgium Female & Male
 
 ### TEST 7: Sujets Selection 📚
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 - Look for "Sélectionner un Sujet" dropdown
 - ✅ Dropdown populated with sujets
 
 ### TEST 8: Duration Display ⏰
-**URL**: http://localhost:3002/manager/content/audio-simulator
+**URL**: http://localhost:3000/manager/content/audio-simulator
 - Look for "Durée" section
 - ✅ Shows "Durée fixe: 7 minutes"
 
@@ -133,11 +133,11 @@ npm run dev
 ### Frontend Not Loading
 ```bash
 # Check if running
-curl http://localhost:3002
+curl http://localhost:3000
 
 # Restart if needed
 cd /home/gotti/Desktop/frontend
-npm run dev -- -p 3002
+npm run dev
 ```
 
 ---

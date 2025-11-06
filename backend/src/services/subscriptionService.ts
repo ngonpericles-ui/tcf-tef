@@ -19,42 +19,42 @@ export class SubscriptionService {
    */
   static async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     try {
-      // Get plans from database
-      const dbPlans = await (prisma as any).subscriptionPlan.findMany({
-        where: { isActive: true },
-        orderBy: [
-          { sortOrder: 'asc' },
-          { createdAt: 'desc' }
-        ]
-      });
+      // Try to get plans from database first
+      try {
+        const dbPlans = await prisma.subscriptionPlan.findMany({
+          where: { isActive: true },
+          orderBy: [
+            { sortOrder: 'asc' },
+            { createdAt: 'desc' }
+          ]
+        });
 
-      if (dbPlans && dbPlans.length > 0) {
-        return dbPlans;
+        if (dbPlans && dbPlans.length > 0) {
+          // Filter out FREE plan and map to SubscriptionPlan format
+          return dbPlans
+            .filter((plan) => plan.tier !== 'FREE')
+            .map((plan) => ({
+              id: plan.id,
+              name: plan.name,
+              nameEn: plan.nameEn || plan.name,
+              description: plan.description || '',
+              descriptionEn: plan.descriptionEn || plan.description || '',
+              tier: plan.tier,
+              price: plan.price,
+              currency: plan.currency,
+              billingCycle: plan.billingCycle,
+              features: plan.features,
+              limitations: plan.limitations || [],
+              isPopular: plan.isPopular
+            }));
+        }
+      } catch (dbError: any) {
+        // Model might not be fully synced, fall through to hardcoded plans
+        logger.debug('Using hardcoded plans', { error: dbError?.message });
       }
 
-      // Fallback to hardcoded plans if database is empty
+      // Return hardcoded plans (FREE plan removed - not needed on subscription page)
       const plans: SubscriptionPlan[] = [
-        {
-          id: 'free',
-          name: 'Gratuit',
-          nameEn: 'Free',
-          description: 'Accès limité aux cours et tests de base',
-          descriptionEn: 'Limited access to basic courses and tests',
-          tier: SubscriptionTier.FREE,
-          price: 0,
-          currency: 'FCFA',
-          billingCycle: 'monthly',
-          features: [
-            'Accès aux cours gratuits',
-            'Tests de base',
-            'Support communautaire'
-          ],
-          limitations: [
-            'Pas d\'accès aux cours premium',
-            'Pas de sessions en direct',
-            'Support limité'
-          ]
-        },
         {
           id: 'essential',
           name: 'Essentiel',
@@ -339,7 +339,7 @@ export class SubscriptionService {
             tier: user.subscriptionTier,
             status: 'ACTIVE',
             startDate: new Date(),
-            endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+            endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 1 month from now (30 days)
             user: {
               id: user.id,
               firstName: user.firstName,
@@ -350,10 +350,11 @@ export class SubscriptionService {
         }
       }
 
-      return subscription;
+      return subscription || null;
     } catch (error) {
       logger.error('Failed to get active subscription', { userId, error });
-      throw error;
+      // Return null instead of throwing to handle gracefully
+      return null;
     }
   }
 

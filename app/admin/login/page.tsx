@@ -22,15 +22,31 @@ export default function AdminLoginPage() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const { language, setLanguage, t } = useLanguage()
   const { theme, setTheme } = useTheme()
-  const { login, isAuthenticated, isAdmin, loading } = useAuth()
+  const { login, isAuthenticated, isAdmin, loading, user } = useAuth()
   const router = useRouter()
 
   // If already authenticated as admin, redirect to dashboard (but not if showing success message)
   useEffect(() => {
+    console.log('🔍 Admin login page - Auth check:', { loading, isAuthenticated, isAdmin, showSuccessMessage })
     if (!loading && isAuthenticated && isAdmin && !showSuccessMessage) {
+      console.log('🔄 Redirecting authenticated admin to /admin')
+      // Use replace to avoid adding to history stack
       router.replace('/admin')
     }
   }, [loading, isAuthenticated, isAdmin, showSuccessMessage, router])
+
+  // Prevent any cookie clearing when admin is already authenticated
+  useEffect(() => {
+    if (isAuthenticated && isAdmin) {
+      console.log('🛡️ Admin already authenticated - preventing any session clearing')
+      // Ensure cookies are properly set
+      if (typeof window !== 'undefined') {
+        document.cookie = 'auth=1; path=/; max-age=86400' // 24 hours
+        document.cookie = 'role=ADMIN; path=/; max-age=86400'
+        document.cookie = `user_id=${user?.id || ''}; path=/; max-age=86400`
+      }
+    }
+  }, [isAuthenticated, isAdmin, user?.id])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,8 +55,9 @@ export default function AdminLoginPage() {
     // Don't clear success message here - let it show if login succeeds
 
     try {
-      // Clear any existing session before admin login
-      if (typeof window !== 'undefined') {
+      // NEVER clear existing session for admins - this causes the redirect issue
+      // Only clear session for non-admin users
+      if (typeof window !== 'undefined' && !isAdmin && !isAuthenticated) {
         localStorage.removeItem('auth')
         localStorage.removeItem('role')
         localStorage.removeItem('user_id')
@@ -54,6 +71,21 @@ export default function AdminLoginPage() {
       const result = await login(username, password)
 
       if (result.success && result.user?.role === 'ADMIN') {
+        console.log('✅ Admin login successful:', result.user.email)
+        
+        // Explicitly set admin role in cookies to ensure middleware reads it correctly
+        if (typeof window !== 'undefined') {
+          const maxAge = 60 * 60 * 24 * 7; // 7 days
+          document.cookie = `auth=1; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `role=ADMIN; path=/; max-age=${maxAge}; SameSite=Lax`;
+          document.cookie = `user_id=${result.user.id}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          console.log('🍪 Admin role cookie set explicitly:', result.user.role);
+          
+          // Give browser time to process cookies before redirecting
+          // This ensures middleware can read the cookies
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
         // Show success message briefly
         const userName = result.user.firstName && result.user.lastName
           ? `${result.user.firstName} ${result.user.lastName}`
@@ -62,11 +94,12 @@ export default function AdminLoginPage() {
         setSuccess(t("admin.login.success", `Connexion réussie! Bienvenue ${userName}`))
         setShowSuccessMessage(true) // Prevent immediate redirect
 
-        // Show success message for 2 seconds before redirecting
+        // Show success message for 1.5 seconds before redirecting
         setTimeout(() => {
+          console.log('🚀 Redirecting to /admin dashboard')
           setShowSuccessMessage(false) // Allow redirect
           router.replace("/admin")
-        }, 2000) // 2 second delay to show success message
+        }, 1500) // 1.5 second delay to show success message
       } else if (result.success && result.user?.role !== 'ADMIN') {
         setError(t("Accès refusé. Seuls les administrateurs peuvent accéder à cette section.", "Access denied. Only administrators can access this section."))
         setSuccess("") // Clear success message on error

@@ -5,9 +5,6 @@ const nextConfig = {
     buildActivity: true,
     buildActivityPosition: 'bottom-right',
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -41,78 +38,15 @@ const nextConfig = {
     webpackBuildWorker: true,
     optimizeCss: false,
   },
+  // Modern routing configuration
+  // Note: middleware.ts is still functional but deprecated
+  // Consider migrating to route handlers or server components for auth logic
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Enhanced webpack configuration
-  webpack: (config, { dev, isServer }) => {
-    // Handle SVG imports
-    config.module.rules.push({
-      test: /\.svg$/,
-      use: ['@svgr/webpack'],
-    })
-
-    if (!isServer) {
-      config.resolve = {
-        ...config.resolve,
-        fallback: {
-          ...config.resolve.fallback,
-          fs: false,
-          net: false,
-          tls: false,
-          crypto: false,
-          stream: false,
-          util: false,
-          buffer: false
-        },
-        alias: {
-          ...config.resolve.alias,
-          'react': 'react',
-          'react-dom': 'react-dom',
-        },
-      }
-
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          ...config.optimization.splitChunks,
-          cacheGroups: {
-            ...config.optimization.splitChunks?.cacheGroups,
-            vendor: {
-              test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              chunks: 'all',
-              priority: 10,
-            },
-            common: {
-              name: 'common',
-              minChunks: 2,
-              chunks: 'all',
-              priority: 5,
-              reuseExistingChunk: true,
-            },
-          },
-        },
-      }
-
-      config.output = {
-        ...config.output,
-        chunkLoadingGlobal: 'webpackChunkTCF_TEF',
-        globalObject: 'self',
-      }
-    }
-
-    return config
-  },
-  // Standalone deployment
-  output: 'standalone',
   trailingSlash: false,
-  // Skip 404 static generation to avoid next/document errors
+  // Skip static generation for 404 page
   skipTrailingSlashRedirect: true,
-  // Disable static 404 page generation
-  generateBuildId: async () => {
-    return 'build-' + Date.now()
-  },
 }
 
 export default nextConfig

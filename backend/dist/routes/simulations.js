@@ -4,16 +4,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const client_1 = require("@prisma/client");
+const database_1 = require("../config/database");
 const auth_1 = require("../middleware/auth");
 const levelAssessmentService_1 = require("../services/levelAssessmentService");
 const aiTeacherFeedbackService_1 = require("../services/aiTeacherFeedbackService");
 const logger_1 = require("../utils/logger");
+const simulationLimitService_1 = require("../services/simulationLimitService");
 const router = express_1.default.Router();
-const prisma = new client_1.PrismaClient();
 router.get('/', auth_1.authenticate, async (req, res, next) => {
     try {
-        const simulations = await prisma.test.findMany({
+        const simulations = await database_1.prisma.test.findMany({
             where: {
                 isPublished: true
             },
@@ -70,7 +70,7 @@ router.get('/', auth_1.authenticate, async (req, res, next) => {
 });
 router.get('/questions', auth_1.authenticate, async (req, res, next) => {
     try {
-        const questions = await prisma.testQuestion.findMany({
+        const questions = await database_1.prisma.testQuestion.findMany({
             include: {
                 test: {
                     select: {
@@ -112,7 +112,20 @@ router.post('/:id/start', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const userId = req.user.userId;
-        const simulation = await prisma.test.findUnique({
+        const limitCheck = await (0, simulationLimitService_1.checkSimulationLimit)(userId);
+        if (!limitCheck.canCreate) {
+            return res.status(403).json({
+                success: false,
+                error: {
+                    message: limitCheck.error || 'Simulation limit reached for this billing period. Please upgrade your subscription or wait for the next billing cycle.',
+                    limitReached: true,
+                    remaining: limitCheck.remaining,
+                    maxSimulations: limitCheck.maxSimulations,
+                    periodEndDate: limitCheck.periodEndDate.toISOString()
+                }
+            });
+        }
+        const simulation = await database_1.prisma.test.findUnique({
             where: { id },
             include: {
                 questions: {
@@ -126,14 +139,16 @@ router.post('/:id/start', auth_1.authenticate, async (req, res, next) => {
                 error: { message: 'Simulation not found' }
             });
         }
-        const session = await prisma.testAttempt.create({
+        const session = await database_1.prisma.testAttempt.create({
             data: {
                 userId,
                 testId: id,
                 status: 'IN_PROGRESS',
                 startedAt: new Date(),
-                answers: {},
-                timeRemaining: simulation.duration * 60,
+                answers: {
+                    timeRemaining: simulation.duration * 60,
+                    progress: {}
+                },
             }
         });
         const sessionData = {
@@ -231,7 +246,7 @@ router.put('/sessions/:id/progress', auth_1.authenticate, async (req, res, next)
         const { id } = req.params;
         const { answers, currentSection, currentQuestion, timeRemaining } = req.body;
         const userId = req.user.userId;
-        const session = await prisma.testAttempt.findFirst({
+        const session = await database_1.prisma.testAttempt.findFirst({
             where: {
                 id,
                 userId
@@ -243,16 +258,17 @@ router.put('/sessions/:id/progress', auth_1.authenticate, async (req, res, next)
                 error: { message: 'Session not found' }
             });
         }
-        await prisma.testAttempt.update({
+        const updatedAnswers = {
+            ...(typeof answers === 'object' ? answers : {}),
+            timeRemaining,
+            currentSection,
+            currentQuestion,
+            lastSaved: new Date().toISOString()
+        };
+        await database_1.prisma.testAttempt.update({
             where: { id },
             data: {
-                answers: answers,
-                timeRemaining,
-                metadata: {
-                    currentSection,
-                    currentQuestion,
-                    lastSaved: new Date().toISOString()
-                }
+                answers: updatedAnswers
             }
         });
         res.json({
@@ -269,7 +285,7 @@ router.post('/sessions/:id/submit', auth_1.authenticate, async (req, res, next) 
         const { id } = req.params;
         const { answers, timeSpent } = req.body;
         const userId = req.user.userId;
-        const session = await prisma.testAttempt.findFirst({
+        const session = await database_1.prisma.testAttempt.findFirst({
             where: {
                 id,
                 userId
@@ -308,45 +324,42 @@ router.post('/sessions/:id/submit', auth_1.authenticate, async (req, res, next) 
             };
         });
         const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-        const completedSession = await prisma.testAttempt.update({
+        const grade = getGradeFromPercentage(percentage);
+        const detailedResults = {
+            maxScore,
+            percentage,
+            correctAnswers,
+            grade,
+            level: session.test.level,
+            sections: generateSectionResults(session.test.questions, answers),
+            overallFeedback: generateOverallFeedback(percentage),
+            strengths: generateStrengths(questionResults),
+            weaknesses: generateWeaknesses(questionResults),
+            recommendations: generateRecommendations(percentage, session.test.level),
+            questionResults
+        };
+        const completedSession = await database_1.prisma.testAttempt.update({
             where: { id },
             data: {
                 status: 'COMPLETED',
                 completedAt: new Date(),
                 score: totalScore,
-                maxScore,
-                percentage,
-                correctAnswers,
-                duration: timeSpent,
-                answers: answers
-            }
-        });
-        const result = await prisma.simulationResult.create({
-            data: {
-                userId,
-                testAttemptId: id,
-                simulationTitle: session.test.title,
-                totalScore,
-                maxScore,
-                percentage,
-                grade: getGradeFromPercentage(percentage),
-                level: session.test.level,
                 timeSpent,
-                sections: generateSectionResults(session.test.questions, answers),
-                overallFeedback: generateOverallFeedback(percentage),
-                strengths: generateStrengths(questionResults),
-                weaknesses: generateWeaknesses(questionResults),
-                recommendations: generateRecommendations(percentage, session.test.level)
+                answers: answers,
+                feedback: JSON.stringify(detailedResults)
             }
         });
         res.json({
             success: true,
             data: {
-                resultId: result.id,
+                resultId: completedSession.id,
                 score: totalScore,
                 maxScore,
                 percentage,
-                grade: result.grade
+                grade,
+                correctAnswers,
+                totalQuestions: session.test.questions.length,
+                timeSpent
             }
         });
     }
@@ -357,22 +370,57 @@ router.post('/sessions/:id/submit', auth_1.authenticate, async (req, res, next) 
 router.get('/results', auth_1.authenticate, async (req, res, next) => {
     try {
         const userId = req.user.userId;
-        const results = await prisma.simulationResult.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' },
+        const attempts = await database_1.prisma.testAttempt.findMany({
+            where: {
+                userId,
+                status: 'COMPLETED'
+            },
             include: {
-                testAttempt: {
-                    include: {
-                        test: {
-                            select: {
-                                title: true,
-                                level: true,
-                                type: true
-                            }
-                        }
+                test: {
+                    select: {
+                        id: true,
+                        title: true,
+                        titleEn: true,
+                        level: true,
+                        type: true,
+                        category: true
                     }
                 }
+            },
+            orderBy: { completedAt: 'desc' }
+        });
+        const results = attempts.map(attempt => {
+            let feedbackData = {};
+            if (attempt.feedback) {
+                try {
+                    feedbackData = JSON.parse(attempt.feedback);
+                }
+                catch (e) {
+                }
             }
+            const maxScore = feedbackData.maxScore || 100;
+            const percentage = feedbackData.percentage || (attempt.score && maxScore > 0
+                ? Math.round((attempt.score / maxScore) * 100)
+                : 0);
+            return {
+                id: attempt.id,
+                userId: attempt.userId,
+                testAttemptId: attempt.id,
+                simulationTitle: attempt.test.title,
+                totalScore: attempt.score || 0,
+                maxScore,
+                percentage,
+                grade: feedbackData.grade || getGradeFromPercentage(percentage),
+                level: attempt.test.level || feedbackData.level,
+                timeSpent: attempt.timeSpent || 0,
+                sections: feedbackData.sections || [],
+                overallFeedback: feedbackData.overallFeedback || '',
+                strengths: feedbackData.strengths || [],
+                weaknesses: feedbackData.weaknesses || [],
+                recommendations: feedbackData.recommendations || [],
+                createdAt: attempt.completedAt || attempt.createdAt,
+                test: attempt.test
+            };
         });
         res.json({
             success: true,
@@ -388,18 +436,63 @@ router.get('/results/:id', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const userId = req.user.userId;
-        const result = await prisma.simulationResult.findFirst({
+        const attempt = await database_1.prisma.testAttempt.findFirst({
             where: {
                 id,
-                userId
+                userId,
+                status: 'COMPLETED'
+            },
+            include: {
+                test: {
+                    select: {
+                        id: true,
+                        title: true,
+                        titleEn: true,
+                        level: true,
+                        type: true,
+                        category: true
+                    }
+                }
             }
         });
-        if (!result) {
+        if (!attempt) {
             return res.status(404).json({
                 success: false,
                 error: { message: 'Results not found' }
             });
         }
+        let feedbackData = {};
+        if (attempt.feedback) {
+            try {
+                feedbackData = JSON.parse(attempt.feedback);
+            }
+            catch (e) {
+            }
+        }
+        const maxScore = feedbackData.maxScore || 100;
+        const percentage = feedbackData.percentage || (attempt.score && maxScore > 0
+            ? Math.round((attempt.score / maxScore) * 100)
+            : 0);
+        const result = {
+            id: attempt.id,
+            userId: attempt.userId,
+            testAttemptId: attempt.id,
+            simulationTitle: attempt.test.title,
+            totalScore: attempt.score || 0,
+            maxScore,
+            percentage,
+            grade: feedbackData.grade || getGradeFromPercentage(percentage),
+            level: attempt.test.level || feedbackData.level,
+            timeSpent: attempt.timeSpent || 0,
+            sections: feedbackData.sections || [],
+            overallFeedback: feedbackData.overallFeedback || '',
+            strengths: feedbackData.strengths || [],
+            weaknesses: feedbackData.weaknesses || [],
+            recommendations: feedbackData.recommendations || [],
+            questionResults: feedbackData.questionResults || [],
+            createdAt: attempt.completedAt || attempt.createdAt,
+            test: attempt.test
+        };
         res.json({
             success: true,
             data: result
@@ -605,7 +698,7 @@ router.post('/:id/start', auth_1.authenticate, async (req, res, next) => {
     try {
         const { id } = req.params;
         const userId = req.user.userId;
-        const simulation = await prisma.test.findFirst({
+        const simulation = await database_1.prisma.test.findFirst({
             where: {
                 id: id,
                 isPublished: true
@@ -656,7 +749,7 @@ router.post('/sessions/:sessionId/submit', auth_1.authenticate, async (req, res,
         const { answers, timeSpent } = req.body;
         const userId = req.user.userId;
         const simulationId = sessionId.split('_')[2] || sessionId;
-        const simulation = await prisma.test.findFirst({
+        const simulation = await database_1.prisma.test.findFirst({
             where: {
                 id: simulationId,
                 isPublished: true
@@ -728,37 +821,57 @@ router.post('/sessions/:sessionId/submit', auth_1.authenticate, async (req, res,
 router.get('/free-attempts/count', auth_1.authenticate, async (req, res, next) => {
     try {
         const userId = req.user.userId;
-        const freeAttempts = await prisma.testAttempt.count({
-            where: {
-                userId,
-                test: {
-                    requiredTier: 'FREE'
+        const limitInfo = await (0, simulationLimitService_1.checkSimulationLimit)(userId);
+        const [testAttempts, voiceSimulations, immigrationSimulations] = await Promise.all([
+            database_1.prisma.testAttempt.count({
+                where: {
+                    userId,
+                    createdAt: { gte: limitInfo.periodStartDate }
                 }
-            }
-        });
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { subscriptionTier: true }
-        });
-        const subscriptionTier = user?.subscriptionTier || 'FREE';
-        const canAccessPaid = subscriptionTier !== 'FREE';
-        const remainingFreeAttempts = Math.max(0, 5 - freeAttempts);
+            }),
+            database_1.prisma.voiceSimulation.count({
+                where: {
+                    userId,
+                    createdAt: { gte: limitInfo.periodStartDate }
+                }
+            }),
+            database_1.prisma.immigrationSimulation.count({
+                where: {
+                    userId,
+                    createdAt: { gte: limitInfo.periodStartDate }
+                }
+            })
+        ]);
+        const totalSimulationsUsed = testAttempts + voiceSimulations + immigrationSimulations;
+        const now = new Date();
+        const daysRemaining = Math.max(0, Math.ceil((limitInfo.periodEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
         res.json({
             success: true,
             data: {
-                freeAttemptsUsed: freeAttempts,
-                remainingFreeAttempts,
-                canAccessPaid,
-                subscriptionTier,
-                isBlocked: freeAttempts >= 5 && !canAccessPaid
+                totalSimulationsUsed,
+                remainingSimulations: limitInfo.remaining,
+                maxSimulations: limitInfo.maxSimulations,
+                subscriptionTier: limitInfo.subscriptionTier,
+                isBlocked: !limitInfo.canCreate,
+                canAccessPaid: limitInfo.subscriptionTier !== 'FREE',
+                periodStartDate: limitInfo.periodStartDate.toISOString(),
+                periodEndDate: limitInfo.periodEndDate.toISOString(),
+                daysRemaining,
+                freeAttemptsUsed: limitInfo.subscriptionTier === 'FREE' ? totalSimulationsUsed : 0,
+                remainingFreeAttempts: limitInfo.subscriptionTier === 'FREE' ? limitInfo.remaining : 0,
+                breakdown: {
+                    testAttempts,
+                    voiceSimulations,
+                    immigrationSimulations
+                }
             }
         });
     }
     catch (error) {
-        console.error('Error getting free attempts count:', error);
+        console.error('Error getting simulation attempts count:', error);
         res.status(500).json({
             success: false,
-            error: { message: 'Failed to get free attempts count' }
+            error: { message: 'Failed to get simulation attempts count' }
         });
     }
 });
@@ -766,12 +879,12 @@ router.get('/test-niveau', auth_1.authenticate, async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { level, tier } = req.query;
-        const user = await prisma.user.findUnique({
+        const user = await database_1.prisma.user.findUnique({
             where: { id: userId },
             select: { subscriptionTier: true }
         });
         const userTier = user?.subscriptionTier || 'FREE';
-        const freeAttempts = await prisma.testAttempt.count({
+        const freeAttempts = await database_1.prisma.testAttempt.count({
             where: { userId }
         });
         const isBlocked = freeAttempts >= 5 && userTier === 'FREE';
@@ -790,7 +903,7 @@ router.get('/test-niveau', auth_1.authenticate, async (req, res, next) => {
             whereClause.level = { in: ['B1', 'B2', 'C1', 'C2'] };
             whereClause.requiredTier = { in: ['FREE', 'ESSENTIAL', 'PREMIUM', 'PRO'] };
         }
-        const simulations = await prisma.test.findMany({
+        const simulations = await database_1.prisma.test.findMany({
             where: whereClause,
             include: {
                 questions: {

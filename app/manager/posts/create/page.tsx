@@ -11,6 +11,8 @@ import { useLanguage } from "@/components/language-provider"
 import { useAuth } from "@/contexts/AuthContext"
 import apiClient from "@/lib/api-client"
 import { ArrowLeft, ImageIcon, Video, Smile, MapPin, Users, Globe, Lock, X, CheckCircle, AlertCircle } from "lucide-react"
+import axios from "axios"
+import { UploadProgressCard } from "@/components/upload-progress-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface CreatePostPageProps {
@@ -31,6 +33,9 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
   const [errorMessage, setErrorMessage] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
+  
+  // Upload progress tracking
+  const [uploadProgress, setUploadProgress] = useState<{ fileId: string; progress: number; status: 'uploading' | 'completed' | 'error'; error?: string } | null>(null)
 
   // Determine current role
   const currentRole = propRole || "senior"
@@ -63,11 +68,96 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
     setSuccessMessage("")
 
     try {
+      let mediaUrl: string | undefined = undefined
+
+      // Upload images first if any
+      if (selectedImages.length > 0 || selectedVideo) {
+        try {
+          const fileToUpload = selectedVideo || selectedImages[0]
+          const fileId = Math.random().toString(36).substring(2, 11)
+          
+          // Initialize progress
+          setUploadProgress({
+            fileId,
+            progress: 0,
+            status: 'uploading'
+          })
+
+          const formData = new FormData()
+          formData.append('files', fileToUpload)
+
+          const apiUrl = typeof window !== 'undefined'
+            ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+            : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+
+          const token = typeof window !== 'undefined'
+            ? (localStorage.getItem('access_token') || 
+               localStorage.getItem('tcf_tef_admin_session') ||
+               localStorage.getItem('tcf_tef_session'))
+            : null
+
+          // Upload to post media endpoint with progress tracking
+          const uploadResponse = await axios.post(`${apiUrl}/upload/post-media`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              ...(token && { 'Authorization': `Bearer ${token}` })
+            },
+            timeout: 0, // No timeout
+            onUploadProgress: (progressEvent) => {
+              if (progressEvent.total && progressEvent.total > 0) {
+                const loaded = progressEvent.loaded || 0
+                const total = progressEvent.total || 1
+                const calculatedProgress = Math.min(Math.max(0, Math.round((loaded / total) * 100)), 99)
+                
+                setUploadProgress({
+                  fileId,
+                  progress: calculatedProgress,
+                  status: 'uploading'
+                })
+              }
+            }
+          })
+
+          // Update progress to completed
+          setUploadProgress({
+            fileId,
+            progress: 100,
+            status: 'completed'
+          })
+
+          if (uploadResponse.data?.success && uploadResponse.data.data?.files && uploadResponse.data.data.files.length > 0) {
+            // Get the uploaded file URL
+            const uploadedFile = uploadResponse.data.data.files[0]
+            mediaUrl = uploadedFile.url || uploadedFile.path
+            
+            // If URL is relative, make it absolute
+            if (mediaUrl && !mediaUrl.startsWith('http')) {
+              if (mediaUrl.startsWith('/uploads')) {
+                mediaUrl = `http://localhost:3001${mediaUrl}`
+              } else {
+                mediaUrl = `http://localhost:3001/uploads/${mediaUrl}`
+              }
+            }
+          }
+        } catch (uploadError: any) {
+          console.error('Error uploading media:', uploadError)
+          setUploadProgress({
+            fileId: uploadProgress?.fileId || 'unknown',
+            progress: 0,
+            status: 'error',
+            error: uploadError.response?.data?.error?.message || uploadError.message || 'Upload error'
+          })
+          // Continue with post creation even if upload fails
+          setErrorMessage(t("Erreur lors de l'upload de l'image, mais le post sera créé", "Error uploading image, but post will be created"))
+        }
+      }
+
       // Create post data
       const postData = {
         title: postTitle || "Untitled Post",
         content: postContent,
         excerpt: postContent.substring(0, 200),
+        media: mediaUrl, // Include uploaded media URL
         visibility: privacy as "PUBLIC" | "SUBSCRIBERS_ONLY" | "PRIVATE",
         status: "PUBLISHED", // Posts are published immediately
         category: "General",
@@ -142,6 +232,33 @@ export default function CreatePostPage({ role: propRole }: CreatePostPageProps =
           <CardContent className="p-4 flex items-center space-x-3">
             <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
             <span className="text-red-700 dark:text-red-300">{errorMessage}</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upload Progress Card */}
+      {uploadProgress && (selectedImages.length > 0 || selectedVideo) && (
+        <Card className="bg-card border-gray-200 dark:border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center">
+              <ImageIcon className="w-5 h-5 mr-2" />
+              {t("Progression du téléchargement", "Upload Progress")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <UploadProgressCard
+              upload={uploadProgress}
+              file={{
+                id: uploadProgress.fileId,
+                file: selectedVideo || selectedImages[0],
+                name: (selectedVideo || selectedImages[0])?.name || 'file',
+                size: (selectedVideo || selectedImages[0])?.size || 0,
+                type: (selectedVideo || selectedImages[0])?.type || 'image/jpeg'
+              }}
+              onRemove={() => setUploadProgress(null)}
+              onPause={() => {}}
+              onResume={() => {}}
+            />
           </CardContent>
         </Card>
       )}

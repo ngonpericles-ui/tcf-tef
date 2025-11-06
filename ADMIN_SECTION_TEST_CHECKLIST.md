@@ -4,7 +4,7 @@
 
 ### Prerequisites
 - Backend running on `http://localhost:3001`
-- Frontend running on `http://localhost:3003`
+- Frontend running on `http://localhost:3000`
 - Admin user credentials ready
 - Browser DevTools open (F12) to check console for errors
 
@@ -13,7 +13,7 @@
 ## 1. Admin Authentication & Access Control
 
 ### Test 1.1: Admin Login
-- [ ] Navigate to `http://localhost:3003/admin/login`
+- [ ] Navigate to `http://localhost:3000/admin/login`
 - [ ] Enter admin credentials
 - [ ] Verify successful login and redirect to `/admin`
 - [ ] Check browser console for no errors
@@ -154,9 +154,9 @@
 
 ## 6. Admin Content Management
 
-### Test 6.1: Courses
-- [ ] Navigate to `/admin/courses` or content section
-- [ ] Verify courses list loads
+### Test 6.1: Content Management
+- [ ] Navigate to `/admin/content` section
+- [ ] Verify content management interface loads
 - [ ] Verify create course button works
 - [ ] Verify edit course works
 - [ ] Verify delete course works

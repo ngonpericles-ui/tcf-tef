@@ -307,7 +307,7 @@ export default function CrossSectionDashboard({
                         size="sm"
                         asChild
                       >
-                        <Link href={`/live/${session.id}`}>
+                        <Link href={`/live-session/${session.id}`}>
                           {session.isRegistered ? (
                             <>
                               <CheckCircle className="h-4 w-4 mr-1" />

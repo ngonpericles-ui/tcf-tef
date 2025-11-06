@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LikeService = exports.LikeType = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const logger_1 = require("../utils/logger");
 var LikeType;
 (function (LikeType) {
@@ -11,47 +11,60 @@ var LikeType;
 class LikeService {
     async likeContent(userId, contentId, contentType) {
         try {
-            const existingLike = await connection_1.prisma.like.findUnique({
-                where: {
-                    userId_contentId_contentType: {
-                        userId,
-                        contentId,
-                        contentType
-                    }
-                }
+            const whereCondition = { userId };
+            if (contentType === LikeType.POST) {
+                whereCondition.postId = contentId;
+            }
+            else if (contentType === LikeType.COMMENT) {
+                whereCondition.commentId = contentId;
+            }
+            else {
+                throw new Error(`Invalid contentType: ${contentType}`);
+            }
+            const existingLike = await connection_1.prisma.like.findFirst({
+                where: whereCondition
             });
             if (existingLike) {
                 await connection_1.prisma.like.delete({
                     where: {
-                        userId_contentId_contentType: {
-                            userId,
-                            contentId,
-                            contentType
-                        }
+                        id: existingLike.id
                     }
                 });
+                const countWhere = {};
+                if (contentType === LikeType.POST) {
+                    countWhere.postId = contentId;
+                }
+                else {
+                    countWhere.commentId = contentId;
+                }
                 const likeCount = await connection_1.prisma.like.count({
-                    where: {
-                        contentId,
-                        contentType
-                    }
+                    where: countWhere
                 });
                 logger_1.logger.info('Content unliked', { userId, contentId, contentType, likeCount });
                 return { success: true, liked: false, likeCount };
             }
             else {
+                const createData = {
+                    userId
+                };
+                if (contentType === LikeType.POST) {
+                    createData.postId = contentId;
+                }
+                else {
+                    createData.commentId = contentId;
+                }
                 await connection_1.prisma.like.create({
-                    data: {
-                        userId,
-                        contentId,
-                        contentType
-                    }
+                    data: createData
                 });
+                const countWhere = {};
+                if (contentType === LikeType.POST) {
+                    countWhere.postId = contentId;
+                }
+                else {
+                    countWhere.commentId = contentId;
+                }
                 const likeCount = await connection_1.prisma.like.count({
-                    where: {
-                        contentId,
-                        contentType
-                    }
+                    where: countWhere
                 });
                 logger_1.logger.info('Content liked', { userId, contentId, contentType, likeCount });
                 return { success: true, liked: true, likeCount };
@@ -64,21 +77,26 @@ class LikeService {
     }
     async getLikeStatus(userId, contentId, contentType) {
         try {
+            const whereCondition = { userId };
+            if (contentType === LikeType.POST) {
+                whereCondition.postId = contentId;
+            }
+            else {
+                whereCondition.commentId = contentId;
+            }
+            const countWhere = {};
+            if (contentType === LikeType.POST) {
+                countWhere.postId = contentId;
+            }
+            else {
+                countWhere.commentId = contentId;
+            }
             const [liked, likeCount] = await Promise.all([
-                connection_1.prisma.like.findUnique({
-                    where: {
-                        userId_contentId_contentType: {
-                            userId,
-                            contentId,
-                            contentType
-                        }
-                    }
+                connection_1.prisma.like.findFirst({
+                    where: whereCondition
                 }),
                 connection_1.prisma.like.count({
-                    where: {
-                        contentId,
-                        contentType
-                    }
+                    where: countWhere
                 })
             ]);
             return {
@@ -93,12 +111,16 @@ class LikeService {
     }
     async getContentLikes(contentId, contentType, page = 1, limit = 20) {
         const skip = (page - 1) * limit;
+        const whereCondition = {};
+        if (contentType === LikeType.POST) {
+            whereCondition.postId = contentId;
+        }
+        else {
+            whereCondition.commentId = contentId;
+        }
         const [likes, total] = await Promise.all([
             connection_1.prisma.like.findMany({
-                where: {
-                    contentId,
-                    contentType
-                },
+                where: whereCondition,
                 include: {
                     user: {
                         select: {
@@ -114,10 +136,7 @@ class LikeService {
                 take: limit
             }),
             connection_1.prisma.like.count({
-                where: {
-                    contentId,
-                    contentType
-                }
+                where: whereCondition
             })
         ]);
         return {
@@ -133,8 +152,11 @@ class LikeService {
     async getUserLikes(userId, contentType, page = 1, limit = 20) {
         const skip = (page - 1) * limit;
         const where = { userId };
-        if (contentType) {
-            where.contentType = contentType;
+        if (contentType === LikeType.POST) {
+            where.postId = { not: null };
+        }
+        else if (contentType === LikeType.COMMENT) {
+            where.commentId = { not: null };
         }
         const [likes, total] = await Promise.all([
             connection_1.prisma.like.findMany({
@@ -147,7 +169,14 @@ class LikeService {
                             lastName: true,
                             profileImage: true
                         }
-                    }
+                    },
+                    post: contentType === LikeType.POST ? {
+                        select: {
+                            id: true,
+                            title: true,
+                            excerpt: true
+                        }
+                    } : undefined
                 },
                 orderBy: { createdAt: 'desc' },
                 skip,
@@ -166,17 +195,20 @@ class LikeService {
         };
     }
     async getLikeStats(contentId, contentType) {
+        const countWhere = {};
+        if (contentType === LikeType.POST) {
+            countWhere.postId = contentId;
+        }
+        else {
+            countWhere.commentId = contentId;
+        }
         const [totalLikes, recentLikes] = await Promise.all([
             connection_1.prisma.like.count({
-                where: {
-                    contentId,
-                    contentType
-                }
+                where: countWhere
             }),
             connection_1.prisma.like.count({
                 where: {
-                    contentId,
-                    contentType,
+                    ...countWhere,
                     createdAt: {
                         gte: new Date(Date.now() - 24 * 60 * 60 * 1000)
                     }

@@ -12,6 +12,9 @@ class AgoraService {
     static generateRTCToken(request) {
         try {
             const { channelName, uid, role, expiry = 3600 } = request;
+            if (!this.appId || !this.appCertificate) {
+                throw new errors_1.ValidationError('Agora service is not configured. Please set AGORA_APP_ID and AGORA_APP_CERTIFICATE environment variables.');
+            }
             if (!channelName) {
                 throw new errors_1.ValidationError('Channel name is required');
             }

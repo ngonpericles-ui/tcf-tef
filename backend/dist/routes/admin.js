@@ -5,10 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminRoutes = void 0;
 const express_1 = require("express");
-const adminController_1 = require("../controllers/adminController");
-const settingsService_1 = require("../services/settingsService");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const adminController_1 = require("@/controllers/adminController");
+const settingsService_1 = require("@/services/settingsService");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
 const router = (0, express_1.Router)();
 exports.adminRoutes = router;
@@ -24,6 +24,9 @@ const createManagerSchema = joi_1.default.object({
 const updateManagerSchema = joi_1.default.object({
     firstName: joi_1.default.string().min(2).max(50).optional(),
     lastName: joi_1.default.string().min(2).max(50).optional(),
+    email: joi_1.default.string().email().optional(),
+    phone: joi_1.default.string().optional(),
+    password: joi_1.default.string().min(8).optional(),
     role: joi_1.default.string().valid('JUNIOR_MANAGER', 'SENIOR_MANAGER').optional(),
     status: joi_1.default.string().valid('ACTIVE', 'INACTIVE', 'SUSPENDED').optional()
 });
@@ -43,6 +46,8 @@ router.get('/managers', auth_1.authenticate, auth_1.requireAdmin, adminControlle
 router.post('/managers', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validate)(createManagerSchema), adminController_1.AdminController.createManager);
 router.put('/managers/:managerId', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validateParams)({ managerId: validation_1.commonSchemas.id }), (0, validation_1.validate)(updateManagerSchema), adminController_1.AdminController.updateManager);
 router.get('/managers/:managerId/performance', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validateParams)({ managerId: validation_1.commonSchemas.id }), adminController_1.AdminController.getManagerPerformance);
+router.delete('/managers/:managerId', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validateParams)({ managerId: validation_1.commonSchemas.id }), adminController_1.AdminController.deleteManager);
+router.get('/statistics', auth_1.authenticate, auth_1.requireAdmin, adminController_1.AdminController.getStatistics);
 router.get('/analytics', auth_1.authenticate, auth_1.requireAdmin, adminController_1.AdminController.getAnalytics);
 router.post('/analytics/reports', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validate)(reportConfigSchema), adminController_1.AdminController.generateReport);
 router.get('/analytics/export', auth_1.authenticate, auth_1.requireAdmin, adminController_1.AdminController.exportData);
@@ -126,10 +131,10 @@ router.put('/subscription-plans/:id', auth_1.authenticate, auth_1.requireAdmin, 
         billingCycle: joi_1.default.string().valid('monthly', 'quarterly', 'yearly').optional(),
         features: joi_1.default.array().items(joi_1.default.string()).optional(),
         featuresEn: joi_1.default.array().items(joi_1.default.string()).optional(),
-        maxSimulations: joi_1.default.number().min(0).optional(),
-        maxLiveSessions: joi_1.default.number().min(0).optional(),
-        maxCourses: joi_1.default.number().min(0).optional(),
-        maxTests: joi_1.default.number().min(0).optional(),
+        maxSimulations: joi_1.default.number().min(-1).allow(null).optional(),
+        maxLiveSessions: joi_1.default.number().min(-1).allow(null).optional(),
+        maxCourses: joi_1.default.number().min(-1).allow(null).optional(),
+        maxTests: joi_1.default.number().min(-1).allow(null).optional(),
         isActive: joi_1.default.boolean().optional(),
         isPopular: joi_1.default.boolean().optional(),
         sortOrder: joi_1.default.number().optional(),

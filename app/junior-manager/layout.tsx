@@ -41,31 +41,31 @@ export default function JuniorManagerLayout({ children }: { children: React.Reac
       name: t("Contenu", "Content"),
       href: "/manager/content",
       icon: BookOpen,
-      current: pathname.startsWith("/manager/content"),
+      current: pathname?.startsWith("/manager/content"),
     },
     {
       name: t("Sessions Live", "Live Sessions"),
       href: "/manager/sessions",
       icon: Video,
-      current: pathname.startsWith("/manager/sessions"),
+      current: pathname?.startsWith("/manager/sessions"),
     },
     {
       name: t("Étudiants", "Students"),
       href: "/manager/students",
       icon: Users,
-      current: pathname.startsWith("/manager/students"),
+      current: pathname?.startsWith("/manager/students"),
     },
     {
       name: t("Mon Feed", "My Feed"),
       href: "/manager/feed",
       icon: Rss,
-      current: pathname.startsWith("/manager/feed"),
+      current: pathname?.startsWith("/manager/feed"),
     },
     {
       name: t("Paramètres", "Settings"),
       href: "/manager/settings",
       icon: Settings,
-      current: pathname.startsWith("/manager/settings"),
+      current: pathname?.startsWith("/manager/settings"),
     },
   ]
 

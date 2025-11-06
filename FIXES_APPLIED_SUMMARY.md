@@ -206,7 +206,7 @@ const loadSessions = async () => {
 ### Quick Test
 1. Start backend: `cd backend && npm run dev`
 2. Start frontend: `cd frontend && npm run dev`
-3. Test admin login at `http://localhost:3003/admin/login`
+3. Test admin login at `http://localhost:3000/admin/login`
 4. Verify redirect to `/admin` dashboard
 5. Create a live session
 6. Login as student and verify session appears

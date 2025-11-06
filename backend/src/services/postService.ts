@@ -70,7 +70,12 @@ export class PostService {
     const orderBy: any = {};
     orderBy[sort.sortBy] = sort.sortOrder;
 
-    const [posts, total] = await Promise.all([
+    // Query posts with author and counts - handle missing relations gracefully
+    let posts: any[] = []
+    let total = 0
+    
+    try {
+      [posts, total] = await Promise.all([
       prisma.post.findMany({
         where,
         skip,
@@ -82,7 +87,10 @@ export class PostService {
               id: true,
               firstName: true,
               lastName: true,
-              role: true
+                role: true,
+                profileImage: true,
+                profilePicture: true,
+                email: true
             }
           },
           _count: {
@@ -93,12 +101,57 @@ export class PostService {
             }
           }
         }
-      }),
-      prisma.post.count({ where })
-    ]);
+        }).catch(async (error: any) => {
+          // If _count fails, try without it
+          logger.warn('Failed to fetch posts with _count, trying without', { error: error.message });
+          return await prisma.post.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy,
+            include: {
+              author: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  role: true,
+                  profileImage: true,
+                  profilePicture: true,
+                  email: true
+                }
+              }
+            }
+          }).then(posts => posts.map(post => ({
+            ...post,
+            _count: {
+              likes: 0,
+              comments: 0,
+              shares: 0
+            }
+          })));
+        }),
+        prisma.post.count({ where }).catch(() => 0)
+      ]);
+    } catch (error: any) {
+      logger.error('Failed to fetch posts', { error: error.message });
+      // Return empty results on error
+      posts = []
+      total = 0
+    }
+
+    // Map posts to include counts from _count field and format properly
+    const formattedPosts = posts.map(post => ({
+      ...post,
+      likes: post._count?.likes || 0,
+      comments: post._count?.comments || 0,
+      shares: post._count?.shares || 0,
+      views: post.viewCount || 0,
+      images: post.media ? [post.media] : []
+    }));
 
     return {
-      posts,
+      posts: formattedPosts,
       pagination: {
         page,
         limit,
@@ -172,8 +225,7 @@ export class PostService {
       const like = await prisma.like.findFirst({
         where: {
           userId,
-          contentId: postId,
-          contentType: 'POST'
+          postId: postId
         }
       });
       userLiked = !!like;
@@ -316,11 +368,12 @@ export class PostService {
    * Toggle like on post
    */
   static async toggleLike(postId: string, userId: string) {
+    try {
+      // Check if user already liked this post
     const existingLike = await prisma.like.findFirst({
       where: {
         userId,
-        contentId: postId,
-        contentType: 'POST'
+          postId: postId
       }
     });
 
@@ -331,27 +384,29 @@ export class PostService {
         where: { id: existingLike.id }
       });
       liked = false;
+        logger.info('Post unliked', { postId, userId });
     } else {
       // Like
       await prisma.like.create({
         data: {
           userId,
-          contentId: postId,
-          contentType: 'POST'
+            postId: postId
         }
       });
       liked = true;
+        logger.info('Post liked', { postId, userId });
     }
 
     // Get updated like count
     const likeCount = await prisma.like.count({
-      where: {
-        contentId: postId,
-        contentType: 'POST'
-      }
+        where: { postId: postId }
     });
 
     return { liked, likeCount };
+    } catch (error: any) {
+      logger.error('Failed to toggle post like', { postId, userId, error: error.message });
+      throw error;
+    }
   }
 
   /**
@@ -390,7 +445,11 @@ export class PostService {
           select: {
             id: true,
             firstName: true,
-            lastName: true
+            lastName: true,
+            email: true,
+            profileImage: true,
+            profilePicture: true,
+            role: true
           }
         },
         _count: {
@@ -425,7 +484,11 @@ export class PostService {
             select: {
               id: true,
               firstName: true,
-              lastName: true
+              lastName: true,
+              email: true,
+              profileImage: true,
+              profilePicture: true,
+              role: true
             }
           },
           replies: {
@@ -434,7 +497,11 @@ export class PostService {
                 select: {
                   id: true,
                   firstName: true,
-                  lastName: true
+                  lastName: true,
+                  email: true,
+                  profileImage: true,
+                  profilePicture: true,
+                  role: true
                 }
               }
             },

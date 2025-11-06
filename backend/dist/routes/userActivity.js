@@ -1,10 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const auth_1 = require("../middleware/auth");
-const client_1 = require("@prisma/client");
+const auth_1 = require("@/middleware/auth");
 const router = (0, express_1.Router)();
-router.get('/activity', auth_1.authenticate, (0, auth_1.authorize)(client_1.UserRole.STUDENT), async (req, res) => {
+router.get('/activity', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user.userId;
         res.json({

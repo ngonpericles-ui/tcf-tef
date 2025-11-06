@@ -5,6 +5,7 @@ import PageShell from "@/components/page-shell"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -37,6 +38,8 @@ import {
 import { useLang } from "@/components/language-provider"
 import { useAuth } from "@/hooks/useAuth"
 import apiClient from "@/lib/api-client"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 interface Manager {
   id: string
@@ -45,12 +48,17 @@ interface Manager {
   email: string
   role: string
   specialties: string[]
+  subjects?: string[] // Sujets (Grammaire, Expression Orale, etc.)
   rating: number
   totalSessions: number
   languages: string[]
-  availability: string[]
+  availability: string[] // Working time periods (disponibilité) - e.g., ["Lun-Ven"]
+  workingHours?: string[] // Specific time slots - e.g., ["Lundi: 09:00-12:00", "Mardi: 14:00-17:00"]
   bio: string
   profileImage?: string
+  isOnline?: boolean // Online status
+  status?: string // 'ONLINE' | 'OFFLINE'
+  acceptsMessages?: boolean // Whether tutor accepts messages from students
 }
 
 // Horaires disponibles
@@ -63,6 +71,7 @@ const timeSlots = [
 export default function AvantagesProPage() {
   const { lang } = useLang()
   const { user, loading: authLoading, isAuthenticated } = useAuth()
+  const router = useRouter()
   const t = (fr: string, en: string) => (lang === "fr" ? fr : en)
 
   // State for managers and sessions
@@ -74,7 +83,6 @@ export default function AvantagesProPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedSubject, setSelectedSubject] = useState("all")
   const [selectedAvailability, setSelectedAvailability] = useState("all")
-  const [sortBy, setSortBy] = useState("rating")
   const [selectedTrainer, setSelectedTrainer] = useState<any>(null)
   const [selectedDate, setSelectedDate] = useState<Date>()
   const [selectedTime, setSelectedTime] = useState("")
@@ -82,9 +90,64 @@ export default function AvantagesProPage() {
   const [selectedLevel, setSelectedLevel] = useState("")
   const [isBookingOpen, setIsBookingOpen] = useState(false)
 
+  // Dynamic filters from backend
+  const [subjects, setSubjects] = useState<string[]>([])
+  const [availabilityOptions, setAvailabilityOptions] = useState<string[]>([])
+  const [loadingFilters, setLoadingFilters] = useState(false)
+
+  // Track if data has been loaded to prevent multiple loads
+  const [dataLoaded, setDataLoaded] = useState(false)
+
+  // Fetch dynamic filters from backend
+  useEffect(() => {
+    const fetchFilters = async () => {
+      try {
+        setLoadingFilters(true)
+        
+        // Fetch subjects
+        const subjectsResponse = await apiClient.get('/marketplace/subjects') as any
+        if (subjectsResponse.success && Array.isArray(subjectsResponse.data)) {
+          setSubjects(subjectsResponse.data)
+        } else {
+          // Fallback to default subjects
+          setSubjects(["Grammaire", "Expression Orale", "Méthodologie TCF/TEF", "Vocabulaire", "Phonétique", "Conversation", "Compréhension Orale", "Compréhension Écrite", "Expression Écrite"])
+        }
+
+        // Fetch availability options
+        const availabilityResponse = await apiClient.get('/marketplace/availability-options') as any
+        if (availabilityResponse.success && Array.isArray(availabilityResponse.data)) {
+          setAvailabilityOptions(availabilityResponse.data)
+        } else {
+          // Fallback to default availability
+          setAvailabilityOptions(["Lun-Ven", "Mar-Sam", "Lun-Dim", "Mer-Dim", "Lun-Sam", "Lun-Ven 18h-23h"])
+        }
+      } catch (error) {
+        console.error('Error fetching filters:', error)
+        // Use fallback values
+        setSubjects(["Grammaire", "Expression Orale", "Méthodologie TCF/TEF", "Vocabulaire", "Phonétique", "Conversation", "Compréhension Orale", "Compréhension Écrite", "Expression Écrite"])
+        setAvailabilityOptions(["Lun-Ven", "Mar-Sam", "Lun-Dim", "Mer-Dim", "Lun-Sam", "Lun-Ven 18h-23h"])
+      } finally {
+        setLoadingFilters(false)
+      }
+    }
+
+    fetchFilters()
+  }, [])
 
   // Load managers and user sessions
   useEffect(() => {
+    // Skip if auth is still loading
+    if (authLoading) {
+      console.log('⏳ Auth still loading, skipping data load...')
+      return
+    }
+
+    // Skip if already loaded and user hasn't changed
+    if (dataLoaded && user?.email) {
+      console.log('✅ Data already loaded, skipping...')
+      return
+    }
+
     const loadData = async () => {
       console.log('🔍 Avantages Pro - Auth State:', {
         user: !!user,
@@ -211,42 +274,117 @@ export default function AvantagesProPage() {
         }
 
         // Fetch available tutors from marketplace (same source as marketplace page)
-        const tutorsResponse = await apiClient.get('/marketplace/tutors', {
-          params: {
-            search: searchTerm,
-            specialties: selectedSubject !== 'all' ? selectedSubject : undefined,
-            availability: selectedAvailability !== 'all' ? selectedAvailability : undefined,
-            sortBy: sortBy
-          }
-        })
+        // Don't pass search/filter params on initial load - filtering is done client-side
+        console.log('🔍 Fetching tutors from /marketplace/tutors...')
+        try {
+        const tutorsResponse = await apiClient.get('/marketplace/tutors')
+
+          console.log('📋 Tutors response:', {
+            success: tutorsResponse.success,
+            dataLength: tutorsResponse.data ? (Array.isArray(tutorsResponse.data) ? tutorsResponse.data.length : 1) : 0,
+            error: (tutorsResponse as any).error
+          })
 
         if (tutorsResponse.success && tutorsResponse.data) {
           const tutorsData = Array.isArray(tutorsResponse.data) ? tutorsResponse.data : []
+            console.log(`✅ Received ${tutorsData.length} tutors from API (same endpoint as student marketplace)`)
 
-          // Filter for only active marketplace profiles (admin + senior managers with isActive: true)
-          const activeTutors = tutorsData.filter((tutor: any) =>
-            tutor.isActive === true &&
-            (tutor.role === 'ADMIN' || tutor.role === 'SENIOR_MANAGER')
-          )
+            // Process tutors EXACTLY like student marketplace page
+            // Backend already filters for active profiles, so we just process the data
+            const transformedManagers: Manager[] = tutorsData
+              .filter((tutor: any) => tutor.isActive === true) // Only active profiles
+              .map((tutor: any) => {
+                // Use EXACT same processing logic as student marketplace
+                const fullName = tutor.fullName || `${tutor.firstName || ''} ${tutor.lastName || ''}`.trim() || 'Formateur'
+                
+                // Backend sends 'specialties' (not 'specialities') - match exactly
+                const specialties = Array.isArray(tutor.specialties) 
+                  ? tutor.specialties 
+                  : tutor.specialties 
+                  ? [tutor.specialties] 
+                  : []
+                
+                // Backend sends subjects (sujets)
+                const subjects = Array.isArray(tutor.subjects) 
+                  ? tutor.subjects 
+                  : tutor.subjects 
+                  ? [tutor.subjects] 
+                  : []
+                
+                // Backend sends languages as array
+                const languages = Array.isArray(tutor.languages) 
+                  ? tutor.languages 
+                  : tutor.languages 
+                  ? [tutor.languages] 
+                  : ['Français', 'Anglais']
+                
+                // Backend sends availability as array
+                const availability = Array.isArray(tutor.availability) 
+                  ? tutor.availability 
+                  : tutor.availability 
+                  ? [tutor.availability] 
+                  : ['Disponible']
+                
+                // Backend sends working hours (specific time slots)
+                const workingHours = Array.isArray(tutor.workingHours) 
+                  ? tutor.workingHours 
+                  : tutor.workingHours 
+                  ? [tutor.workingHours] 
+                  : []
+                
+                // Status from backend - backend sends 'ONLINE' or 'OFFLINE'
+                const isOnline = tutor.status === 'ONLINE'
+                
+                // Profile image URL handling (same as student marketplace)
+                const profileImage = tutor.profilePicture 
+                  ? (() => {
+                      if (tutor.profilePicture.startsWith('http')) return tutor.profilePicture
+                      let cleanPath = tutor.profilePicture.replace(/^\/+/, '')
+                      if (cleanPath.startsWith('uploads/')) {
+                        return `http://localhost:3001/${cleanPath}`
+                      } else {
+                        return `http://localhost:3001/uploads/${cleanPath}`
+                      }
+                    })()
+                  : null
+            
+            return {
+                  id: tutor.id || tutor.userId || '',
+                  firstName: tutor.firstName || '',
+                  lastName: tutor.lastName || '',
+              email: tutor.email || tutor.userId || `tutor${tutor.id}@aura.ca`,
+              role: tutor.role || 'TEACHER',
+                  specialties: specialties, // Same field name as backend
+                  subjects: subjects, // Sujets
+                  rating: 4.8, // Default rating - can be enhanced later
+                  totalSessions: 0, // Default - can be enhanced later
+                  languages: languages,
+                  availability: availability, // Working time periods (disponibilité)
+                  workingHours: workingHours, // Specific time slots
+              bio: tutor.bio || t("Expert certifié en français", "Certified French expert"),
+                  profileImage: profileImage,
+                  isOnline: isOnline,
+                  status: tutor.status || 'OFFLINE',
+                  acceptsMessages: tutor.acceptsMessages !== false // Default to true if not set
+            };
+          })
 
-          // Transform tutor data to match component expectations
-          const transformedManagers: Manager[] = activeTutors.map((tutor: any) => ({
-            id: tutor.id,
-            firstName: tutor.title?.includes('Admin') ? 'Admin' :
-                      tutor.title?.includes('Senior') ? 'Senior Manager' : 'Manager',
-            lastName: tutor.title || '',
-            email: tutor.userId || `tutor${tutor.id}@aura.ca`,
-            role: tutor.role || 'TEACHER',
-            specialties: tutor.specialties || ['Grammaire', 'Expression Orale'],
-            rating: tutor.rating || 4.8,
-            totalSessions: tutor.totalSessions || 0,
-            languages: tutor.languages || ['Français', 'Anglais'],
-            availability: tutor.availability || ['Lun-Ven'],
-            bio: tutor.bio || t("Expert certifié en français", "Certified French expert"),
-            profileImage: tutor.profileImage
-          }))
-
+            console.log(`✅ Processed ${transformedManagers.length} managers (same processing as student marketplace)`)
           setManagers(transformedManagers)
+          } else {
+            console.error('❌ Failed to fetch tutors:', {
+              success: tutorsResponse.success,
+              error: (tutorsResponse as any).error,
+              data: tutorsResponse.data
+            })
+            // Don't set error here - let the component show empty state
+          }
+        } catch (tutorsError: any) {
+          console.error('❌ Error fetching tutors:', tutorsError)
+          // Only set error if it's not an auth error (which is handled above)
+          if (tutorsError.response?.status !== 401 && tutorsError.response?.status !== 403) {
+            setError(t("Erreur lors du chargement des formateurs", "Error loading trainers"))
+          }
         }
 
         // Fetch user's one-on-one sessions
@@ -258,6 +396,9 @@ export default function AvantagesProPage() {
           setUserSessions(Array.isArray(sessionsResponse.data) ? sessionsResponse.data : [])
         }
 
+        // Mark data as loaded
+        setDataLoaded(true)
+
       } catch (error) {
         console.error('Error loading data:', error)
         setError(t("Erreur lors du chargement des données", "Error loading data"))
@@ -267,10 +408,8 @@ export default function AvantagesProPage() {
     }
 
     loadData()
-  }, [user, t])
-
-  const subjects = ["Grammaire", "Expression Orale", "Methodologie TCF/TEF", "Vocabulaire", "Phonétique", "Conversation", "Compréhension Orale", "Compréhension Ecrite", "Expression Ecrite"]
-  const availabilityOptions = ["Lun-Ven", "Mar-Sam", "Lun-Dim", "Mer-Dim", "Lun-Sam", "Lun-Ven 18h-23h"]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, authLoading]) // Only depend on auth state, not user object which changes frequently
   
   // Options pour la réservation
   const categoryOptions = ["Méthodologie TCF/TEF", "Vocabulaire", "Grammaire"]
@@ -278,32 +417,62 @@ export default function AvantagesProPage() {
 
   const filteredTrainers = managers.filter(manager => {
     const fullName = `${manager.firstName} ${manager.lastName}`
-    const matchesSearch = fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         manager.specialties.some(specialty => specialty.toLowerCase().includes(searchTerm.toLowerCase()))
-    const matchesSubject = selectedSubject === "all" || manager.specialties.includes(selectedSubject)
-    const matchesAvailability = selectedAvailability === "all" || manager.availability.includes(selectedAvailability)
+    
+    // Search term filter - if empty, match all
+    const matchesSearch = !searchTerm || searchTerm.trim() === "" ||
+      fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (manager.specialties && Array.isArray(manager.specialties) && manager.specialties.some((specialty: string) => specialty.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+      (manager.subjects && Array.isArray(manager.subjects) && manager.subjects.some((subject: string) => subject.toLowerCase().includes(searchTerm.toLowerCase())))
+    
+    // Match subject - check both specialties and subjects
+    const matchesSubject = selectedSubject === "all" || 
+      !selectedSubject ||
+      (manager.specialties && Array.isArray(manager.specialties) && manager.specialties.includes(selectedSubject)) ||
+      (manager.subjects && Array.isArray(manager.subjects) && manager.subjects.includes(selectedSubject))
+    
+    // Match availability - check working time
+    const matchesAvailability = selectedAvailability === "all" || 
+      !selectedAvailability ||
+      (manager.availability && Array.isArray(manager.availability) && manager.availability.includes(selectedAvailability))
 
     return matchesSearch && matchesSubject && matchesAvailability
   })
 
-  const sortedTrainers = [...filteredTrainers].sort((a, b) => {
-    switch (sortBy) {
-      case "rating":
-        return b.rating - a.rating
-      case "experience":
-        return b.totalSessions - a.totalSessions
-      case "students":
-        return b.totalSessions - a.totalSessions
-      default:
-        return 0
-    }
+  console.log('🔍 Filtering trainers:', {
+    totalManagers: managers.length,
+    filteredCount: filteredTrainers.length,
+    searchTerm,
+    selectedSubject,
+    selectedAvailability
   })
 
+  // Use filtered trainers directly without sorting
+  const sortedTrainers = filteredTrainers
 
 
-  const handleBooking = (trainer: Manager) => {
-    setSelectedTrainer(trainer)
-    setIsBookingOpen(true)
+
+  const handleBooking = async (trainer: Manager) => {
+    // Create one-on-one session request directly
+    try {
+      const response = await apiClient.post('/marketplace/requests', {
+        tutorId: trainer.id,
+        requestType: 'SESSION',
+        subject: t("Demande de session 1-on-1", "One-on-one session request"),
+        description: t("Demande de session individuelle avec {name}", `Individual session request with ${trainer.firstName} ${trainer.lastName}`),
+        urgency: 'MEDIUM',
+        requestedDate: new Date().toISOString()
+      })
+      
+      if (response.success) {
+        toast.success(t("Demande de session envoyée avec succès", "Session request sent successfully"))
+        // Refresh trainers list to update request count if needed
+      } else {
+        toast.error(response.error?.message || t("Erreur lors de l'envoi de la demande", "Error sending request"))
+      }
+    } catch (error: any) {
+      console.error('Error creating session request:', error)
+      toast.error(t("Erreur lors de l'envoi de la demande", "Error sending request"))
+    }
   }
 
   const confirmBooking = async () => {
@@ -595,20 +764,6 @@ export default function AvantagesProPage() {
                 </select>
               </div>
               
-              {/* Tri */}
-              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                <span className="text-sm text-gray-600 dark:text-gray-300">{t("Trier par:", "Sort by:")}</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-green-500 focus:ring-green-500"
-                >
-                  <option value="rating">{t("Note", "Rating")}</option>
-                  <option value="experience">{t("Expérience", "Experience")}</option>
-                  <option value="students">{t("Élèves", "Students")}</option>
-                  <option value="price">{t("Prix", "Price")}</option>
-                </select>
-              </div>
             </div>
           </div>
         </section>
@@ -621,7 +776,7 @@ export default function AvantagesProPage() {
                 {t("Formateurs Disponibles", "Available Trainers")}
               </h2>
               <span className="text-gray-600">
-                {sortedTrainers.length} {t("formateurs", "trainers")}
+                {managers.length > 0 ? sortedTrainers.length : 0} {t("formateurs", "trainers")}
               </span>
             </div>
             
@@ -652,7 +807,21 @@ export default function AvantagesProPage() {
                   </Button>
                 )}
               </div>
-            ) : managers.length > 0 ? (
+            ) : managers.length === 0 ? (
+              <div className="text-center py-12">
+                <Card className="bg-white dark:bg-gray-800 shadow-sm">
+                  <CardContent className="text-center py-12">
+                    <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                      {t("Aucun formateur disponible", "No trainers available")}
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">
+                      {t("Aucun formateur disponible pour le moment. Les formateurs certifiés apparaîtront ici lorsqu'ils activeront leurs profils marketplace.", "No trainers available at the moment. Certified trainers will appear here when they activate their marketplace profiles.")}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : sortedTrainers.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {sortedTrainers.map((trainer) => (
                   <div
@@ -664,9 +833,14 @@ export default function AvantagesProPage() {
                       <div className="flex items-start gap-4">
                         <div className="relative">
                           <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-2xl font-bold text-gray-600">
-                            {`${trainer.firstName[0]}${trainer.lastName[0]}`}
+                            {trainer.profileImage ? (
+                              <img src={trainer.profileImage} alt={`${trainer.firstName} ${trainer.lastName}`} className="w-full h-full rounded-full object-cover" />
+                            ) : (
+                              `${trainer.firstName[0]}${trainer.lastName[0]}`
+                            )}
                           </div>
-                          <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white bg-green-500" />
+                          {/* Online/Offline status indicator */}
+                          <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${trainer.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
                         </div>
 
                         <div className="flex-1 min-w-0">
@@ -677,12 +851,20 @@ export default function AvantagesProPage() {
 
                           <p className="text-sm text-gray-600 mb-2">{trainer.role}</p>
 
-                          <div className="flex items-center gap-2 mb-3">
+                          <div className="flex items-center gap-2 mb-2">
                             <div className="flex items-center gap-1">
                               <Star className="h-4 w-4 text-yellow-500 fill-current" />
                               <span className="text-sm font-medium text-foreground">{trainer.rating}</span>
                             </div>
                             <span className="text-sm text-gray-500">({trainer.totalSessions} sessions)</span>
+                          </div>
+                          
+                          {/* Online status */}
+                          <div className="flex items-center gap-1 text-xs">
+                            <div className={`w-2 h-2 rounded-full ${trainer.isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+                            <span className={trainer.isOnline ? 'text-green-600' : 'text-gray-500'}>
+                              {trainer.isOnline ? t("En ligne", "Online") : t("Hors ligne", "Offline")}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -694,21 +876,68 @@ export default function AvantagesProPage() {
                         {trainer.bio}
                       </p>
                       
-                      {/* Spécialisations */}
+                      {/* Spécialisations et Sujets */}
                       <div className="flex flex-wrap gap-1 mb-4">
                         {trainer.specialties?.slice(0, 2).map((spec: string, idx: number) => (
                           <Badge key={idx} variant="outline" className="text-xs border-green-200 text-green-700 bg-green-50">
                             {spec}
                           </Badge>
                         ))}
+                        {trainer.subjects && trainer.subjects.length > 0 && trainer.subjects.slice(0, 3).map((subject: string, idx: number) => (
+                          <Badge key={`subject-${idx}`} variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
+                            {subject}
+                          </Badge>
+                        ))}
                       </div>
                       
                       {/* Informations pratiques */}
                       <div className="space-y-2 text-sm text-gray-600 mb-4">
-                        <div className="flex items-center gap-2">
+                        {/* Working time periods (disponibilité) */}
+                        {trainer.availability && trainer.availability.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <Clock className="h-4 w-4 mt-0.5" />
+                            <div className="flex-1">
+                              <span className="text-xs font-medium mb-1 block">{t("Périodes", "Periods")}:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {trainer.availability.slice(0, 2).map((avail: string, idx: number) => (
+                                  <span key={idx} className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                                    {avail}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Working hours (specific time slots) */}
+                        {trainer.workingHours && trainer.workingHours.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <Clock className="h-4 w-4 mt-0.5" />
+                            <div className="flex-1">
+                              <span className="text-xs font-medium mb-1 block">{t("Horaires", "Hours")}:</span>
+                              <div className="flex flex-wrap gap-1">
+                                {trainer.workingHours.slice(0, 2).map((hours: string, idx: number) => (
+                                  <span key={idx} className="text-xs bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded border border-blue-200 dark:border-blue-800">
+                                    {hours}
+                                  </span>
+                                ))}
+                                {trainer.workingHours.length > 2 && (
+                                  <span className="text-xs text-gray-500">
+                                    +{trainer.workingHours.length - 2}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {(!trainer.availability || trainer.availability.length === 0) && (!trainer.workingHours || trainer.workingHours.length === 0) && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
                           <Clock className="h-4 w-4" />
-                          <span>{trainer.availability || "Non spécifié"}</span>
+                            <span>{t("Non spécifié", "Not specified")}</span>
                         </div>
+                        )}
+                        
                         <div className="flex items-center gap-2">
                           <Award className="h-4 w-4" />
                           <span>{trainer.totalSessions} sessions</span>
@@ -726,10 +955,88 @@ export default function AvantagesProPage() {
                         <div className="text-xs text-gray-500 line-through">15000 CFA/h</div>
                       </div>
                       
-                      <div className="flex justify-center">
+                      <div className="flex gap-2">
                         <Button
                           size="sm"
-                          className="w-full bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                          variant="outline"
+                          className="flex-1 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          onClick={async () => {
+                            try {
+                              // Check if trainer accepts messages
+                              const acceptsMessages = trainer.acceptsMessages !== false
+                              if (!acceptsMessages) {
+                                toast.error(t("Ce formateur n'accepte pas les messages", "This trainer does not accept messages"))
+                                return
+                              }
+                              
+                              // Show loading state
+                              const loadingToast = toast.loading(t("Création de la conversation...", "Creating conversation..."))
+                              
+                              // Fetch trainer profile to ensure they exist and accept messages
+                              const tutorsResponse = await apiClient.get('/marketplace/tutors')
+                              if (!tutorsResponse.success || !tutorsResponse.data) {
+                                toast.dismiss(loadingToast)
+                                toast.error(t("Impossible de récupérer les informations du formateur", "Unable to fetch trainer information"))
+                                return
+                              }
+                              
+                              const tutors = Array.isArray(tutorsResponse.data) ? tutorsResponse.data : []
+                              const foundTrainer = tutors.find((t: any) => t.id === trainer.id)
+                              
+                              if (!foundTrainer) {
+                                toast.dismiss(loadingToast)
+                                toast.error(t("Formateur introuvable", "Trainer not found"))
+                                return
+                              }
+                              
+                              // Verify trainer accepts messages
+                              const trainerAcceptsMessages = foundTrainer.acceptsMessages !== false
+                              if (!trainerAcceptsMessages) {
+                                toast.dismiss(loadingToast)
+                                toast.error(t("Ce formateur n'accepte pas les messages", "This trainer does not accept messages"))
+                                return
+                              }
+                              
+                              // Send an initial greeting message to create the conversation properly
+                              try {
+                                const messageResponse = await apiClient.post('/messages', {
+                                  receiverId: trainer.id,
+                                  content: t("Bonjour ! Je souhaite commencer une conversation avec vous.", "Hello! I would like to start a conversation with you."),
+                                  subject: t("Nouvelle conversation", "New conversation")
+                                })
+                                
+                                if (messageResponse.success) {
+                                  toast.dismiss(loadingToast)
+                                  toast.success(t("Conversation créée avec succès", "Conversation created successfully"))
+                                  router.push(`/messages?contact=${trainer.id}`)
+                                } else {
+                                  // Even if message fails, redirect anyway
+                                  toast.dismiss(loadingToast)
+                                  console.warn('Initial message failed, but redirecting anyway:', messageResponse.error)
+                                  router.push(`/messages?contact=${trainer.id}`)
+                                }
+                              } catch (messageError: any) {
+                                // If sending message fails, still redirect - conversation will be created on first message
+                                toast.dismiss(loadingToast)
+                                console.warn('Error sending initial message, but redirecting anyway:', messageError)
+                                router.push(`/messages?contact=${trainer.id}`)
+                              }
+                            } catch (error: any) {
+                              console.error('Error creating conversation:', error)
+                              toast.error(t("Erreur lors de la création de la conversation", "Error creating conversation"))
+                            }
+                          }}
+                          disabled={trainer.acceptsMessages === false}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          {trainer.acceptsMessages === false 
+                            ? t("Messages désactivés", "Messages disabled")
+                            : t("Message", "Message")
+                          }
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-lg"
                           onClick={() => handleBooking(trainer)}
                         >
                           <CalendarIcon className="h-4 w-4 mr-2" />
@@ -742,17 +1049,30 @@ export default function AvantagesProPage() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
-                  <UserCheck className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 text-foreground">
-                  {t("Aucun formateur disponible", "No trainers available")}
+                  <Card className="bg-white dark:bg-gray-800 shadow-sm">
+                    <CardContent className="text-center py-12">
+                      <MessageCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                        {t("Aucun formateur trouvé", "No trainers found")}
                 </h3>
-                <p className="text-muted-foreground">
-                  {t("Les formateurs seront bientôt disponibles", "Trainers will be available soon")}
-                </p>
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">
+                        {t("Aucun formateur ne correspond à vos critères de filtrage. Essayez de modifier vos filtres.", "No trainers match your filtering criteria. Try modifying your filters.")}
+                      </p>
+                      <Button 
+                        onClick={() => {
+                          setSearchTerm("")
+                          setSelectedSubject("all")
+                          setSelectedAvailability("all")
+                        }}
+                        variant="outline"
+                      >
+                        {t("Réinitialiser les filtres", "Reset filters")}
+                      </Button>
+                    </CardContent>
+                  </Card>
               </div>
-            )}
+              )
+            }
           </div>
         </section>
 
