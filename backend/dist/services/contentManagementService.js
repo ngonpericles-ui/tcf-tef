@@ -40,6 +40,22 @@ class ContentManagementService {
                 if (uploadData.contentType === 'VIDEO') {
                     thumbnailUrl = cloudinaryService_1.CloudinaryService.getVideoThumbnailUrl(uploadResult.public_id);
                 }
+                try {
+                    const fs = require('fs');
+                    if (fs.existsSync(uploadData.file.path)) {
+                        await fs.promises.unlink(uploadData.file.path);
+                        logger_1.logger.info('Local file deleted after Cloudinary upload', {
+                            filePath: uploadData.file.path,
+                            contentType: uploadData.contentType
+                        });
+                    }
+                }
+                catch (unlinkError) {
+                    logger_1.logger.warn('Failed to delete local file after Cloudinary upload', {
+                        filePath: uploadData.file.path,
+                        error: unlinkError
+                    });
+                }
             }
             let content;
             let analysis;

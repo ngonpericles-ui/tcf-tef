@@ -43,11 +43,34 @@ const jwt_1 = require("@/utils/jwt");
 const admin = __importStar(require("firebase-admin"));
 const path_1 = __importDefault(require("path"));
 if (!admin.apps.length) {
-    const serviceAccountPath = path_1.default.join(__dirname, '../../tcftef-68b4c-firebase-adminsdk-fbsvc-49c8267271.json');
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccountPath),
-        projectId: 'tcftef-68b4c'
-    });
+    try {
+        if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+            admin.initializeApp({
+                credential: admin.credential.cert({
+                    projectId: process.env.FIREBASE_PROJECT_ID,
+                    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL
+                }),
+                projectId: process.env.FIREBASE_PROJECT_ID
+            });
+        }
+        else {
+            const serviceAccountPath = path_1.default.join(__dirname, '../../tcftef-68b4c-firebase-adminsdk-fbsvc-49c8267271.json');
+            if (require('fs').existsSync(serviceAccountPath)) {
+                admin.initializeApp({
+                    credential: admin.credential.cert(serviceAccountPath),
+                    projectId: 'tcftef-68b4c'
+                });
+            }
+            else {
+                console.warn('⚠️ Firebase credentials not found. Google authentication will not work.');
+            }
+        }
+    }
+    catch (error) {
+        console.error('❌ Firebase initialization error:', error);
+        console.warn('⚠️ Google authentication will not work.');
+    }
 }
 const { ValidationError, ConflictError, NotFoundError, AuthenticationError } = require('../utils/errors.js');
 const client_1 = require("@prisma/client");

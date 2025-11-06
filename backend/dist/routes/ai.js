@@ -694,10 +694,26 @@ router.post('/generate-questions', auth_1.authenticate, async (req, res, next) =
         }
         const validQuestionCount = Math.min(Math.max(1, questionCount), 30);
         const result = await aiService_1.AIService.generateQuestions(content, lessonTitle, courseTitle, validQuestionCount, questionTypes, category, difficulty);
-        res.json({
-            success: true,
-            data: result
+        console.log('✅ AI Questions Generated:', {
+            questionCount: result.questions?.length || 0,
+            lessonTitle,
+            courseTitle,
+            validQuestionCount,
+            firstQuestion: result.questions?.[0]
         });
+        const responseData = {
+            success: true,
+            data: {
+                questions: result.questions || []
+            },
+            message: `${result.questions?.length || 0} questions générées avec succès`
+        };
+        console.log('📤 Sending response:', {
+            success: responseData.success,
+            questionCount: responseData.data.questions.length,
+            hasQuestions: responseData.data.questions.length > 0
+        });
+        res.json(responseData);
     }
     catch (error) {
         next(error);
@@ -711,7 +727,18 @@ router.post('/generate-questions-from-file', auth_1.authenticate, upload.single(
                 error: 'No file uploaded'
             });
         }
-        const { lessonTitle, courseTitle, questionCount = 5 } = req.body;
+        const { lessonTitle, courseTitle, questionCount = 5, difficulty = 'medium', category = 'GENERAL', level = 'B1' } = req.body;
+        console.log('📄 File upload request:', {
+            fileName: req.file?.originalname,
+            fileSize: req.file?.size,
+            fileType: req.file?.mimetype,
+            lessonTitle,
+            courseTitle,
+            questionCount,
+            difficulty,
+            category,
+            level
+        });
         if (!lessonTitle || !courseTitle) {
             if (fs_1.default.existsSync(req.file.path)) {
                 fs_1.default.unlinkSync(req.file.path);
@@ -723,12 +750,16 @@ router.post('/generate-questions-from-file', auth_1.authenticate, upload.single(
         }
         let extractedText = '';
         if (req.file.mimetype === 'application/pdf') {
+            console.log('📖 Extracting text from PDF...');
             const pdfBuffer = fs_1.default.readFileSync(req.file.path);
             const pdfData = await (0, pdf_parse_1.default)(pdfBuffer);
             extractedText = pdfData.text;
+            console.log(`✅ Extracted ${extractedText.length} characters from PDF`);
         }
         else if (req.file.mimetype === 'text/plain') {
+            console.log('📝 Reading text file...');
             extractedText = fs_1.default.readFileSync(req.file.path, 'utf-8');
+            console.log(`✅ Read ${extractedText.length} characters from text file`);
         }
         else if (req.file.mimetype === 'application/msword' ||
             req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
@@ -745,16 +776,46 @@ router.post('/generate-questions-from-file', auth_1.authenticate, upload.single(
                 error: 'Could not extract text from file'
             });
         }
-        const validQuestionCount = Math.min(Math.max(1, parseInt(questionCount) || 5), 20);
-        const result = await aiService_1.AIService.generateQuestions(extractedText, lessonTitle, courseTitle, validQuestionCount, ["multiple-choice", "true-false", "short-answer"]);
+        const isQuestionnaire = questionCount && questionCount <= 30;
+        const validQuestionCount = isQuestionnaire
+            ? Math.min(Math.max(1, parseInt(questionCount) || 5), 30)
+            : Math.min(Math.max(80, parseInt(questionCount) || 80), 150);
+        console.log('🤖 Generating questions with AI:', {
+            extractedTextLength: extractedText.length,
+            questionCount: validQuestionCount,
+            difficulty,
+            category,
+            level,
+            isQuestionnaire
+        });
+        const result = await aiService_1.AIService.generateQuestions(extractedText, lessonTitle, courseTitle, validQuestionCount, ["multiple-choice", "true-false", "short-answer"], category || 'GENERAL', difficulty || 'medium');
+        const formattedQuestions = (result.questions || []).map((q, index) => ({
+            id: `q_${Date.now()}_${index}`,
+            question: q.questionText || q.question || q.text || '',
+            type: q.type || 'open',
+            category: q.category || 'GENERAL',
+            level: q.level || 'B1',
+            options: q.options || [],
+            correctAnswer: q.correctAnswer || '',
+            points: q.points || 1,
+            keywords: q.keywords || [],
+            difficulty: q.difficulty || 5,
+            explanation: q.explanation || ''
+        }));
         if (fs_1.default.existsSync(req.file.path)) {
             fs_1.default.unlinkSync(req.file.path);
         }
         res.json({
             success: true,
             data: {
-                ...result,
-                extractedText: extractedText.substring(0, 500) + '...'
+                questions: formattedQuestions,
+                metadata: {
+                    totalQuestions: formattedQuestions.length,
+                    categories: [...new Set(formattedQuestions.map((q) => q.category))],
+                    levels: [...new Set(formattedQuestions.map((q) => q.level))],
+                    extractionDate: new Date()
+                },
+                extractedText: extractedText,
             }
         });
     }

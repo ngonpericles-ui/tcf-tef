@@ -95,7 +95,18 @@ const errorHandler = (error, req, res, next) => {
     };
     if (environment_1.config.nodeEnv === 'development') {
         errorResponse.error.stack = error.stack;
+        if (error.name === 'ValidationError' && error.details) {
+            errorResponse.error.details = error.details;
+        }
     }
+    console.error('❌ Error Response:', {
+        statusCode,
+        message,
+        code,
+        url: req.url,
+        method: req.method,
+        body: req.body
+    });
     res.status(statusCode).json(errorResponse);
 };
 exports.errorHandler = errorHandler;

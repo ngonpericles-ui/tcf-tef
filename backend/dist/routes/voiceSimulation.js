@@ -1430,7 +1430,10 @@ router.get('/question-bank/sujets', async (req, res) => {
         const questionBanks = await prisma.questionBank.findMany({
             where: {
                 isActive: true,
-                category: 'GENERAL'
+                OR: [
+                    { category: 'GENERAL' },
+                    { category: 'IMMIGRATION' }
+                ]
             },
             select: {
                 id: true,
@@ -1444,7 +1447,7 @@ router.get('/question-bank/sujets', async (req, res) => {
                 createdAt: 'desc'
             }
         });
-        console.log(`📚 Found ${questionBanks.length} question banks for voice simulation`);
+        console.log(`📚 Found ${questionBanks.length} question banks for voice simulation (shared with immigration)`);
         const allSujets = new Set();
         questionBanks.forEach(bank => {
             if (bank.extractedQuestions && Array.isArray(bank.extractedQuestions)) {
@@ -1559,7 +1562,10 @@ router.get('/question-bank/sujets', async (req, res) => {
         const questionBanks = await prisma.questionBank.findMany({
             where: {
                 isActive: true,
-                category: 'GENERAL'
+                OR: [
+                    { category: 'GENERAL' },
+                    { category: 'IMMIGRATION' }
+                ]
             },
             select: {
                 id: true,
@@ -1573,7 +1579,7 @@ router.get('/question-bank/sujets', async (req, res) => {
                 createdAt: 'desc'
             }
         });
-        console.log(`📚 Found ${questionBanks.length} question banks for voice simulation`);
+        console.log(`📚 Found ${questionBanks.length} question banks for voice simulation (shared with immigration)`);
         const allSujets = new Set();
         questionBanks.forEach(bank => {
             if (bank.extractedQuestions && Array.isArray(bank.extractedQuestions)) {

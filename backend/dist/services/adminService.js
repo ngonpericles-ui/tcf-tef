@@ -1500,14 +1500,84 @@ class AdminService {
     }
     static async createAudioSimulation(data) {
         try {
+            if (!data.title || data.title.trim().length < 3) {
+                throw new Error('Title is required and must be at least 3 characters');
+            }
+            if (!data.description || data.description.trim().length < 3) {
+                throw new Error('Description is required and must be at least 3 characters');
+            }
+            if (!data.subscription || !Array.isArray(data.subscription) || data.subscription.length === 0) {
+                throw new Error('At least one subscription tier must be selected');
+            }
+            const userId = data.userId || 'system';
+            if (data.extractedQuestions && Array.isArray(data.extractedQuestions) && data.extractedQuestions.length > 0) {
+                try {
+                    const questionBankService = (await Promise.resolve().then(() => __importStar(require('./questionBankService')))).default;
+                    const formattedQuestions = data.extractedQuestions.map((q, index) => ({
+                        id: `q_${Date.now()}_${index}`,
+                        question: typeof q === 'string' ? q : (q.question || q.text || q),
+                        type: typeof q === 'string' ? 'open' : (q.type || 'open'),
+                        category: typeof q === 'string' ? 'GENERAL' : (q.category || 'GENERAL'),
+                        level: typeof q === 'string' ? 'B1' : (q.level || 'B1'),
+                        keywords: typeof q === 'string' ? [] : (q.keywords || []),
+                        difficulty: typeof q === 'string' ? 5 : (q.difficulty || 5)
+                    }));
+                    const sujets = data.extractedQuestions.map((q) => typeof q === 'string' ? q : (q.question || q.text || q));
+                    if (formattedQuestions.length === 0) {
+                        throw new Error('No valid questions to save to QuestionBank');
+                    }
+                    const questionBank = await connection_1.prisma.questionBank.create({
+                        data: {
+                            managerId: userId,
+                            title: data.title || 'Extracted Questions from Audio Simulator',
+                            description: data.description || 'Questions extracted from audio simulation creation',
+                            extractedQuestions: formattedQuestions,
+                            level: (data.level || 'B1'),
+                            category: 'GENERAL',
+                            isActive: true
+                        }
+                    });
+                    logger_1.logger.info('QuestionBank created with validation', {
+                        questionBankId: questionBank.id,
+                        questionCount: formattedQuestions.length,
+                        category: questionBank.category,
+                        userId
+                    });
+                    logger_1.logger.info('Extracted questions saved to QuestionBank', {
+                        questionCount: formattedQuestions.length,
+                        userId
+                    });
+                }
+                catch (questionBankError) {
+                    logger_1.logger.error('Failed to save extracted questions to QuestionBank', {
+                        error: questionBankError.message,
+                        userId
+                    });
+                }
+            }
+            let voiceType = 'FEMALE';
+            if (data.voicePreference) {
+                const voicePref = String(data.voicePreference).toLowerCase();
+                if (voicePref.includes('male') && !voicePref.includes('female')) {
+                    voiceType = 'MALE';
+                }
+                else {
+                    voiceType = 'FEMALE';
+                }
+            }
             const simulation = await connection_1.prisma.voiceSimulation.create({
                 data: {
-                    userId: 'system',
+                    userId: userId,
                     scheduledDate: new Date(),
                     status: 'SCHEDULED',
-                    questionsData: data,
-                    duration: data.duration || 420,
-                    voicePreference: data.voicePreference || 'france_female_1'
+                    questionsData: {
+                        ...data,
+                        extractedQuestions: data.extractedQuestions || [],
+                        sujets: data.sujets || [],
+                        voicePreference: data.voicePreference || 'france_female_1'
+                    },
+                    duration: data.maxDuration || data.duration || 300,
+                    voicePreference: voiceType
                 }
             });
             return simulation;

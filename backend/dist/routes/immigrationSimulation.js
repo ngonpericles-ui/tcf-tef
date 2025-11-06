@@ -341,6 +341,89 @@ router.put('/reschedule/:id', auth_1.authenticate, async (req, res) => {
         });
     }
 });
+router.get('/question-bank/sujets', auth_1.authenticate, async (req, res) => {
+    try {
+        const questionBanks = await prisma.questionBank.findMany({
+            where: {
+                isActive: true,
+                OR: [
+                    { category: 'GENERAL' },
+                    { category: 'IMMIGRATION' }
+                ]
+            },
+            select: {
+                id: true,
+                title: true,
+                extractedQuestions: true,
+                level: true,
+                category: true,
+                createdAt: true
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+        console.log(`📚 Found ${questionBanks.length} question banks for immigration simulation`);
+        const allSujets = new Set();
+        questionBanks.forEach(bank => {
+            if (bank.extractedQuestions && Array.isArray(bank.extractedQuestions)) {
+                bank.extractedQuestions.forEach((q) => {
+                    if (q.question) {
+                        allSujets.add(q.question);
+                    }
+                });
+            }
+            else if (bank.extractedQuestions && typeof bank.extractedQuestions === 'object') {
+                const data = bank.extractedQuestions;
+                if (data.questions && Array.isArray(data.questions)) {
+                    data.questions.forEach((q) => {
+                        if (q.question) {
+                            allSujets.add(q.question);
+                        }
+                    });
+                }
+            }
+        });
+        const sujets = Array.from(allSujets);
+        console.log(`📝 Found ${sujets.length} sujets from question banks`);
+        if (sujets.length === 0) {
+            const defaultSujets = [
+                'Immigration et intégration',
+                'Vie quotidienne et culture',
+                'Travail et carrière',
+                'Éducation et formation',
+                'Santé et bien-être',
+                'Voyages et tourisme',
+                'Technologie et innovation',
+                'Environnement et développement durable'
+            ];
+            return res.json({
+                success: true,
+                data: {
+                    sujets: defaultSujets,
+                    source: 'default',
+                    message: 'Aucun contenu extrait trouvé - Utilisation des sujets par défaut'
+                }
+            });
+        }
+        res.json({
+            success: true,
+            data: {
+                sujets: sujets.sort(),
+                source: 'question_banks',
+                count: sujets.length,
+                message: `${sujets.length} sujets trouvés dans la banque de questions`
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error fetching sujets:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch sujets'
+        });
+    }
+});
 router.get('/:id', auth_1.authenticate, async (req, res) => {
     try {
         const { id } = req.params;

@@ -25,6 +25,7 @@ export declare class AIService {
     static generateQuestions(content: string, lessonTitle: string, courseTitle: string, questionCount?: number, questionTypes?: string[], category?: string, difficulty?: string): Promise<{
         questions: any[];
     }>;
+    private static generateRealisticOptions;
     static generateChatResponse(message: string, context: {
         lessonTitle: string;
         courseTitle: string;

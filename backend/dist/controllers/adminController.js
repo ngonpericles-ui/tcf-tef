@@ -400,14 +400,32 @@ AdminController.getAudioSimulation = (0, errorHandler_1.asyncHandler)(async (req
     res.status(200).json(response);
 });
 AdminController.createAudioSimulation = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const simulationData = req.body;
-    const simulation = await adminService_1.AdminService.createAudioSimulation(simulationData);
-    const response = {
-        success: true,
-        data: simulation,
-        message: 'Audio simulation created successfully'
-    };
-    res.status(201).json(response);
+    try {
+        console.log('📝 Creating audio simulation with data:', {
+            title: req.body.title,
+            description: req.body.description?.substring(0, 50),
+            descriptionLength: req.body.description?.length,
+            hasSubscription: Array.isArray(req.body.subscription),
+            subscriptionCount: req.body.subscription?.length,
+            hasExtractedQuestions: Array.isArray(req.body.extractedQuestions),
+            extractedQuestionsCount: req.body.extractedQuestions?.length
+        });
+        const simulationData = {
+            ...req.body,
+            userId: req.user?.id || req.user?.userId || 'system'
+        };
+        const simulation = await adminService_1.AdminService.createAudioSimulation(simulationData);
+        const response = {
+            success: true,
+            data: simulation,
+            message: 'Audio simulation created successfully'
+        };
+        res.status(201).json(response);
+    }
+    catch (error) {
+        console.error('❌ Error creating audio simulation:', error);
+        throw error;
+    }
 });
 AdminController.updateAudioSimulation = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;

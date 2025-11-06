@@ -48,6 +48,11 @@ class TestService {
                 throw new errorHandler_1.AuthorizationError('Access denied. Manager role required.');
             }
             const result = await connection_1.prisma.$transaction(async (tx) => {
+                const testDataWithFileUrl = testData;
+                const fileUrl = testDataWithFileUrl.fileUrl;
+                const tags = fileUrl
+                    ? [...testData.tags, `fileUrl:${fileUrl}`]
+                    : testData.tags;
                 const test = await tx.test.create({
                     data: {
                         title: testData.title,
@@ -60,7 +65,7 @@ class TestService {
                         questionCount: testData.questionCount,
                         difficulty: testData.difficulty,
                         passingScore: testData.passingScore,
-                        tags: testData.tags,
+                        tags: tags,
                         aiPowered: testData.aiPowered || false,
                         hasAIFeedback: testData.hasAIFeedback || false,
                         isOfficial: testData.isOfficial || false,
@@ -70,19 +75,63 @@ class TestService {
                     }
                 });
                 if (questionsData && questionsData.length > 0) {
-                    await tx.testQuestion.createMany({
-                        data: questionsData.map((question, index) => ({
+                    logger_1.logger.info('Creating questions', {
+                        testId: test.id,
+                        questionCount: questionsData.length,
+                        firstQuestion: questionsData[0]
+                    });
+                    const questionsToCreate = questionsData.map((question, index) => {
+                        let optionsJson = null;
+                        if (question.options) {
+                            if (Array.isArray(question.options)) {
+                                optionsJson = question.options;
+                            }
+                            else if (typeof question.options === 'object') {
+                                optionsJson = question.options;
+                            }
+                            else {
+                                logger_1.logger.warn('Invalid options format', { questionIndex: index, options: question.options });
+                                optionsJson = null;
+                            }
+                        }
+                        let correctAnswerJson;
+                        if (question.correctAnswer !== undefined && question.correctAnswer !== null) {
+                            correctAnswerJson = question.correctAnswer;
+                        }
+                        else {
+                            logger_1.logger.warn('Missing correctAnswer', { questionIndex: index });
+                            correctAnswerJson = question.type === 'multiple-choice' ? 0 : question.type === 'true-false' ? true : '';
+                        }
+                        const category = question.category || testData.category;
+                        const level = question.level || testData.level;
+                        logger_1.logger.info('Question data prepared', {
+                            index,
+                            questionText: question.questionText?.substring(0, 50),
+                            type: question.type,
+                            optionsIsArray: Array.isArray(optionsJson),
+                            correctAnswerType: typeof correctAnswerJson,
+                            category,
+                            level
+                        });
+                        return {
                             testId: test.id,
                             questionText: question.questionText,
                             type: question.type,
-                            options: question.options,
-                            correctAnswer: question.correctAnswer,
-                            points: question.points,
-                            explanation: question.explanation,
-                            order: question.order,
-                            level: question.level,
-                            category: testData.category
-                        }))
+                            options: optionsJson,
+                            correctAnswer: correctAnswerJson,
+                            points: question.points || 1,
+                            explanation: question.explanation || null,
+                            order: question.order || index + 1,
+                            level: level,
+                            category: category
+                        };
+                    });
+                    await tx.testQuestion.createMany({
+                        data: questionsToCreate
+                    });
+                    logger_1.logger.info('Questions created successfully', {
+                        testId: test.id,
+                        questionCount: questionsToCreate.length
                     });
                 }
                 const levels = testData.levels || [testData.level];
@@ -151,6 +200,8 @@ class TestService {
                         attempts: true
                     }
                 });
+            }, {
+                timeout: 30000,
             });
             if (!result) {
                 throw new Error('Failed to create test');
@@ -164,7 +215,35 @@ class TestService {
             return result;
         }
         catch (error) {
-            logger_1.logger.error('Failed to create test with questions', { testData, questionsData, createdById, error });
+            logger_1.logger.error('Failed to create test with questions', {
+                testData: {
+                    title: testData.title,
+                    category: testData.category,
+                    level: testData.level,
+                    type: testData.type
+                },
+                questionsDataCount: questionsData?.length,
+                firstQuestion: questionsData?.[0],
+                createdById,
+                error: {
+                    message: error.message,
+                    code: error.code,
+                    meta: error.meta,
+                    stack: error.stack
+                }
+            });
+            if (error.code === 'P2002') {
+                throw new errorHandler_1.ValidationError('A test with this title already exists');
+            }
+            else if (error.code === 'P2003') {
+                throw new errorHandler_1.ValidationError('Invalid reference: The test or related data is invalid');
+            }
+            else if (error.message?.includes('Invalid enum value')) {
+                throw new errorHandler_1.ValidationError(`Invalid enum value: ${error.message}. Please check category and level values.`);
+            }
+            else if (error.message?.includes('required')) {
+                throw new errorHandler_1.ValidationError(`Missing required field: ${error.message}`);
+            }
             throw error;
         }
     }
@@ -211,8 +290,66 @@ class TestService {
                     bestScore = Math.max(...completedAttempts.map(a => a.score));
                 }
             }
+            const transformedQuestions = test.questions.map((q) => {
+                const question = {
+                    id: q.id,
+                    text: q.questionText,
+                    questionText: q.questionText,
+                    questionTextEn: q.questionTextEn,
+                    type: q.type,
+                    correctAnswer: q.correctAnswer,
+                    allowPause: true,
+                    allowRewind: true,
+                    timeLimit: undefined,
+                    points: q.points,
+                    explanation: q.explanation
+                };
+                let options = q.options;
+                if (typeof options === 'string') {
+                    try {
+                        options = JSON.parse(options);
+                    }
+                    catch (e) {
+                        options = [];
+                    }
+                }
+                if (Array.isArray(options)) {
+                    question.options = options;
+                }
+                else if (options && typeof options === 'object') {
+                    if (options.choices && Array.isArray(options.choices)) {
+                        question.options = options.choices;
+                    }
+                    else if (Array.isArray(options)) {
+                        question.options = options;
+                    }
+                    else {
+                        question.options = [];
+                    }
+                    if (options.audioUrl) {
+                        question.audioUrl = options.audioUrl;
+                    }
+                    if (options.videoUrl) {
+                        question.videoUrl = options.videoUrl;
+                    }
+                    if (options.imageUrl) {
+                        question.imageUrl = options.imageUrl;
+                    }
+                }
+                else {
+                    question.options = [];
+                }
+                return question;
+            });
+            let fileUrl = undefined;
+            const fileUrlTag = test.tags.find(tag => tag.startsWith('fileUrl:'));
+            if (fileUrlTag) {
+                fileUrl = fileUrlTag.replace('fileUrl:', '');
+            }
             const testWithDetails = {
                 ...test,
+                questions: transformedQuestions,
+                fileUrl: fileUrl,
                 isFavorited: false,
                 bestScore,
                 attemptsCount
@@ -286,8 +423,14 @@ class TestService {
                         bestScore = Math.max(...completedAttempts.map(a => a.score));
                     }
                 }
+                let fileUrl = undefined;
+                const fileUrlTag = test.tags.find(tag => tag.startsWith('fileUrl:'));
+                if (fileUrlTag) {
+                    fileUrl = fileUrlTag.replace('fileUrl:', '');
+                }
                 return {
                     ...test,
+                    fileUrl: fileUrl,
                     isFavorited: false,
                     bestScore,
                     attemptsCount

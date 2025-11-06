@@ -164,19 +164,24 @@ router.get('/audio-simulations/:id', auth_1.authenticate, auth_1.requireAdmin, (
 router.post('/audio-simulations', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validate)({
     body: joi_1.default.object({
         title: joi_1.default.string().min(3).max(200).required(),
-        description: joi_1.default.string().min(10).max(1000).required(),
-        level: joi_1.default.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').required(),
-        category: joi_1.default.string().valid('GRAMMAR', 'LISTENING', 'READING', 'VOCABULARY', 'WRITING', 'ORAL', 'TCF_TEF').required(),
+        description: joi_1.default.string().min(1).max(2000).allow('').required(),
+        level: joi_1.default.string().valid('A1', 'A2', 'B1', 'B2', 'C1', 'C2').optional().default('B1'),
+        category: joi_1.default.string().valid('GRAMMAR', 'LISTENING', 'READING', 'VOCABULARY', 'WRITING', 'ORAL', 'TCF_TEF', 'GENERAL').optional().default('GENERAL'),
+        subscription: joi_1.default.array().items(joi_1.default.string()).optional().default([]),
+        duration: joi_1.default.number().min(60).max(1800).optional().default(420),
+        maxDuration: joi_1.default.number().min(60).max(1800).optional(),
+        instructions: joi_1.default.string().allow('').optional(),
+        sujets: joi_1.default.array().items(joi_1.default.string()).optional().default([]),
+        extractedQuestions: joi_1.default.array().items(joi_1.default.any()).optional().default([]),
         questions: joi_1.default.array().items(joi_1.default.object({
             question: joi_1.default.string().required(),
             type: joi_1.default.string().valid('multiple-choice', 'open-ended', 'scenario').required(),
             options: joi_1.default.array().items(joi_1.default.string()).optional(),
             correctAnswer: joi_1.default.string().optional(),
             points: joi_1.default.number().min(1).max(10).required()
-        })).min(1).required(),
-        duration: joi_1.default.number().min(60).max(1800).default(420),
-        voicePreference: joi_1.default.string().default('france_female_1'),
-        isActive: joi_1.default.boolean().default(true)
+        })).optional(),
+        voicePreference: joi_1.default.string().optional().default('france_female_1'),
+        isActive: joi_1.default.boolean().optional().default(true)
     })
 }), adminController_1.AdminController.createAudioSimulation);
 router.put('/audio-simulations/:id', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validate)({

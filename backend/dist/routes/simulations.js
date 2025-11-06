@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -946,6 +979,167 @@ router.get('/test-niveau', auth_1.authenticate, async (req, res, next) => {
             success: false,
             error: { message: 'Failed to fetch simulations' }
         });
+    }
+});
+router.post('/extract-questions', auth_1.authenticate, async (req, res, next) => {
+    try {
+        const { pdfUrl, simulationType, level } = req.body;
+        if (!pdfUrl) {
+            return res.status(400).json({
+                success: false,
+                error: { message: 'PDF URL is required' }
+            });
+        }
+        const { AIService } = await Promise.resolve().then(() => __importStar(require('../services/aiService')));
+        const pdfParse = (await Promise.resolve().then(() => __importStar(require('pdf-parse')))).default;
+        const axios = (await Promise.resolve().then(() => __importStar(require('axios')))).default;
+        const fs = (await Promise.resolve().then(() => __importStar(require('fs')))).default;
+        const path = (await Promise.resolve().then(() => __importStar(require('path')))).default;
+        const os = (await Promise.resolve().then(() => __importStar(require('os')))).default;
+        const response = await axios.get(pdfUrl, { responseType: 'arraybuffer' });
+        const pdfBuffer = Buffer.from(response.data);
+        const pdfData = await pdfParse(pdfBuffer);
+        const extractedText = pdfData.text;
+        if (!extractedText || extractedText.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: { message: 'Could not extract text from PDF' }
+            });
+        }
+        const questionCount = 25;
+        const questionTypes = ["multiple-choice", "true-false", "short-answer"];
+        const category = "reading";
+        const result = await AIService.generateQuestions(extractedText, `Simulation ${simulationType || 'TCF/TEF'}`, `Simulation ${simulationType || 'TCF/TEF'} - Niveau ${level || 'B1'}`, questionCount, questionTypes, category, "medium");
+        const transformedQuestions = result.questions.map((q, index) => {
+            let options = q.options || [];
+            if (!Array.isArray(options)) {
+                options = [];
+            }
+            if (q.type === "multiple-choice" && options.length < 4) {
+                while (options.length < 4) {
+                    options.push("");
+                }
+            }
+            let mappedType = "MULTIPLE_CHOICE";
+            if (q.type === "true-false") {
+                mappedType = "TRUE_FALSE";
+            }
+            else if (q.type === "short-answer") {
+                mappedType = "FILL_BLANK";
+            }
+            else if (q.type === "essay") {
+                mappedType = "ESSAY";
+            }
+            return {
+                id: `q_${Date.now()}_${index}`,
+                question: q.questionText || q.question || "",
+                type: mappedType,
+                options: options,
+                correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "multiple-choice" ? 0 : ""),
+                points: q.points || 1,
+                section: "comprehension_ecrite"
+            };
+        });
+        res.json({
+            success: true,
+            data: {
+                questions: transformedQuestions,
+                extractedText: extractedText.substring(0, 500) + '...'
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error extracting questions from PDF:', error);
+        next(error);
+    }
+});
+router.post('/', auth_1.authenticate, async (req, res, next) => {
+    try {
+        const userId = req.user.userId;
+        const { title, description, type, level, targetTier, questions, questionCount, sections, totalDuration, createdById } = req.body;
+        if (!title || !questions || questions.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: { message: 'Title and questions are required' }
+            });
+        }
+        const subscriptionTierMap = {
+            'FREE': 'FREE',
+            'ESSENTIAL': 'ESSENTIAL',
+            'PREMIUM': 'PREMIUM',
+            'PRO': 'PRO'
+        };
+        const requiredTier = subscriptionTierMap[targetTier] || 'FREE';
+        let category = 'READING';
+        if (sections && sections.length > 0) {
+            const firstSection = sections[0];
+            if (firstSection.key === 'comprehension_orale') {
+                category = 'LISTENING';
+            }
+            else if (firstSection.key === 'expression_ecrite') {
+                category = 'WRITING';
+            }
+            else if (firstSection.key === 'expression_orale') {
+                category = 'ORAL';
+            }
+        }
+        const test = await database_1.prisma.test.create({
+            data: {
+                title,
+                description: description || '',
+                type: 'PRACTICE',
+                level: level || 'B1',
+                category: category,
+                requiredTier: requiredTier,
+                duration: totalDuration || 60,
+                questionCount: questionCount || questions.length,
+                difficulty: 1,
+                passingScore: 60,
+                tags: [type || 'SIMULATION', level || 'B1'],
+                aiPowered: true,
+                hasAIFeedback: false,
+                isOfficial: false,
+                isPublished: true,
+                status: 'PUBLISHED',
+                createdById: createdById || userId
+            }
+        });
+        if (questions && questions.length > 0) {
+            await database_1.prisma.testQuestion.createMany({
+                data: questions.map((q, index) => {
+                    let optionsData = {};
+                    if (q.type === "MULTIPLE_CHOICE" && Array.isArray(q.options)) {
+                        optionsData.choices = q.options;
+                    }
+                    else if (q.options && !Array.isArray(q.options)) {
+                        optionsData = q.options;
+                    }
+                    return {
+                        testId: test.id,
+                        questionText: q.question || q.questionText || '',
+                        type: q.type || 'MULTIPLE_CHOICE',
+                        options: Object.keys(optionsData).length > 0 ? optionsData : (Array.isArray(q.options) ? q.options : []),
+                        correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "MULTIPLE_CHOICE" ? 0 : ""),
+                        points: q.points || 1,
+                        explanation: q.explanation || null,
+                        order: index + 1,
+                        level: level || 'B1',
+                        category: category
+                    };
+                })
+            });
+        }
+        res.json({
+            success: true,
+            data: {
+                test,
+                message: 'Simulation created successfully'
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error creating simulation:', error);
+        next(error);
     }
 });
 function groupQuestionsBySection(questions) {

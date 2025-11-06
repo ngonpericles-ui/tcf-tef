@@ -12,13 +12,25 @@ const validate = (schema) => {
             if (schema && typeof schema === 'object' && !schema.validate) {
                 const schemaObj = schema;
                 if (schemaObj.body) {
+                    console.log('🔍 Validation - Request body:', JSON.stringify(req.body, null, 2));
                     const { error, value } = schemaObj.body.validate(req.body, {
                         abortEarly: false,
                         stripUnknown: true
                     });
                     if (error) {
+                        console.error('❌ Validation errors:', {
+                            url: req.url,
+                            method: req.method,
+                            errors: error.details.map(d => ({
+                                path: d.path.join('.'),
+                                message: d.message,
+                                type: d.type,
+                                context: d.context
+                            })),
+                            receivedBody: JSON.stringify(req.body, null, 2)
+                        });
                         const errorMessage = error.details
-                            .map(detail => detail.message)
+                            .map(detail => `${detail.path.join('.')}: ${detail.message}`)
                             .join(', ');
                         throw new errors_1.ValidationError(errorMessage);
                     }
