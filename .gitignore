@@ -31,3 +31,5 @@ backend/*firebase*.json
 redis-stable/
 redis-stable.tar.gz
 backend/logs/*.log
+backend/tcftef-*-firebase-adminsdk-*.json
+backend/*firebase*.json
