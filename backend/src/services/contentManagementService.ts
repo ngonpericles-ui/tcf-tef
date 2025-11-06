@@ -117,6 +117,24 @@ export class ContentManagementService {
         if (uploadData.contentType === 'VIDEO') {
           thumbnailUrl = CloudinaryService.getVideoThumbnailUrl(uploadResult.public_id);
         }
+
+        // Clean up local file after successful Cloudinary upload
+        try {
+          const fs = require('fs');
+          if (fs.existsSync(uploadData.file.path)) {
+            await fs.promises.unlink(uploadData.file.path);
+            logger.info('Local file deleted after Cloudinary upload', {
+              filePath: uploadData.file.path,
+              contentType: uploadData.contentType
+            });
+          }
+        } catch (unlinkError) {
+          logger.warn('Failed to delete local file after Cloudinary upload', {
+            filePath: uploadData.file.path,
+            error: unlinkError
+          });
+          // Don't throw - Cloudinary upload succeeded, local cleanup failure is non-critical
+        }
       }
 
       // Create content based on type
