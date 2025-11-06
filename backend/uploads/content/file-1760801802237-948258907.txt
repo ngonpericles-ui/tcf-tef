@@ -1,5 +1,0 @@
-# Simulation TCF/TEF
-
-Simulation complète TCF/TEF
-
-This is test content for TCF_TEF.
