@@ -33,3 +33,5 @@ redis-stable.tar.gz
 backend/logs/*.log
 backend/tcftef-*-firebase-adminsdk-*.json
 backend/*firebase*.json
+backend/uploads/**
+cloudflared
