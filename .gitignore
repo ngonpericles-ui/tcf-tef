@@ -28,3 +28,6 @@ next-env.d.ts
 node_modules
 backend/tcftef-*-firebase-adminsdk-*.json
 backend/*firebase*.json
+redis-stable/
+redis-stable.tar.gz
+backend/logs/*.log
