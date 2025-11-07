@@ -5,7 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --exec \"ts-node --transpile-only -r tsconfig-paths/register src/server.ts\"",
-    "build": "NODE_OPTIONS=--max-old-space-size=4096 tsc && tsc-alias",
+    "build": "NODE_OPTIONS=--max-old-space-size=4096 tsc && tsc-alias && npm run copy:js",
+    "copy:js": "mkdir -p dist/utils && cp -r src/utils/*.js dist/utils/ 2>/dev/null || true",
     "postinstall": "npx prisma generate",
     "start": "node dist/server.js",
     "start:prod": "node dist/server.js",

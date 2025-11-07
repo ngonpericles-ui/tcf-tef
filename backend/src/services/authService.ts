@@ -10,16 +10,32 @@ if (!admin.apps.length) {
   try {
     // Option 1: Use environment variables (RECOMMENDED - no secrets in code)
     if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          privateKey: privateKey,
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL
         }),
         projectId: process.env.FIREBASE_PROJECT_ID
       });
+      console.log('✅ Firebase Admin SDK initialized with environment variables');
     } 
-    // Option 2: Fallback to JSON file (for local development only)
+    // Option 2: Use FIREBASE_SERVICE_ACCOUNT_JSON (base64 encoded JSON)
+    else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      try {
+        const serviceAccount = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON, 'base64').toString());
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          projectId: serviceAccount.project_id
+        });
+        console.log('✅ Firebase Admin SDK initialized with base64 JSON');
+      } catch (parseError) {
+        console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', parseError);
+        throw parseError;
+      }
+    }
+    // Option 3: Fallback to JSON file (for local development only)
     else {
       const serviceAccountPath = path.join(__dirname, '../../tcftef-68b4c-firebase-adminsdk-fbsvc-49c8267271.json');
       if (require('fs').existsSync(serviceAccountPath)) {
@@ -27,8 +43,10 @@ if (!admin.apps.length) {
           credential: admin.credential.cert(serviceAccountPath),
           projectId: 'tcftef-68b4c'
         });
+        console.log('✅ Firebase Admin SDK initialized with local JSON file');
       } else {
         console.warn('⚠️ Firebase credentials not found. Google authentication will not work.');
+        console.warn('⚠️ Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL environment variables');
       }
     }
   } catch (error) {
