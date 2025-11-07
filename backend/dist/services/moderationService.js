@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ModerationService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 class ModerationService {
     static async getUserReports() {
         try {

@@ -1,4 +1,4 @@
-import { JWTPayload, AuthTokens } from '@/types';
+import { JWTPayload, AuthTokens } from '../types';
 import { UserRole, SubscriptionTier } from '@prisma/client';
 export interface TokenPayload {
     userId: string;

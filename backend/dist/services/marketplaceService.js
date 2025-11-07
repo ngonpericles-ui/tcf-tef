@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MarketplaceService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 class MarketplaceService {
     static async getTutorProfile(userId) {
         try {

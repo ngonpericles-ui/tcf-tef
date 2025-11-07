@@ -61,6 +61,7 @@ import { RealTimeMessagingService } from './services/realTimeMessagingService';
 import { MessageQueueWorker } from './workers/messageQueueWorker';
 import { monitoringService } from './services/monitoringService';
 import { checkRedisHealth } from './config/redis';
+import { checkDatabaseHealth } from './config/database';
 
 const app = express();
 const server = createServer(app);

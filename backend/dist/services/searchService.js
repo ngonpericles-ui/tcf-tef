@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SearchService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 class SearchService {
     static async globalSearch(query, filters = {}, options = {}) {

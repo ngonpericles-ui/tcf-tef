@@ -64,6 +64,7 @@ const realTimeMessagingService_1 = require("./services/realTimeMessagingService"
 const messageQueueWorker_1 = require("./workers/messageQueueWorker");
 const monitoringService_1 = require("./services/monitoringService");
 const redis_1 = require("./config/redis");
+const database_1 = require("./config/database");
 const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 app.use((0, helmet_1.default)({
@@ -205,7 +206,7 @@ server.listen(PORT, async () => {
     console.log(`📨 Real-time messaging service initialized`);
     console.log(`⚡ Message queue worker initialized`);
     console.log(`📊 Monitoring service started`);
-    const dbHealth = await checkDatabaseHealth();
+    const dbHealth = await (0, database_1.checkDatabaseHealth)();
     const dbStatus = dbHealth.healthy ? 'Connected' : 'Connection failed';
     console.log(`🔗 Database: ${dbStatus}`);
     await new Promise(resolve => setTimeout(resolve, 2000));

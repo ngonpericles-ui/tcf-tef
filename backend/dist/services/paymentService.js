@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PaymentService = void 0;
 const stripe_1 = __importDefault(require("stripe"));
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const subscriptionService_1 = require("./subscriptionService");
