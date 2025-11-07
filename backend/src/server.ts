@@ -306,8 +306,6 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-export default app;
-
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
   
@@ -320,5 +318,3 @@ process.on('SIGINT', async () => {
   
   process.exit(0);
 });
-
-export default app;
