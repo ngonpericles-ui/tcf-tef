@@ -166,6 +166,8 @@ class MessageQueueWorker {
         }
     }
     async processDeliveryConfirmations() {
+        if (!this.redis)
+            return;
         while (this.isRunning) {
             try {
                 const confirmation = await this.redis.brpop('delivery_confirmation_queue', 1);
@@ -243,7 +245,9 @@ class MessageQueueWorker {
                 timestamp: new Date(),
                 workerId: this.workerId
             };
-            await this.redis.lpush('dead_letter_queue', JSON.stringify(deadLetterData));
+            if (this.redis) {
+                await this.redis.lpush('dead_letter_queue', JSON.stringify(deadLetterData)).catch(err => logger_1.logger.warn('Failed to add to dead letter queue:', err));
+            }
             logger_1.logger.warn('Message added to dead letter queue', {
                 messageId: messageData.id,
                 error: error.message,

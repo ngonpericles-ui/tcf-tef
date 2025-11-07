@@ -238,6 +238,8 @@ export class MessageQueueWorker {
    * Process delivery confirmations
    */
   private async processDeliveryConfirmations() {
+    if (!this.redis) return; // Exit if Redis not available
+    
     while (this.isRunning) {
       try {
         const confirmation = await this.redis.brpop('delivery_confirmation_queue', 1);
@@ -342,7 +344,11 @@ export class MessageQueueWorker {
         workerId: this.workerId
       };
 
-      await this.redis.lpush('dead_letter_queue', JSON.stringify(deadLetterData));
+      if (this.redis) {
+        await this.redis.lpush('dead_letter_queue', JSON.stringify(deadLetterData)).catch(err => 
+          logger.warn('Failed to add to dead letter queue:', err)
+        );
+      }
       
       logger.warn('Message added to dead letter queue', { 
         messageId: messageData.id,
