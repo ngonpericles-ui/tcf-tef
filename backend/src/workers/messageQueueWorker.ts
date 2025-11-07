@@ -288,6 +288,8 @@ export class MessageQueueWorker {
    * Process read receipts
    */
   private async processReadReceipts() {
+    if (!this.redis) return; // Exit if Redis not available
+    
     while (this.isRunning) {
       try {
         const receipt = await this.redis.brpop('read_receipt_queue', 1);
