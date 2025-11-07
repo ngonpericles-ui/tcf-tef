@@ -79,13 +79,17 @@ export class MessageQueueWorker {
   async stop() {
     this.isRunning = false;
     logger.info('Stopping message queue worker', { workerId: this.workerId });
-    await this.redis.quit();
+    if (this.redis) {
+      await this.redis.quit().catch(err => logger.warn('Error closing Redis:', err));
+    }
   }
 
   /**
    * Process messages from the queue
    */
   private async processMessages() {
+    if (!this.redis) return; // Exit if Redis not available
+    
     while (this.isRunning) {
       try {
         // Get message from queue (blocking call)
@@ -178,6 +182,8 @@ export class MessageQueueWorker {
    * Process notifications queue
    */
   private async processNotifications() {
+    if (!this.redis) return; // Exit if Redis not available
+    
     while (this.isRunning) {
       try {
         const notification = await this.redis.brpop('notification_queue', 1);

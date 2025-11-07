@@ -57,9 +57,13 @@ class MessageQueueWorker {
     async stop() {
         this.isRunning = false;
         logger_1.logger.info('Stopping message queue worker', { workerId: this.workerId });
-        await this.redis.quit();
+        if (this.redis) {
+            await this.redis.quit().catch(err => logger_1.logger.warn('Error closing Redis:', err));
+        }
     }
     async processMessages() {
+        if (!this.redis)
+            return;
         while (this.isRunning) {
             try {
                 const message = await this.messagingService.getMessageFromQueue();
@@ -120,6 +124,8 @@ class MessageQueueWorker {
         }
     }
     async processNotifications() {
+        if (!this.redis)
+            return;
         while (this.isRunning) {
             try {
                 const notification = await this.redis.brpop('notification_queue', 1);
