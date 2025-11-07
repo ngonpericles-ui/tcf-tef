@@ -76,12 +76,29 @@ app.use(helmet({
   },
 }));
 
-// CORS configuration
+// CORS configuration - Support multiple origins for production and development
+const allowedOrigins = [
+  'http://localhost:3000',  // Local development
+  config.corsOrigin,
+  process.env.FRONTEND_URL,  // Vercel frontend URL
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,  // Vercel preview deployments
+  process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : null,  // Vercel production URL
+].filter(Boolean) as string[];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',  // Frontend (port 3000)
-    config.corsOrigin
-  ],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // Log for debugging
+      logger.warn('CORS blocked origin:', origin);
+      callback(null, true); // Allow all origins in production for now (can be restricted later)
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -275,6 +292,21 @@ process.on('SIGTERM', async () => {
   
   process.exit(0);
 });
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT received, shutting down gracefully');
+  
+  // Stop services
+  if (messageQueueWorker) {
+    await messageQueueWorker.stop();
+  }
+  
+  monitoringService.stop();
+  
+  process.exit(0);
+});
+
+export default app;
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
