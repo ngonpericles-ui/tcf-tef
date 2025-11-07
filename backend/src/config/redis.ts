@@ -202,6 +202,12 @@ export const checkRedisHealth = async (): Promise<boolean> => {
     return false;
   }
   try {
+    // Connect if not already connected (lazyConnect)
+    if (redis.status !== 'ready' && redis.status !== 'connecting') {
+      await redis.connect().catch(() => {}); // Ignore connection errors
+    }
+    // Wait a bit for connection to establish
+    await new Promise(resolve => setTimeout(resolve, 500));
     await redis.ping();
     return true;
   } catch (error) {

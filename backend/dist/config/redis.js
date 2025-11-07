@@ -145,6 +145,10 @@ const checkRedisHealth = async () => {
         return false;
     }
     try {
+        if (exports.redis.status !== 'ready' && exports.redis.status !== 'connecting') {
+            await exports.redis.connect().catch(() => { });
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
         await exports.redis.ping();
         return true;
     }
