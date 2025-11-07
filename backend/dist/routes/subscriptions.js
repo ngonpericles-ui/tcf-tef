@@ -5,9 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.subscriptionRoutes = void 0;
 const express_1 = require("express");
-const subscriptionController_1 = require("../controllers/subscriptionController");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const subscriptionController_1 = require("@/controllers/subscriptionController");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
 const router = (0, express_1.Router)();
 exports.subscriptionRoutes = router;

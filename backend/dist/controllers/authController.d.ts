@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import '../middleware/auth';
+import '@/middleware/auth';
 export declare class AuthController {
     static register: (req: Request, res: Response, next: NextFunction) => void;
     static registerAdmin: (req: Request, res: Response, next: NextFunction) => void;

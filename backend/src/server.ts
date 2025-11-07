@@ -257,7 +257,13 @@ server.listen(PORT, async () => {
   console.log(`⚡ Message queue worker initialized`);
   console.log(`📊 Monitoring service started`);
   
-  // Check Redis health
+  // Check database health (actually test connection)
+  const dbHealth = await checkDatabaseHealth();
+  const dbStatus = dbHealth.healthy ? 'Connected' : 'Connection failed';
+  console.log(`🔗 Database: ${dbStatus}`);
+  
+  // Check Redis health (wait a bit for connection to establish)
+  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for Redis to connect
   const redisHealth = await checkRedisHealth();
   console.log(`🔴 Redis: ${redisHealth ? 'Connected' : 'Not connected'}`);
   
@@ -271,7 +277,7 @@ server.listen(PORT, async () => {
   
   logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`📊 Environment: ${config.nodeEnv}`);
-  logger.info(`🔗 Database: ${config.databaseUrl ? 'Connected' : 'Not configured'}`);
+  logger.info(`🔗 Database: ${dbStatus}`);
   logger.info(`💬 Socket.IO chat service initialized`);
   logger.info(`📨 Real-time messaging service initialized`);
   logger.info(`⚡ Message queue worker initialized`);

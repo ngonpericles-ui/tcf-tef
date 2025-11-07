@@ -207,9 +207,11 @@ export const checkRedisHealth = async (): Promise<boolean> => {
     return false;
   }
   try {
-    // Wait a bit for connection to establish if connecting
-    if (redis.status === 'connecting' || redis.status === 'connect') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait up to 3 seconds for connection to establish
+    let attempts = 0;
+    while (attempts < 6 && (redis.status === 'connecting' || redis.status === 'connect' || redis.status === 'wait')) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
     }
     // Try to ping - this will work if connected
     await redis.ping();
@@ -217,9 +219,9 @@ export const checkRedisHealth = async (): Promise<boolean> => {
   } catch (error) {
     // If ping fails, try to connect
     try {
-      if (redis.status !== 'connecting' && redis.status !== 'connect') {
+      if (redis.status !== 'connecting' && redis.status !== 'connect' && redis.status !== 'wait') {
         await redis.connect().catch(() => {});
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         await redis.ping();
         return true;
       }

@@ -1,4 +1,4 @@
-import { LoginRequest, RegisterRequest, RefreshTokenRequest, AuthTokens, UserProfile } from '../types';
+import { LoginRequest, RegisterRequest, RefreshTokenRequest, AuthTokens, UserProfile } from '@/types';
 export declare class AuthService {
     static register(data: RegisterRequest): Promise<{
         user: UserProfile;

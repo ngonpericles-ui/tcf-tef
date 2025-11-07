@@ -148,17 +148,19 @@ const checkRedisHealth = async () => {
         return false;
     }
     try {
-        if (exports.redis.status === 'connecting' || exports.redis.status === 'connect') {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        let attempts = 0;
+        while (attempts < 6 && (exports.redis.status === 'connecting' || exports.redis.status === 'connect' || exports.redis.status === 'wait')) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            attempts++;
         }
         await exports.redis.ping();
         return true;
     }
     catch (error) {
         try {
-            if (exports.redis.status !== 'connecting' && exports.redis.status !== 'connect') {
+            if (exports.redis.status !== 'connecting' && exports.redis.status !== 'connect' && exports.redis.status !== 'wait') {
                 await exports.redis.connect().catch(() => { });
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 await exports.redis.ping();
                 return true;
             }

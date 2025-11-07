@@ -5,9 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.liveSessionRoutes = void 0;
 const express_1 = require("express");
-const liveSessionController_1 = require("../controllers/liveSessionController");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const liveSessionController_1 = require("@/controllers/liveSessionController");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
 const router = (0, express_1.Router)();
 exports.liveSessionRoutes = router;

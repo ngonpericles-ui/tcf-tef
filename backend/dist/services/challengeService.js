@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChallengeService = void 0;
-const connection_1 = require("../database/connection");
-const logger_1 = require("../utils/logger");
+const connection_1 = require("@/database/connection");
+const logger_1 = require("@/utils/logger");
 class ChallengeService {
     static async getDailyChallenges() {
         try {

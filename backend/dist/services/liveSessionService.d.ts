@@ -1,5 +1,5 @@
 import { UserRole, LiveSessionStatus } from '@prisma/client';
-import { CreateLiveSessionRequest, LiveSessionWithDetails, PaginationParams, FilterParams } from '../types';
+import { CreateLiveSessionRequest, LiveSessionWithDetails, PaginationParams, FilterParams } from '@/types';
 export declare class LiveSessionService {
     static createLiveSession(sessionData: CreateLiveSessionRequest, createdById: string, creatorRole: UserRole): Promise<LiveSessionWithDetails>;
     static getLiveSessionById(sessionId: string, userId?: string): Promise<LiveSessionWithDetails>;

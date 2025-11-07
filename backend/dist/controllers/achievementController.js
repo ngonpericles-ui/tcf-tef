@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AchievementController = void 0;
-const errorHandler_1 = require("../middleware/errorHandler");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const achievementService_1 = require("../services/achievementService");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class AchievementController {
 }
 exports.AchievementController = AchievementController;

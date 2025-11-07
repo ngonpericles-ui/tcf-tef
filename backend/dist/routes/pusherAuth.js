@@ -71,7 +71,7 @@ router.post('/auth', auth_1.authenticate, async (req, res) => {
         let userInfo = {};
         if (isPresenceChannel) {
             try {
-                const { prisma } = await Promise.resolve().then(() => __importStar(require('../config/database')));
+                const { prisma } = await Promise.resolve().then(() => __importStar(require('@/config/database')));
                 const user = await prisma.user.findUnique({
                     where: { id: userId },
                     select: {

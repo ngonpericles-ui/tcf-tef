@@ -2,8 +2,8 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TeacherController = void 0;
-const teacherService_1 = require("../services/teacherService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const teacherService_1 = require("@/services/teacherService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 class TeacherController {
 }
 exports.TeacherController = TeacherController;

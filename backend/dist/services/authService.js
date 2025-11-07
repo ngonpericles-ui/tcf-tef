@@ -37,9 +37,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
-const connection_1 = require("../database/connection");
-const password_1 = require("../utils/password");
-const jwt_1 = require("../utils/jwt");
+const connection_1 = require("@/database/connection");
+const password_1 = require("@/utils/password");
+const jwt_1 = require("@/utils/jwt");
 const admin = __importStar(require("firebase-admin"));
 const path_1 = __importDefault(require("path"));
 if (!admin.apps.length) {
@@ -92,7 +92,7 @@ if (!admin.apps.length) {
 }
 const { ValidationError, ConflictError, NotFoundError, AuthenticationError } = require('../utils/errors.js');
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class AuthService {
     static async register(data) {
         try {

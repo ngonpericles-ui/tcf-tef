@@ -2,12 +2,12 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionController = void 0;
-const liveSessionService_1 = require("../services/liveSessionService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const liveSessionService_1 = require("@/services/liveSessionService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
-const emailService_1 = require("../services/emailService");
-const database_1 = require("../config/database");
+const logger_1 = require("@/utils/logger");
+const emailService_1 = require("@/services/emailService");
+const database_1 = require("@/config/database");
 class LiveSessionController {
     static storeMessage(sessionId, message) {
         if (!this.messageStorage.has(sessionId)) {

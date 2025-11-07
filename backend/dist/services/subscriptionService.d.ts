@@ -1,4 +1,4 @@
-import { SubscriptionPlan, CreateSubscriptionRequest, PaginationParams } from '../types';
+import { SubscriptionPlan, CreateSubscriptionRequest, PaginationParams } from '@/types';
 import { SubscriptionTier, PaymentStatus } from '@prisma/client';
 export declare class SubscriptionService {
     static getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
