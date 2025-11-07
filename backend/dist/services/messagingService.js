@@ -28,7 +28,12 @@ class MessagingService {
         this.messageQueue = redis_1.messageQueueRedis;
         this.messageCache = redis_1.cacheRedis;
         this.rateLimiter = redis_1.rateLimitRedis;
-        logger_1.logger.info('MessagingService initialized with Redis');
+        if (redis_1.messageQueueRedis && redis_1.cacheRedis && redis_1.rateLimitRedis) {
+            logger_1.logger.info('MessagingService initialized with Redis');
+        }
+        else {
+            logger_1.logger.warn('MessagingService initialized without Redis - some features may be limited');
+        }
         this.initializeMessageProcessing();
         this.initializeRateLimiting();
     }

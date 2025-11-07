@@ -52,23 +52,27 @@ export interface ChatRoom {
 
 export class MessagingService {
   private io: SocketIOServer;
-  private messageQueue: Redis;
+  private messageQueue: Redis | null;
   private onlineUsers: Map<string, string> = new Map(); // userId -> socketId
   private typingUsers: Map<string, Set<string>> = new Map(); // roomId -> Set<userId>
   private roomParticipants: Map<string, Set<string>> = new Map(); // roomId -> Set<userId>
   private userRooms: Map<string, Set<string>> = new Map(); // userId -> Set<roomId>
-  private messageCache: Redis;
-  private rateLimiter: Redis;
+  private messageCache: Redis | null;
+  private rateLimiter: Redis | null;
 
   constructor(io: SocketIOServer) {
     this.io = io;
     
-    // Initialize specialized Redis connections
+    // Initialize specialized Redis connections (may be null if Redis not configured)
     this.messageQueue = messageQueueRedis;
     this.messageCache = cacheRedis;
     this.rateLimiter = rateLimitRedis;
     
-    logger.info('MessagingService initialized with Redis');
+    if (messageQueueRedis && cacheRedis && rateLimitRedis) {
+      logger.info('MessagingService initialized with Redis');
+    } else {
+      logger.warn('MessagingService initialized without Redis - some features may be limited');
+    }
     
     this.initializeMessageProcessing();
     this.initializeRateLimiting();

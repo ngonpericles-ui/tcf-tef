@@ -9,12 +9,34 @@ const redis_adapter_1 = require("@socket.io/redis-adapter");
 const ioredis_1 = __importDefault(require("ioredis"));
 const messagingService_1 = require("./messagingService");
 const logger_1 = require("../utils/logger");
-const pubClient = new ioredis_1.default({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-    password: process.env.REDIS_PASSWORD,
-});
-const subClient = pubClient.duplicate();
+const createSocketIORedisClients = () => {
+    if (!process.env.REDIS_HOST || process.env.REDIS_HOST === 'localhost') {
+        return { pubClient: null, subClient: null };
+    }
+    try {
+        const pubClient = new ioredis_1.default({
+            host: process.env.REDIS_HOST,
+            port: parseInt(process.env.REDIS_PORT || '6379'),
+            password: process.env.REDIS_PASSWORD,
+            lazyConnect: true,
+            maxRetriesPerRequest: 3,
+            retryStrategy: (times) => times > 5 ? null : Math.min(times * 200, 2000),
+        });
+        pubClient.on('error', (err) => {
+            logger_1.logger.warn('Socket.IO Redis pub client error:', err.message);
+        });
+        const subClient = pubClient.duplicate();
+        subClient.on('error', (err) => {
+            logger_1.logger.warn('Socket.IO Redis sub client error:', err.message);
+        });
+        return { pubClient, subClient };
+    }
+    catch (error) {
+        logger_1.logger.warn('Failed to create Socket.IO Redis clients:', error);
+        return { pubClient: null, subClient: null };
+    }
+};
+const { pubClient, subClient } = createSocketIORedisClients();
 class RealTimeMessagingService {
     constructor(server) {
         this.connectedUsers = new Map();
@@ -32,12 +54,17 @@ class RealTimeMessagingService {
             maxHttpBufferSize: 1e6,
             allowEIO3: true,
         });
-        try {
-            this.io.adapter((0, redis_adapter_1.createAdapter)(pubClient, subClient));
-            logger_1.logger.info('Redis adapter configured for Socket.IO clustering');
+        if (pubClient && subClient) {
+            try {
+                this.io.adapter((0, redis_adapter_1.createAdapter)(pubClient, subClient));
+                logger_1.logger.info('Redis adapter configured for Socket.IO clustering');
+            }
+            catch (error) {
+                logger_1.logger.warn('Redis adapter setup failed - using default adapter', error);
+            }
         }
-        catch (error) {
-            logger_1.logger.warn('Redis adapter setup failed - using default adapter', error);
+        else {
+            logger_1.logger.info('Socket.IO using default adapter (Redis not configured)');
         }
         this.messagingService = new messagingService_1.MessagingService(this.io);
         this.messageQueue = pubClient;

@@ -4,27 +4,51 @@ import Redis from 'ioredis';
 
 export class MessageQueueWorker {
   private messagingService: MessagingService;
-  private redis: Redis;
+  private redis: Redis | null;
   private isRunning: boolean = false;
   private workerId: string;
 
   constructor() {
     this.workerId = `worker-${process.pid}-${Date.now()}`;
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-    });
+    
+    // Only create Redis client if Redis is configured
+    if (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost') {
+      try {
+        this.redis = new Redis({
+          host: process.env.REDIS_HOST,
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          password: process.env.REDIS_PASSWORD,
+          lazyConnect: true,
+          maxRetriesPerRequest: 3,
+          retryStrategy: (times) => times > 5 ? null : Math.min(times * 200, 2000),
+        });
+        
+        this.redis.on('error', (err) => {
+          logger.warn('Message queue worker Redis error:', err.message);
+        });
+      } catch (error) {
+        logger.warn('Failed to create Redis client for message queue worker:', error);
+        this.redis = null;
+      }
+    } else {
+      logger.warn('Message queue worker initialized without Redis - worker will not process messages');
+      this.redis = null;
+    }
 
     this.messagingService = new MessagingService(null as any);
     
-    logger.info('Message queue worker initialized', { workerId: this.workerId });
+    logger.info('Message queue worker initialized', { workerId: this.workerId, hasRedis: !!this.redis });
   }
 
   /**
    * Start the worker
    */
   async start() {
+    if (!this.redis) {
+      logger.warn('Cannot start message queue worker - Redis not configured');
+      return;
+    }
+    
     if (this.isRunning) {
       logger.warn('Worker is already running', { workerId: this.workerId });
       return;

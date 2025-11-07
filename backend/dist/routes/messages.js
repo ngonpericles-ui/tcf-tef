@@ -9,7 +9,6 @@ const notificationService_1 = require("../services/notificationService");
 const pusherService_1 = require("../services/pusherService");
 const secureSessionService_1 = require("../services/secureSessionService");
 const emailService_1 = require("../services/emailService");
-const twilioService_1 = require("../services/twilioService");
 const router = express_1.default.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
@@ -1113,14 +1112,6 @@ ${secureLink}
         }
         catch (emailError) {
             console.warn('Failed to send email notification:', emailError);
-        }
-        try {
-            if (student.phone) {
-                await twilioService_1.TwilioService.sendSecureSessionNotification(student.phone, student.email, title, `${instructor.firstName} ${instructor.lastName}`, secureLink);
-            }
-        }
-        catch (twilioError) {
-            console.warn('Failed to send Twilio notification:', twilioError);
         }
         try {
             await pusherService_1.pusherService.sendVideoCallNotification(studentId, {

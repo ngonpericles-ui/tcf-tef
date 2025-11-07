@@ -11,15 +11,37 @@ class MessageQueueWorker {
     constructor() {
         this.isRunning = false;
         this.workerId = `worker-${process.pid}-${Date.now()}`;
-        this.redis = new ioredis_1.default({
-            host: process.env.REDIS_HOST || 'localhost',
-            port: parseInt(process.env.REDIS_PORT || '6379'),
-            password: process.env.REDIS_PASSWORD,
-        });
+        if (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost') {
+            try {
+                this.redis = new ioredis_1.default({
+                    host: process.env.REDIS_HOST,
+                    port: parseInt(process.env.REDIS_PORT || '6379'),
+                    password: process.env.REDIS_PASSWORD,
+                    lazyConnect: true,
+                    maxRetriesPerRequest: 3,
+                    retryStrategy: (times) => times > 5 ? null : Math.min(times * 200, 2000),
+                });
+                this.redis.on('error', (err) => {
+                    logger_1.logger.warn('Message queue worker Redis error:', err.message);
+                });
+            }
+            catch (error) {
+                logger_1.logger.warn('Failed to create Redis client for message queue worker:', error);
+                this.redis = null;
+            }
+        }
+        else {
+            logger_1.logger.warn('Message queue worker initialized without Redis - worker will not process messages');
+            this.redis = null;
+        }
         this.messagingService = new messagingService_1.MessagingService(null);
-        logger_1.logger.info('Message queue worker initialized', { workerId: this.workerId });
+        logger_1.logger.info('Message queue worker initialized', { workerId: this.workerId, hasRedis: !!this.redis });
     }
     async start() {
+        if (!this.redis) {
+            logger_1.logger.warn('Cannot start message queue worker - Redis not configured');
+            return;
+        }
         if (this.isRunning) {
             logger_1.logger.warn('Worker is already running', { workerId: this.workerId });
             return;

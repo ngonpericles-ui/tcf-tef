@@ -13,14 +13,39 @@ declare module 'socket.io' {
   }
 }
 
-// Redis configuration for Socket.IO clustering
-const pubClient = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-});
+// Redis configuration for Socket.IO clustering (optional)
+const createSocketIORedisClients = () => {
+  if (!process.env.REDIS_HOST || process.env.REDIS_HOST === 'localhost') {
+    return { pubClient: null, subClient: null };
+  }
+  
+  try {
+    const pubClient = new Redis({
+      host: process.env.REDIS_HOST,
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
+      lazyConnect: true,
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => times > 5 ? null : Math.min(times * 200, 2000),
+    });
+    
+    pubClient.on('error', (err) => {
+      logger.warn('Socket.IO Redis pub client error:', err.message);
+    });
+    
+    const subClient = pubClient.duplicate();
+    subClient.on('error', (err) => {
+      logger.warn('Socket.IO Redis sub client error:', err.message);
+    });
+    
+    return { pubClient, subClient };
+  } catch (error) {
+    logger.warn('Failed to create Socket.IO Redis clients:', error);
+    return { pubClient: null, subClient: null };
+  }
+};
 
-const subClient = pubClient.duplicate();
+const { pubClient, subClient } = createSocketIORedisClients();
 
 export class RealTimeMessagingService {
   private io: SocketIOServer;
@@ -28,7 +53,7 @@ export class RealTimeMessagingService {
   private connectedUsers: Map<string, string> = new Map(); // userId -> socketId
   private userRooms: Map<string, Set<string>> = new Map(); // userId -> Set<roomIds>
   private typingUsers: Map<string, Map<string, number>> = new Map(); // roomId -> Map<userId, timestamp>
-  private messageQueue: Redis;
+  private messageQueue: Redis | null;
 
   constructor(server: any) {
     this.io = new SocketIOServer(server, {
@@ -46,11 +71,15 @@ export class RealTimeMessagingService {
     });
 
         // Set up Redis adapter for horizontal scaling (if Redis is available)
-        try {
-          this.io.adapter(createAdapter(pubClient, subClient));
-          logger.info('Redis adapter configured for Socket.IO clustering');
-        } catch (error) {
-          logger.warn('Redis adapter setup failed - using default adapter', error);
+        if (pubClient && subClient) {
+          try {
+            this.io.adapter(createAdapter(pubClient, subClient));
+            logger.info('Redis adapter configured for Socket.IO clustering');
+          } catch (error) {
+            logger.warn('Redis adapter setup failed - using default adapter', error);
+          }
+        } else {
+          logger.info('Socket.IO using default adapter (Redis not configured)');
         }
 
     this.messagingService = new MessagingService(this.io);

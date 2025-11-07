@@ -75,11 +75,25 @@ app.use((0, helmet_1.default)({
         },
     },
 }));
+const allowedOrigins = [
+    'http://localhost:3000',
+    environment_1.config.corsOrigin,
+    process.env.FRONTEND_URL,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+    process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : null,
+].filter(Boolean);
 app.use((0, cors_1.default)({
-    origin: [
-        'http://localhost:3000',
-        environment_1.config.corsOrigin
-    ],
+    origin: (origin, callback) => {
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        }
+        else {
+            logger_1.logger.warn('CORS blocked origin:', origin);
+            callback(null, true);
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -225,5 +239,12 @@ process.on('SIGINT', async () => {
     monitoringService_1.monitoringService.stop();
     process.exit(0);
 });
-exports.default = app;
+process.on('SIGINT', async () => {
+    logger_1.logger.info('SIGINT received, shutting down gracefully');
+    if (messageQueueWorker) {
+        await messageQueueWorker.stop();
+    }
+    monitoringService_1.monitoringService.stop();
+    process.exit(0);
+});
 //# sourceMappingURL=server.js.map

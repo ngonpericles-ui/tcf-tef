@@ -1,6 +1,9 @@
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 
+// Check if Redis is configured
+const isRedisEnabled = !!process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost';
+
 // Redis configuration for different use cases (Online Redis Cloud) - OPTIMIZED
 const redisConfig = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -8,144 +11,147 @@ const redisConfig = {
   password: process.env.REDIS_PASSWORD,
   db: parseInt(process.env.REDIS_DB || '0'),
   // Enhanced retry and timeout settings
-  maxRetriesPerRequest: 5,
+  maxRetriesPerRequest: isRedisEnabled ? 3 : null, // Stop retrying if Redis not configured
   retryDelayOnFailover: 200,
-  connectTimeout: 30000,
-  commandTimeout: 30000,
-  lazyConnect: false,
+  connectTimeout: 10000, // Reduced timeout
+  commandTimeout: 5000, // Reduced timeout
+  lazyConnect: true, // Don't connect immediately - only when needed
   keepAlive: 60000,
   // High availability settings
   enableOfflineQueue: false,
   enableReadyCheck: true,
-  maxLoadingTimeout: 10000,
+  maxLoadingTimeout: 5000,
   // Connection pool settings
   family: 4,
   // Performance settings
   maxMemoryPolicy: 'allkeys-lru',
-  // Enhanced error handling
+  // Enhanced error handling - stop retrying after 5 attempts if Redis not available
   retryStrategy: (times: number) => {
-    const delay = Math.min(times * 200, 5000);
-    console.log(`Redis retry attempt ${times}, delay: ${delay}ms`);
+    if (!isRedisEnabled || times > 5) {
+      logger.warn(`Redis connection disabled or max retries reached (${times}). Continuing without Redis.`);
+      return null; // Stop retrying
+    }
+    const delay = Math.min(times * 200, 2000);
+    logger.info(`Redis retry attempt ${times}, delay: ${delay}ms`);
     return delay;
   },
-  // SSL/TLS for online Redis (disabled for now due to TLS issues)
-  // tls: process.env.REDIS_HOST?.includes('redis-cloud.com') ? {} : undefined,
+  // Auto reconnect only if Redis is enabled
+  reconnectOnError: (err: Error) => {
+    if (!isRedisEnabled) return false;
+    const targetError = 'READONLY';
+    return err.message.includes(targetError);
+  },
+};
+
+// Create a safe Redis client factory that handles errors gracefully
+const createSafeRedisClient = (config: any, name: string): Redis | null => {
+  if (!isRedisEnabled) {
+    logger.warn(`Redis ${name} disabled - REDIS_HOST not configured. Running without Redis.`);
+    return null;
+  }
+  
+  try {
+    const client = new Redis({
+      ...config,
+      ...redisConfig,
+    });
+    
+    // Add comprehensive error handlers
+    client.on('error', (error) => {
+      logger.error(`Redis ${name} error:`, error.message);
+      // Don't crash the app - just log the error
+    });
+    
+    client.on('connect', () => {
+      logger.info(`Redis ${name} connected`);
+    });
+    
+    client.on('ready', () => {
+      logger.info(`Redis ${name} ready`);
+    });
+    
+    client.on('close', () => {
+      logger.warn(`Redis ${name} connection closed`);
+    });
+    
+    client.on('reconnecting', () => {
+      logger.info(`Redis ${name} reconnecting...`);
+    });
+    
+    client.on('end', () => {
+      logger.warn(`Redis ${name} connection ended`);
+    });
+    
+    return client;
+  } catch (error) {
+    logger.error(`Failed to create Redis ${name} client:`, error);
+    return null;
+  }
 };
 
 // Main Redis client for general operations
-export const redis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:messaging:',
-});
+export const redis = createSafeRedisClient({ keyPrefix: 'aura:messaging:' }, 'main') as Redis | null;
 
 // Redis client for Socket.IO adapter
-export const redisPubClient = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:socketio:',
-});
-
-export const redisSubClient = redisPubClient.duplicate();
+export const redisPubClient = createSafeRedisClient({ keyPrefix: 'aura:socketio:' }, 'pub') as Redis | null;
+export const redisSubClient = redisPubClient ? redisPubClient.duplicate() : null;
 
 // Redis client for message queues (high throughput)
-export const messageQueueRedis = new Redis({
-  ...redisConfig,
+export const messageQueueRedis = createSafeRedisClient({ 
   keyPrefix: 'aura:queue:',
-  db: 1, // Use different DB for queues
-  maxRetriesPerRequest: null, // For blocking operations
-  lazyConnect: false,
-  keepAlive: 60000,
-});
+  db: 1,
+  maxRetriesPerRequest: null,
+}, 'queue') as Redis | null;
 
 // Redis client for caching (fast access)
-export const cacheRedis = new Redis({
-  ...redisConfig,
+export const cacheRedis = createSafeRedisClient({ 
   keyPrefix: 'aura:cache:',
-  db: 2, // Use different DB for caching
+  db: 2,
   maxRetriesPerRequest: 1,
-  lazyConnect: false,
-});
+}, 'cache') as Redis | null;
 
 // Redis client for rate limiting (strict)
-export const rateLimitRedis = new Redis({
-  ...redisConfig,
+export const rateLimitRedis = createSafeRedisClient({ 
   keyPrefix: 'aura:rate:',
-  db: 3, // Use different DB for rate limiting
+  db: 3,
   maxRetriesPerRequest: 1,
-  lazyConnect: false,
-});
+}, 'ratelimit') as Redis | null;
 
 // Redis client for sessions
-export const sessionRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:session:',
-});
-
+export const sessionRedis = createSafeRedisClient({ keyPrefix: 'aura:session:' }, 'session') as Redis | null;
 
 // Redis client for presence tracking
-export const presenceRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:presence:',
-});
+export const presenceRedis = createSafeRedisClient({ keyPrefix: 'aura:presence:' }, 'presence') as Redis | null;
 
 // Redis client for typing indicators
-export const typingRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:typing:',
-});
+export const typingRedis = createSafeRedisClient({ keyPrefix: 'aura:typing:' }, 'typing') as Redis | null;
 
 // Redis client for notifications
-export const notificationRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:notification:',
-});
+export const notificationRedis = createSafeRedisClient({ keyPrefix: 'aura:notification:' }, 'notification') as Redis | null;
 
 // Redis client for analytics
-export const analyticsRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:analytics:',
-});
+export const analyticsRedis = createSafeRedisClient({ keyPrefix: 'aura:analytics:' }, 'analytics') as Redis | null;
 
 // Redis client for search indexing
-export const searchRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:search:',
-});
+export const searchRedis = createSafeRedisClient({ keyPrefix: 'aura:search:' }, 'search') as Redis | null;
 
 // Redis client for file uploads
-export const uploadRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:upload:',
-});
+export const uploadRedis = createSafeRedisClient({ keyPrefix: 'aura:upload:' }, 'upload') as Redis | null;
 
 // Redis client for encryption keys
-export const encryptionRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:encryption:',
-});
+export const encryptionRedis = createSafeRedisClient({ keyPrefix: 'aura:encryption:' }, 'encryption') as Redis | null;
 
 // Redis client for webhooks
-export const webhookRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:webhook:',
-});
+export const webhookRedis = createSafeRedisClient({ keyPrefix: 'aura:webhook:' }, 'webhook') as Redis | null;
 
 // Redis client for dead letter queue
-export const deadLetterRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:deadletter:',
-});
+export const deadLetterRedis = createSafeRedisClient({ keyPrefix: 'aura:deadletter:' }, 'deadletter') as Redis | null;
 
 // Redis client for monitoring
-export const monitoringRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:monitoring:',
-});
+export const monitoringRedis = createSafeRedisClient({ keyPrefix: 'aura:monitoring:' }, 'monitoring') as Redis | null;
 
 // Redis client for testing
-export const testRedis = new Redis({
-  ...redisConfig,
-  keyPrefix: 'aura:test:',
-});
+export const testRedis = createSafeRedisClient({ keyPrefix: 'aura:test:' }, 'test') as Redis | null;
 
 // Redis cluster configuration (for production scaling)
 export const createRedisCluster = () => {
@@ -186,66 +192,32 @@ export const createRedisSentinel = () => {
   return null;
 };
 
-// Connection event handlers
-const setupRedisEventHandlers = (client: Redis, name: string) => {
-  client.on('connect', () => {
-    logger.info(`Redis ${name} connected`);
-  });
-
-  client.on('ready', () => {
-    logger.info(`Redis ${name} ready`);
-  });
-
-  client.on('error', (error) => {
-    logger.error(`Redis ${name} error:`, error);
-  });
-
-  client.on('close', () => {
-    logger.warn(`Redis ${name} connection closed`);
-  });
-
-  client.on('reconnecting', () => {
-    logger.info(`Redis ${name} reconnecting...`);
-  });
-
-  client.on('end', () => {
-    logger.warn(`Redis ${name} connection ended`);
-  });
-};
-
-// Setup event handlers for all Redis clients
-setupRedisEventHandlers(redis, 'main');
-setupRedisEventHandlers(redisPubClient, 'pub');
-setupRedisEventHandlers(redisSubClient, 'sub');
-setupRedisEventHandlers(messageQueueRedis, 'queue');
-setupRedisEventHandlers(cacheRedis, 'cache');
-setupRedisEventHandlers(sessionRedis, 'session');
-setupRedisEventHandlers(rateLimitRedis, 'ratelimit');
-setupRedisEventHandlers(presenceRedis, 'presence');
-setupRedisEventHandlers(typingRedis, 'typing');
-setupRedisEventHandlers(notificationRedis, 'notification');
-setupRedisEventHandlers(analyticsRedis, 'analytics');
-setupRedisEventHandlers(searchRedis, 'search');
-setupRedisEventHandlers(uploadRedis, 'upload');
-setupRedisEventHandlers(encryptionRedis, 'encryption');
-setupRedisEventHandlers(webhookRedis, 'webhook');
-setupRedisEventHandlers(deadLetterRedis, 'deadletter');
-setupRedisEventHandlers(monitoringRedis, 'monitoring');
-setupRedisEventHandlers(testRedis, 'test');
+// Event handlers are now set up in createSafeRedisClient
+// No need for separate setup function
 
 // Health check function
 export const checkRedisHealth = async (): Promise<boolean> => {
+  if (!isRedisEnabled || !redis) {
+    logger.info('Redis health check skipped - Redis not configured');
+    return false;
+  }
   try {
     await redis.ping();
     return true;
   } catch (error) {
-    logger.error('Redis health check failed:', error);
+    logger.warn('Redis health check failed:', error);
     return false;
   }
 };
 
 // Get Redis info
 export const getRedisInfo = async () => {
+  if (!isRedisEnabled || !redis) {
+    return {
+      status: 'disabled',
+      message: 'Redis is not configured'
+    };
+  }
   try {
     const info = await redis.info();
     return {
@@ -258,16 +230,21 @@ export const getRedisInfo = async () => {
         return acc;
       }, {} as Record<string, string>)
     };
-  } catch (error) {
+  } catch (error: any) {
     return {
       status: 'error',
-      error: error.message
+      error: error?.message || 'Unknown error'
     };
   }
 };
 
 // Graceful shutdown
 export const shutdownRedis = async () => {
+  if (!isRedisEnabled) {
+    logger.info('Redis shutdown skipped - Redis not configured');
+    return;
+  }
+  
   logger.info('Shutting down Redis connections...');
   
   const clients = [
@@ -276,9 +253,9 @@ export const shutdownRedis = async () => {
     typingRedis, notificationRedis, analyticsRedis, searchRedis,
     uploadRedis, encryptionRedis, webhookRedis, deadLetterRedis,
     monitoringRedis, testRedis
-  ];
+  ].filter(Boolean) as Redis[]; // Filter out null clients
 
-  await Promise.all(clients.map(client => client.quit()));
+  await Promise.allSettled(clients.map(client => client.quit().catch(err => logger.warn('Error closing Redis client:', err))));
   logger.info('All Redis connections closed');
 };
 
