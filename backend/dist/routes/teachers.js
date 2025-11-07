@@ -5,10 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.teacherRoutes = void 0;
 const express_1 = require("express");
-const teacherController_1 = require("../controllers/teacherController");
-const auth_1 = require("../middleware/auth");
+const teacherController_1 = require("@/controllers/teacherController");
+const auth_1 = require("@/middleware/auth");
 const client_1 = require("@prisma/client");
-const validation_1 = require("../middleware/validation");
+const validation_1 = require("@/middleware/validation");
 const joi_1 = __importDefault(require("joi"));
 const router = (0, express_1.Router)();
 exports.teacherRoutes = router;

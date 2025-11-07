@@ -5,10 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminRoutes = void 0;
 const express_1 = require("express");
-const adminController_1 = require("../controllers/adminController");
-const settingsService_1 = require("../services/settingsService");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const adminController_1 = require("@/controllers/adminController");
+const settingsService_1 = require("@/services/settingsService");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
 const router = (0, express_1.Router)();
 exports.adminRoutes = router;

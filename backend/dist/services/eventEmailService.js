@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventEmailService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const emailService_1 = require("./emailService");
 const logger_1 = require("../utils/logger");
 class EventEmailService {

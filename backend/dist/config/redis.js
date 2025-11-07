@@ -16,7 +16,7 @@ const redisConfig = {
     retryDelayOnFailover: 200,
     connectTimeout: 10000,
     commandTimeout: 5000,
-    lazyConnect: true,
+    lazyConnect: false,
     keepAlive: 60000,
     enableOfflineQueue: false,
     enableReadyCheck: true,
@@ -53,10 +53,10 @@ const createSafeRedisClient = (config, name) => {
             logger_1.logger.error(`Redis ${name} error:`, error.message);
         });
         client.on('connect', () => {
-            logger_1.logger.info(`Redis ${name} connected`);
+            logger_1.logger.info(`✅ Redis ${name} connected`);
         });
         client.on('ready', () => {
-            logger_1.logger.info(`Redis ${name} ready`);
+            logger_1.logger.info(`✅ Redis ${name} ready`);
         });
         client.on('close', () => {
             logger_1.logger.warn(`Redis ${name} connection closed`);
@@ -66,6 +66,9 @@ const createSafeRedisClient = (config, name) => {
         });
         client.on('end', () => {
             logger_1.logger.warn(`Redis ${name} connection ended`);
+        });
+        client.connect().catch((err) => {
+            logger_1.logger.warn(`Redis ${name} initial connection failed (will retry):`, err.message);
         });
         return client;
     }
@@ -145,12 +148,22 @@ const checkRedisHealth = async () => {
         return false;
     }
     try {
+        if (exports.redis.status === 'connecting' || exports.redis.status === 'connect') {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        if (exports.redis.status === 'ready') {
+            await exports.redis.ping();
+            return true;
+        }
         if (exports.redis.status !== 'ready' && exports.redis.status !== 'connecting') {
             await exports.redis.connect().catch(() => { });
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (exports.redis.status === 'ready') {
+                await exports.redis.ping();
+                return true;
+            }
         }
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await exports.redis.ping();
-        return true;
+        return false;
     }
     catch (error) {
         logger_1.logger.warn('Redis health check failed:', error);

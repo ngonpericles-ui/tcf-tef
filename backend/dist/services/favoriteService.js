@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FavoriteService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const client_1 = require("@prisma/client");
 class FavoriteService {
     static async getFavorites(userId, pagination, filters) {

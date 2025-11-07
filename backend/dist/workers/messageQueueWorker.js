@@ -17,7 +17,7 @@ class MessageQueueWorker {
                     host: process.env.REDIS_HOST,
                     port: parseInt(process.env.REDIS_PORT || '6379'),
                     password: process.env.REDIS_PASSWORD,
-                    lazyConnect: true,
+                    lazyConnect: false,
                     maxRetriesPerRequest: 3,
                     retryStrategy: (times) => times > 5 ? null : Math.min(times * 200, 2000),
                 });

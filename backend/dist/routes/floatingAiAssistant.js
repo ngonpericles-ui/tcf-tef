@@ -4,11 +4,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const auth_1 = require("../middleware/auth");
-const validation_1 = require("../middleware/validation");
-const requestLogger_1 = require("../middleware/requestLogger");
-const floatingAiAssistantService_1 = require("../services/floatingAiAssistantService");
-const logger_1 = require("../utils/logger");
+const auth_1 = require("@/middleware/auth");
+const validation_1 = require("@/middleware/validation");
+const requestLogger_1 = require("@/middleware/requestLogger");
+const floatingAiAssistantService_1 = require("@/services/floatingAiAssistantService");
+const logger_1 = require("@/utils/logger");
 const router = express_1.default.Router();
 router.post('/chat', requestLogger_1.requestLogger, auth_1.authenticate, (0, validation_1.validate)(validation_1.aiAssistantSchemas.chat), async (req, res) => {
     try {

@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requirePaidSubscription = exports.requirePremium = exports.requireRole = exports.requireAdmin = exports.requireSeniorManager = exports.requireManager = exports.authorizeResourceOwner = exports.requireSubscriptionTier = exports.authorize = exports.optionalAuthenticate = exports.authenticate = void 0;
-const jwt_1 = require("../utils/jwt");
-const errorHandler_1 = require("../middleware/errorHandler");
+const jwt_1 = require("@/utils/jwt");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 const authenticate = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;

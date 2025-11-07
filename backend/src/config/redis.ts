@@ -15,7 +15,7 @@ const redisConfig = {
   retryDelayOnFailover: 200,
   connectTimeout: 10000, // Reduced timeout
   commandTimeout: 5000, // Reduced timeout
-  lazyConnect: true, // Don't connect immediately - only when needed
+  lazyConnect: false, // Connect immediately when client is created
   keepAlive: 60000,
   // High availability settings
   enableOfflineQueue: false,
@@ -63,11 +63,11 @@ const createSafeRedisClient = (config: any, name: string): Redis | null => {
     });
     
     client.on('connect', () => {
-      logger.info(`Redis ${name} connected`);
+      logger.info(`✅ Redis ${name} connected`);
     });
     
     client.on('ready', () => {
-      logger.info(`Redis ${name} ready`);
+      logger.info(`✅ Redis ${name} ready`);
     });
     
     client.on('close', () => {
@@ -80,6 +80,11 @@ const createSafeRedisClient = (config: any, name: string): Redis | null => {
     
     client.on('end', () => {
       logger.warn(`Redis ${name} connection ended`);
+    });
+    
+    // Attempt to connect immediately
+    client.connect().catch((err) => {
+      logger.warn(`Redis ${name} initial connection failed (will retry):`, err.message);
     });
     
     return client;
@@ -202,14 +207,25 @@ export const checkRedisHealth = async (): Promise<boolean> => {
     return false;
   }
   try {
-    // Connect if not already connected (lazyConnect)
-    if (redis.status !== 'ready' && redis.status !== 'connecting') {
-      await redis.connect().catch(() => {}); // Ignore connection errors
+    // Wait a bit for connection to establish if connecting
+    if (redis.status === 'connecting' || redis.status === 'connect') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    // Wait a bit for connection to establish
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await redis.ping();
-    return true;
+    // Check if ready
+    if (redis.status === 'ready') {
+      await redis.ping();
+      return true;
+    }
+    // If not ready, try to connect
+    if (redis.status !== 'ready' && redis.status !== 'connecting') {
+      await redis.connect().catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (redis.status === 'ready') {
+        await redis.ping();
+        return true;
+      }
+    }
+    return false;
   } catch (error) {
     logger.warn('Redis health check failed:', error);
     return false;
