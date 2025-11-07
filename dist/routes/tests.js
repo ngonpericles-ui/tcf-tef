@@ -1,0 +1,24 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.testRoutes = void 0;
+const express_1 = require("express");
+const testController_1 = require("../controllers/testController");
+const validation_1 = require("../middleware/validation");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+exports.testRoutes = router;
+router.get('/', auth_1.optionalAuthenticate, testController_1.TestController.getAllTests);
+router.post('/', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validate)(validation_1.testSchemas.create), testController_1.TestController.createTest);
+router.get('/attempts', auth_1.authenticate, testController_1.TestController.getUserTestAttempts);
+router.get('/created', auth_1.authenticate, auth_1.requireManager, testController_1.TestController.getUserCreatedTests);
+router.get('/:testId', auth_1.optionalAuthenticate, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id }), testController_1.TestController.getTestById);
+router.post('/:testId/start', auth_1.authenticate, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id }), testController_1.TestController.startTest);
+router.post('/submit', auth_1.authenticate, (0, validation_1.validate)(validation_1.testSchemas.submitAnswers), testController_1.TestController.submitTest);
+router.get('/attempts/:attemptId', auth_1.authenticate, (0, validation_1.validateParams)({ attemptId: validation_1.commonSchemas.id }), testController_1.TestController.getTestAttemptDetails);
+router.post('/:testId/questions', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id }), testController_1.TestController.addQuestionsToTest);
+router.get('/:testId/questions', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id }), testController_1.TestController.getTestQuestions);
+router.put('/:testId/questions/:questionId', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id, questionId: validation_1.commonSchemas.id }), testController_1.TestController.updateTestQuestion);
+router.delete('/:testId/questions/:questionId', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id, questionId: validation_1.commonSchemas.id }), testController_1.TestController.deleteTestQuestion);
+router.post('/:testId/upload', auth_1.authenticate, auth_1.requireManager, (0, validation_1.validateParams)({ testId: validation_1.commonSchemas.id }), testController_1.TestController.uploadTestFile);
+router.get('/health', testController_1.TestController.healthCheck);
+//# sourceMappingURL=tests.js.map

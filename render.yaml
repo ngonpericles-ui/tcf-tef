@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: backendaura
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node dist/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: http://localhost:3000,https://aura-ca-frontend.onrender.com,https://defense-aura-ca.vercel.app,https://french-learning-platform-jzwjjnbdy-ngonpericles-educms-projects.vercel.app
+      - key: PORT
+        value: 10000
