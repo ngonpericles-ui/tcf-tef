@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --exec \"ts-node --transpile-only -r tsconfig-paths/register src/server.ts\"",
     "build": "tsc && tsc-alias",
-    "postinstall": "npx prisma generate",
+    "postinstall": "npm run build && npx prisma generate",
     "start": "node dist/server.js",
     "start:prod": "node dist/server.js",
     "lint": "eslint src/**/*.ts",
