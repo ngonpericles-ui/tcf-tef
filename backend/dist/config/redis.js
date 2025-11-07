@@ -151,22 +151,21 @@ const checkRedisHealth = async () => {
         if (exports.redis.status === 'connecting' || exports.redis.status === 'connect') {
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        if (exports.redis.status === 'ready') {
-            await exports.redis.ping();
-            return true;
-        }
-        if (exports.redis.status !== 'ready' && exports.redis.status !== 'connecting') {
-            await exports.redis.connect().catch(() => { });
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (exports.redis.status === 'ready') {
+        await exports.redis.ping();
+        return true;
+    }
+    catch (error) {
+        try {
+            if (exports.redis.status !== 'connecting' && exports.redis.status !== 'connect') {
+                await exports.redis.connect().catch(() => { });
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 await exports.redis.ping();
                 return true;
             }
         }
-        return false;
-    }
-    catch (error) {
-        logger_1.logger.warn('Redis health check failed:', error);
+        catch (connectError) {
+            logger_1.logger.warn('Redis health check failed:', connectError);
+        }
         return false;
     }
 };

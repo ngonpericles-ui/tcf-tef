@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AITeacherFeedbackService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const generative_ai_1 = require("@google/generative-ai");
 const logger_1 = require("../utils/logger");
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');

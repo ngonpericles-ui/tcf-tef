@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.contentRoutes = void 0;
 const express_1 = require("express");
-const auth_1 = require("@/middleware/auth");
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 exports.contentRoutes = router;
 router.get('/', auth_1.authenticate, auth_1.requireManager, (req, res) => {

@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DailyGoalService = void 0;
-const connection_1 = require("@/database/connection");
-const logger_1 = require("@/utils/logger");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const connection_1 = require("../database/connection");
+const logger_1 = require("../utils/logger");
+const errorHandler_1 = require("../middleware/errorHandler");
 class DailyGoalService {
     static async getTodayGoal(userId) {
         try {

@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedFileManagementService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const cloudinaryService_1 = require("./cloudinaryService");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");

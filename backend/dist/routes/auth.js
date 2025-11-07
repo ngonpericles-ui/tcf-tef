@@ -5,10 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authRoutes = void 0;
 const express_1 = require("express");
-const authController_1 = require("@/controllers/authController");
-const validation_1 = require("@/middleware/validation");
-const auth_1 = require("@/middleware/auth");
-const temporaryTokenService_1 = __importDefault(require("@/services/temporaryTokenService"));
+const authController_1 = require("../controllers/authController");
+const validation_1 = require("../middleware/validation");
+const auth_1 = require("../middleware/auth");
+const temporaryTokenService_1 = __importDefault(require("../services/temporaryTokenService"));
 const router = (0, express_1.Router)();
 exports.authRoutes = router;
 router.post('/register', (0, validation_1.validate)(validation_1.authSchemas.register), authController_1.AuthController.register);

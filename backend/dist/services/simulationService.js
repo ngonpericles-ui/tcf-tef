@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SimulationService = void 0;
 const generative_ai_1 = require("@google/generative-ai");
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const eventEmailService_1 = require("./eventEmailService");

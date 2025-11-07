@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.courseRoutes = void 0;
 const express_1 = require("express");
-const courseController_1 = require("@/controllers/courseController");
-const validation_1 = require("@/middleware/validation");
-const auth_1 = require("@/middleware/auth");
+const courseController_1 = require("../controllers/courseController");
+const validation_1 = require("../middleware/validation");
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 exports.courseRoutes = router;
 router.get('/', auth_1.optionalAuthenticate, courseController_1.CourseController.getAllCourses);

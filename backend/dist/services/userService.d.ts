@@ -1,4 +1,4 @@
-import { UserProfile, UpdateUserProfileRequest, PaginationParams, FilterParams } from '@/types';
+import { UserProfile, UpdateUserProfileRequest, PaginationParams, FilterParams } from '../types';
 import { UserRole, UserStatus } from '@prisma/client';
 export declare class UserService {
     static calculateUserAchievements(userId: string): Promise<{

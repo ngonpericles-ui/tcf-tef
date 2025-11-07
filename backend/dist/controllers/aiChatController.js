@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiChatController = void 0;
-const errorHandler_1 = require("@/middleware/errorHandler");
+const errorHandler_1 = require("../middleware/errorHandler");
 const aiChatService_1 = require("../services/aiChatService");
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 class AiChatController {
 }
 exports.AiChatController = AiChatController;

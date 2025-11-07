@@ -211,23 +211,21 @@ export const checkRedisHealth = async (): Promise<boolean> => {
     if (redis.status === 'connecting' || redis.status === 'connect') {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
-    // Check if ready
-    if (redis.status === 'ready') {
-      await redis.ping();
-      return true;
-    }
-    // If not ready, try to connect
-    if (redis.status !== 'ready' && redis.status !== 'connecting') {
-      await redis.connect().catch(() => {});
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      if (redis.status === 'ready') {
+    // Try to ping - this will work if connected
+    await redis.ping();
+    return true;
+  } catch (error) {
+    // If ping fails, try to connect
+    try {
+      if (redis.status !== 'connecting' && redis.status !== 'connect') {
+        await redis.connect().catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await redis.ping();
         return true;
       }
+    } catch (connectError) {
+      logger.warn('Redis health check failed:', connectError);
     }
-    return false;
-  } catch (error) {
-    logger.warn('Redis health check failed:', error);
     return false;
   }
 };

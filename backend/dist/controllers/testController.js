@@ -35,10 +35,10 @@ var __importStar = (this && this.__importStar) || (function () {
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TestController = void 0;
-const testService_1 = require("@/services/testService");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const testService_1 = require("../services/testService");
+const errorHandler_1 = require("../middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 class TestController {
 }
 exports.TestController = TestController;
@@ -217,7 +217,7 @@ TestController.getTestAttemptDetails = (0, errorHandler_1.asyncHandler)(async (r
         });
         return;
     }
-    const { prisma } = await Promise.resolve().then(() => __importStar(require('@/database/connection')));
+    const { prisma } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
     const attempt = await prisma.testAttempt.findUnique({
         where: { id: attemptId },
         include: {

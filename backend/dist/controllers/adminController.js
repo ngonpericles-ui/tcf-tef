@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminController = void 0;
-const adminService_1 = require("@/services/adminService");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const logger_1 = require("@/utils/logger");
+const adminService_1 = require("../services/adminService");
+const errorHandler_1 = require("../middleware/errorHandler");
+const logger_1 = require("../utils/logger");
 class AdminController {
 }
 exports.AdminController = AdminController;

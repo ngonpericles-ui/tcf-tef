@@ -1,4 +1,4 @@
-import { TestWithDetails, CreateTestRequest, StartTestResponse, SubmitTestRequest, PaginationParams, FilterParams } from '@/types';
+import { TestWithDetails, CreateTestRequest, StartTestResponse, SubmitTestRequest, PaginationParams, FilterParams } from '../types';
 import { UserRole } from '@prisma/client';
 export declare class TestService {
     static createTest(testData: CreateTestRequest, createdById: string, creatorRole: UserRole): Promise<TestWithDetails>;

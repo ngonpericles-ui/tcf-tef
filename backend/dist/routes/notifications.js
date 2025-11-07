@@ -5,9 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationRoutes = void 0;
 const express_1 = require("express");
-const notificationController_1 = require("@/controllers/notificationController");
-const validation_1 = require("@/middleware/validation");
-const auth_1 = require("@/middleware/auth");
+const notificationController_1 = require("../controllers/notificationController");
+const validation_1 = require("../middleware/validation");
+const auth_1 = require("../middleware/auth");
 const client_1 = require("@prisma/client");
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const joi_1 = __importDefault(require("joi"));
