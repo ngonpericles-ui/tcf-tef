@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SocialInteractionService = exports.CommentService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 class CommentService {
@@ -89,11 +89,11 @@ class CommentService {
                 const likes = await connection_1.prisma.like.findMany({
                     where: {
                         userId,
-                        contentType: 'COMMENT'
+                        commentId: { not: null }
                     },
-                    select: { contentId: true }
+                    select: { commentId: true }
                 });
-                userLikes = likes.map(like => like.contentId).filter(Boolean);
+                userLikes = likes.map(like => like.commentId).filter(Boolean);
             }
             const formattedComments = comments.map(comment => ({
                 id: comment.id,
@@ -372,8 +372,7 @@ class CommentService {
             const existingLike = await connection_1.prisma.like.findFirst({
                 where: {
                     userId,
-                    contentId: commentId,
-                    contentType: 'COMMENT'
+                    commentId: commentId
                 }
             });
             let isLiked;
@@ -388,15 +387,14 @@ class CommentService {
                 await connection_1.prisma.like.create({
                     data: {
                         userId,
-                        contentId: commentId,
-                        contentType: 'COMMENT'
+                        commentId: commentId
                     }
                 });
                 isLiked = true;
                 logger_1.logger.info('Comment liked', { commentId, userId });
             }
             const likeCount = await connection_1.prisma.like.count({
-                where: { contentId: commentId, contentType: 'COMMENT' }
+                where: { commentId: commentId }
             });
             return { isLiked, likeCount };
         }
@@ -470,8 +468,7 @@ class CommentService {
                 const like = await connection_1.prisma.like.findFirst({
                     where: {
                         userId,
-                        contentId: commentId,
-                        contentType: 'COMMENT'
+                        commentId: commentId
                     }
                 });
                 isLiked = !!like;
@@ -589,11 +586,11 @@ class SocialInteractionService {
     static async getPostEngagement(postId, userId) {
         try {
             const [likeCount, commentCount, shareCount, userLike, userShare] = await Promise.all([
-                connection_1.prisma.like.count({ where: { contentId: postId, contentType: 'POST' } }),
+                connection_1.prisma.like.count({ where: { postId: postId } }),
                 connection_1.prisma.comment.count({ where: { postId } }),
                 connection_1.prisma.share.count({ where: { postId } }),
                 userId ? connection_1.prisma.like.findFirst({
-                    where: { userId, contentId: postId, contentType: 'POST' }
+                    where: { userId, postId: postId }
                 }) : null,
                 userId ? connection_1.prisma.share.findFirst({
                     where: { userId, postId }

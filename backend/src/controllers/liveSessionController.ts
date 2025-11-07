@@ -367,15 +367,16 @@ export class LiveSessionController {
       const reminderDate = new Date(sessionDate.getTime() - (reminderMinutes * 60 * 1000));
 
       // Store reminder in database
-      await prisma.sessionReminder.create({
-        data: {
-          userId,
-          sessionId,
-          reminderTime: reminderMinutes,
-          reminderDate,
-          emailSent: false
-        }
-      });
+      // TODO: sessionReminder model does not exist in schema
+      // await prisma.sessionReminder.create({
+      //   data: {
+      //     userId,
+      //     sessionId,
+      //     reminderTime: reminderMinutes,
+      //     reminderDate,
+      //     emailSent: false
+      //   }
+      // });
 
       // Schedule email reminder (in a real implementation, you'd use a job queue)
       // For now, we'll send a confirmation email

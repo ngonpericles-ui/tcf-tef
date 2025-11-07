@@ -1,7 +1,7 @@
 import { prisma } from '@/database/connection'
 import { logger } from '../utils/logger'
 import { AIService } from './aiService'
-// Updated for targetTime support
+// Updated for timeRemaining support
 
 export interface DashboardData {
   user: {
@@ -27,7 +27,7 @@ export interface DashboardData {
   }
   studySession: {
     isActive: boolean
-    startTime?: string
+    startedAt?: string
     currentDuration: number
     dailyGoal: number
     progress: number
@@ -48,12 +48,12 @@ export interface AIMessages {
 
 export interface StudySessionData {
   isActive: boolean
-  startTime?: string
+  startedAt?: string
   currentDuration: number
   dailyGoal: number
   progress: number
   totalTimeToday: number
-  targetTime?: number
+  timeRemaining?: number
 }
 
 export class HomeService {
@@ -144,38 +144,38 @@ export class HomeService {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       
-      const sessions = await prisma.studySession.findMany({
+      const sessions = await prisma.simulation.findMany({
         where: {
           userId,
-          startTime: { gte: today }
+          startedAt: { gte: today }
         },
         select: {
-          startTime: true,
-          endTime: true,
-          targetTime: true
+          startedAt: true,
+          completedAt: true,
+          timeRemaining: true
         },
-        orderBy: { startTime: 'desc' }
+        orderBy: { startedAt: 'desc' }
       })
 
       // Quick calculations
       const totalTimeToday = sessions.reduce((total, session) => {
-        if (session.endTime) {
-          return total + (session.endTime.getTime() - session.startTime.getTime())
+        if (session.completedAt) {
+          return total + (session.completedAt.getTime() - session.startedAt.getTime())
         }
         return total
       }, 0)
 
-      const activeSession = sessions.find(session => !session.endTime)
+      const activeSession = sessions.find(session => !session.completedAt)
       const dailyGoal = 15 * 60 * 1000 // 15 minutes
 
       return {
         isActive: !!activeSession,
-        startTime: activeSession?.startTime.toISOString(),
-        currentDuration: activeSession ? Date.now() - activeSession.startTime.getTime() : 0,
+        startedAt: activeSession?.startedAt.toISOString(),
+        currentDuration: activeSession ? Date.now() - activeSession.startedAt.getTime() : 0,
         dailyGoal,
         progress: Math.min((totalTimeToday / dailyGoal) * 100, 100),
         totalTimeToday,
-        targetTime: activeSession?.targetTime || 900
+        timeRemaining: activeSession?.timeRemaining || 900
       }
     } catch (error) {
       logger.error('Error getting study session data:', error)
@@ -185,7 +185,7 @@ export class HomeService {
         dailyGoal: 15 * 60 * 1000,
         progress: 0,
         totalTimeToday: 0,
-        targetTime: 900
+        timeRemaining: 900
       }
     }
   }
@@ -197,38 +197,38 @@ export class HomeService {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       
-      const sessions = await prisma.studySession.findMany({
+      const sessions = await prisma.simulation.findMany({
         where: {
           userId,
-          startTime: {
+          startedAt: {
             gte: today
           }
         },
-        orderBy: { startTime: 'desc' }
+        orderBy: { startedAt: 'desc' }
       })
 
       // Calculate total time today
       const totalTimeToday = sessions.reduce((total, session) => {
-        if (session.endTime) {
-          return total + (session.endTime.getTime() - session.startTime.getTime())
+        if (session.completedAt) {
+          return total + (session.completedAt.getTime() - session.startedAt.getTime())
         }
         return total
       }, 0)
 
       // Get active session
-      const activeSession = sessions.find(session => !session.endTime)
+      const activeSession = sessions.find(session => !session.completedAt)
       
       // Get user's daily goal (default 15 minutes)
       const dailyGoal = 15 * 60 * 1000 // 15 minutes in milliseconds
 
       return {
         isActive: !!activeSession,
-        startTime: activeSession?.startTime.toISOString(),
-        currentDuration: activeSession ? Date.now() - activeSession.startTime.getTime() : 0,
+        startedAt: activeSession?.startedAt.toISOString(),
+        currentDuration: activeSession ? Date.now() - activeSession.startedAt.getTime() : 0,
         dailyGoal,
         progress: Math.min((totalTimeToday / dailyGoal) * 100, 100),
         totalTimeToday,
-        targetTime: activeSession?.targetTime || 900 // Default 15 minutes
+        timeRemaining: activeSession?.timeRemaining || 900 // Default 15 minutes
       }
     } catch (error) {
       logger.error('Error getting study session data:', error)
@@ -237,38 +237,44 @@ export class HomeService {
   }
 
   // Start study session
-  static async startStudySession(userId: string, targetTime?: number) {
+  static async startStudySession(userId: string, timeRemaining?: number) {
     try {
       // Check if there's already an active session
-      const activeSession = await prisma.studySession.findFirst({
+      const activeSession = await prisma.simulation.findFirst({
         where: {
           userId,
-          endTime: null
+          completedAt: null
         }
       })
 
       if (activeSession) {
         return {
           isActive: true,
-          startTime: activeSession.startTime.toISOString(),
-          targetTime: activeSession.targetTime || 900, // Default 15 minutes
+          startedAt: activeSession.startedAt.toISOString(),
+          timeRemaining: activeSession.timeRemaining || 900, // Default 15 minutes
           message: 'Study session already active'
         }
       }
 
       // Create new study session with target time
-      const session = await prisma.studySession.create({
+      const session = await prisma.simulation.create({
         data: {
           userId,
-          startTime: new Date(),
-          targetTime: targetTime || 900 // Default 15 minutes (900 seconds)
+          type: 'study',
+          level: 'A1',
+          status: 'IN_PROGRESS',
+          questions: '{}',
+          answers: '{}',
+          timeRemaining: timeRemaining || 900, // Default 15 minutes (900 seconds)
+          maxScore: 100,
+          startedAt: new Date()
         }
       })
 
       return {
         isActive: true,
-        startTime: session.startTime.toISOString(),
-        targetTime: session.targetTime,
+        startedAt: session.startedAt.toISOString(),
+        timeRemaining: session.timeRemaining,
         message: 'Study session started successfully'
       }
     } catch (error) {
@@ -280,10 +286,10 @@ export class HomeService {
   // Stop study session
   static async stopStudySession(userId: string) {
     try {
-      const activeSession = await prisma.studySession.findFirst({
+      const activeSession = await prisma.simulation.findFirst({
         where: {
           userId,
-          endTime: null
+          completedAt: null
         }
       })
 
@@ -295,9 +301,9 @@ export class HomeService {
       }
 
       // Update session with end time
-      await prisma.studySession.update({
+      await prisma.simulation.update({
         where: { id: activeSession.id },
-        data: { endTime: new Date() }
+        data: { completedAt: new Date() }
       })
 
       return {
@@ -314,12 +320,12 @@ export class HomeService {
   static async resetStudySession(userId: string) {
     try {
       // Stop any active session
-      await prisma.studySession.updateMany({
+      await prisma.simulation.updateMany({
         where: {
           userId,
-          endTime: null
+          completedAt: null
         },
-        data: { endTime: new Date() }
+        data: { completedAt: new Date() }
       })
 
       return {
@@ -458,16 +464,16 @@ export class HomeService {
           orderBy: { completedAt: 'desc' },
           take: 5 // Reduced from 10
         }),
-        prisma.studySession.findMany({
+        prisma.simulation.findMany({
           where: {
             userId,
-            startTime: { 
+            startedAt: { 
               gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
             }
           },
           select: {
-            startTime: true,
-            endTime: true
+            startedAt: true,
+            completedAt: true
           }
         })
       ])
@@ -475,12 +481,12 @@ export class HomeService {
       // Quick calculations
       const completedTests = testResults.length
       const averageScore = testResults.length > 0 
-        ? Math.round(testResults.reduce((sum, result) => sum + (result.percentage || 0), 0) / testResults.length)
+        ? Math.round(testResults.reduce((sum, result) => sum + (((result.score || 0) / 100) * 100 || 0), 0) / testResults.length)
         : 0
 
       const totalStudyTime = weeklySessions.reduce((total, session) => {
-        if (session.endTime) {
-          return total + (session.endTime.getTime() - session.startTime.getTime())
+        if (session.completedAt) {
+          return total + (session.completedAt.getTime() - session.startedAt.getTime())
         }
         return total
       }, 0)
@@ -532,22 +538,22 @@ export class HomeService {
       const weekAgo = new Date()
       weekAgo.setDate(weekAgo.getDate() - 7)
       
-      const weeklySessions = await prisma.studySession.findMany({
+      const weeklySessions = await prisma.simulation.findMany({
         where: {
           userId,
-          startTime: { gte: weekAgo }
+          startedAt: { gte: weekAgo }
         }
       })
 
       // Calculate analytics
       const completedTests = testResults.length
       const averageScore = testResults.length > 0 
-        ? testResults.reduce((sum, result) => sum + (result.percentage || 0), 0) / testResults.length 
+        ? testResults.reduce((sum, result) => sum + ((result.score / 100) * 100 || 0), 0) / testResults.length 
         : 0
 
       const totalStudyTime = weeklySessions.reduce((total, session) => {
-        if (session.endTime) {
-          return total + (session.endTime.getTime() - session.startTime.getTime())
+        if (session.completedAt) {
+          return total + (session.completedAt.getTime() - session.startedAt.getTime())
         }
         return total
       }, 0)
@@ -562,7 +568,7 @@ export class HomeService {
       
       // Calculate improvement rate (simplified)
       const improvementRate = testResults.length > 1 
-        ? Math.max(0, (testResults[0]?.percentage || 0) - (testResults[testResults.length - 1]?.percentage || 0))
+        ? Math.max(0, (((testResults[0]?.score || 0) / 100) * 100) - (((testResults[testResults.length - 1]?.score || 0) / 100) * 100))
         : 0
 
       return {
@@ -595,9 +601,9 @@ export class HomeService {
   // Calculate study streak
   private static async calculateStudyStreak(userId: string): Promise<number> {
     try {
-      const sessions = await prisma.studySession.findMany({
+      const sessions = await prisma.simulation.findMany({
         where: { userId },
-        orderBy: { startTime: 'desc' }
+        orderBy: { startedAt: 'desc' }
       })
 
       let streak = 0
@@ -609,7 +615,7 @@ export class HomeService {
         checkDate.setDate(checkDate.getDate() - i)
         
         const hasSession = sessions.some(session => {
-          const sessionDate = new Date(session.startTime)
+          const sessionDate = new Date(session.startedAt)
           sessionDate.setHours(0, 0, 0, 0)
           return sessionDate.getTime() === checkDate.getTime()
         })

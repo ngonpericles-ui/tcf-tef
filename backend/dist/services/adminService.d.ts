@@ -242,6 +242,7 @@ export declare class AdminService {
             role: import(".prisma/client").$Enums.UserRole;
             status: import(".prisma/client").$Enums.UserStatus;
             subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+            currentLevel: string | null;
             profileImage: string | null;
             phone: string | null;
             dateOfBirth: Date | null;
@@ -342,6 +343,7 @@ export declare class AdminService {
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+        currentLevel: string | null;
         profileImage: string | null;
         phone: string | null;
         dateOfBirth: Date | null;
@@ -367,6 +369,7 @@ export declare class AdminService {
         role: import(".prisma/client").$Enums.UserRole;
         status: import(".prisma/client").$Enums.UserStatus;
         subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+        currentLevel: string | null;
         profileImage: string | null;
         phone: string | null;
         dateOfBirth: Date | null;
@@ -537,7 +540,7 @@ export declare class AdminService {
             sessions: number;
         };
     }>;
-    static getReviewRequests(userId: string, userRole: string): Promise<any>;
+    static getReviewRequests(userId: string, userRole: string): Promise<any[]>;
     static handleReviewRequest(requestId: string, action: string, data: {
         tutorId: string;
         response?: string;

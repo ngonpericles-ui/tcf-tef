@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.testRoutes = void 0;
 const express_1 = require("express");
-const testController_1 = require("@/controllers/testController");
-const validation_1 = require("@/middleware/validation");
-const auth_1 = require("@/middleware/auth");
+const testController_1 = require("../controllers/testController");
+const validation_1 = require("../middleware/validation");
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 exports.testRoutes = router;
 router.get('/health', testController_1.TestController.healthCheck);

@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionService = void 0;
-const connection_1 = require("@/database/connection");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const connection_1 = require("../database/connection");
+const errorHandler_1 = require("../middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 class LiveSessionService {
     static async createLiveSession(sessionData, createdById, creatorRole) {
         try {
@@ -313,7 +313,7 @@ class LiveSessionService {
             if (!existingSession) {
                 throw new errorHandler_1.NotFoundError('Live session not found');
             }
-            const isAdminOrManager = [client_1.UserRole.ADMIN, client_1.UserRole.SENIOR_MANAGER, client_1.UserRole.JUNIOR_MANAGER].includes(userRole);
+            const isAdminOrManager = userRole !== 'STUDENT' && [client_1.UserRole.ADMIN, client_1.UserRole.SENIOR_MANAGER, client_1.UserRole.JUNIOR_MANAGER].includes(userRole);
             const isCreator = existingSession.createdById === userId;
             console.log('🔐 Authorization check:', {
                 isAdminOrManager,

@@ -462,7 +462,6 @@ Réponds en JSON avec cette structure:
       const savedFeedback = await prisma.aIFeedback.create({
         data: {
           userId: request.userId,
-          simulationResultId: null, // Will be linked when simulation result is created
           submissionType: 'SIMULATION_COMPLETION',
           submissionContent: JSON.stringify({
             simulationTitle: request.simulationTitle,
@@ -476,7 +475,7 @@ Réponds en JSON avec cette structure:
           strengths: feedback.strengths,
           weaknesses: feedback.weaknesses,
           recommendations: feedback.recommendations,
-          detailedAnalysis: feedback.detailedAnalysis,
+          // detailedAnalysis: feedback.detailedAnalysis, // Field does not exist in schema
           status: feedback.canGradeTo100Percent ? 'AI_COMPLETED' : 'PENDING_HUMAN'
         }
       });

@@ -18,6 +18,7 @@ model User {
   role                         UserRole                 @default(STUDENT)
   status                       UserStatus               @default(ACTIVE)
   subscriptionTier             SubscriptionTier         @default(FREE)
+  currentLevel                 String?                  @default("A1")
   profileImage                 String?
   phone                        String?
   dateOfBirth                  DateTime?
@@ -956,6 +957,7 @@ model AIFeedback {
   submissionContent String?
   submissionFileUrl String?
   aiScore           Float?
+  maxScore          Float?            @default(100)
   aiConfidence      Float?
   overallFeedback   String?
   strengths         String[]

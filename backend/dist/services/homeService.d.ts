@@ -22,7 +22,7 @@ export interface DashboardData {
     };
     studySession: {
         isActive: boolean;
-        startTime?: string;
+        startedAt?: string;
         currentDuration: number;
         dailyGoal: number;
         progress: number;
@@ -41,22 +41,22 @@ export interface AIMessages {
 }
 export interface StudySessionData {
     isActive: boolean;
-    startTime?: string;
+    startedAt?: string;
     currentDuration: number;
     dailyGoal: number;
     progress: number;
     totalTimeToday: number;
-    targetTime?: number;
+    timeRemaining?: number;
 }
 export declare class HomeService {
     static getDashboardData(userId: string): Promise<DashboardData>;
     static getAIMessages(userId: string): Promise<AIMessages>;
     static getStudySessionDataOptimized(userId: string): Promise<StudySessionData>;
     static getStudySessionData(userId: string): Promise<StudySessionData>;
-    static startStudySession(userId: string, targetTime?: number): Promise<{
+    static startStudySession(userId: string, timeRemaining?: number): Promise<{
         isActive: boolean;
-        startTime: any;
-        targetTime: any;
+        startedAt: string;
+        timeRemaining: number;
         message: string;
     }>;
     static stopStudySession(userId: string): Promise<{

@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnalyticsService = void 0;
-const connection_1 = require("@/database/connection");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const connection_1 = require("../database/connection");
+const errorHandler_1 = require("../middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 class AnalyticsService {
     static async getDashboardAnalytics(userRole) {
         try {

@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AITeacherFeedbackService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const generative_ai_1 = require("@google/generative-ai");
 const logger_1 = require("../utils/logger");
 const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -319,7 +319,6 @@ Réponds en JSON avec cette structure:
             const savedFeedback = await connection_1.prisma.aIFeedback.create({
                 data: {
                     userId: request.userId,
-                    simulationResultId: null,
                     submissionType: 'SIMULATION_COMPLETION',
                     submissionContent: JSON.stringify({
                         simulationTitle: request.simulationTitle,
@@ -333,7 +332,6 @@ Réponds en JSON avec cette structure:
                     strengths: feedback.strengths,
                     weaknesses: feedback.weaknesses,
                     recommendations: feedback.recommendations,
-                    detailedAnalysis: feedback.detailedAnalysis,
                     status: feedback.canGradeTo100Percent ? 'AI_COMPLETED' : 'PENDING_HUMAN'
                 }
             });

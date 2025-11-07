@@ -237,6 +237,7 @@ export declare class ManagerService {
             role: import(".prisma/client").$Enums.UserRole;
             status: import(".prisma/client").$Enums.UserStatus;
             subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+            currentLevel: string | null;
             profileImage: string | null;
             phone: string | null;
             dateOfBirth: Date | null;

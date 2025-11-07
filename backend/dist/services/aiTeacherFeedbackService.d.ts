@@ -82,6 +82,7 @@ export declare class AITeacherFeedbackService {
         submissionContent: string | null;
         submissionFileUrl: string | null;
         aiScore: number | null;
+        maxScore: number | null;
         aiConfidence: number | null;
         overallFeedback: string | null;
         strengths: string[];
@@ -104,6 +105,7 @@ export declare class AITeacherFeedbackService {
         submissionContent: string | null;
         submissionFileUrl: string | null;
         aiScore: number | null;
+        maxScore: number | null;
         aiConfidence: number | null;
         overallFeedback: string | null;
         strengths: string[];

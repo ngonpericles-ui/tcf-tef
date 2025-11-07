@@ -101,7 +101,6 @@ export class AuthService {
           role: true,
           status: true,
           subscriptionTier: true,
-          currentLevel: true,
           profileImage: true,
           phone: true,
           dateOfBirth: true,
@@ -115,6 +114,7 @@ export class AuthService {
           socialAuthProvider: true,
           socialAuthId: true,
           profilePicture: true,
+          currentLevel: true,
           createdAt: true,
           updatedAt: true
         }
@@ -149,8 +149,7 @@ export class AuthService {
           socialAuthProvider: user.socialAuthProvider || null,
           socialAuthId: user.socialAuthId || null,
           profilePicture: user.profilePicture || null,
-          currentLevel: user.currentLevel || 'A1',
-
+          currentLevel: (user as any).currentLevel || 'A1'
         },
         tokens
       };
@@ -198,7 +197,6 @@ export class AuthService {
           role: true,
           status: true,
           subscriptionTier: true,
-          currentLevel: true,
           profileImage: true,
           phone: true,
           dateOfBirth: true,
@@ -212,6 +210,7 @@ export class AuthService {
           socialAuthProvider: true,
           socialAuthId: true,
           profilePicture: true,
+          currentLevel: true,
           createdAt: true,
           updatedAt: true
         }
@@ -246,7 +245,7 @@ export class AuthService {
           socialAuthProvider: user.socialAuthProvider || null,
           socialAuthId: user.socialAuthId || null,
           profilePicture: user.profilePicture || null,
-          currentLevel: user.currentLevel || 'A1'
+          currentLevel: (user as any).currentLevel || 'A1'
         },
         tokens
       };

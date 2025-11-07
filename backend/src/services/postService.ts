@@ -583,7 +583,7 @@ export class PostService {
     }
 
     const [likes, comments, shares, views] = await Promise.all([
-      prisma.like.count({ where: { contentId: postId, contentType: 'POST' } }),
+      prisma.like.count({ where: { postId: postId } }),
       prisma.comment.count({ where: { postId } }),
       prisma.share.count({ where: { postId } }),
       post.viewCount

@@ -152,11 +152,11 @@ export class CommentService {
         const likes = await prisma.like.findMany({
           where: {
             userId,
-            contentType: 'COMMENT'
+            commentId: { not: null }
           },
-          select: { contentId: true }
+          select: { commentId: true }
         });
-        userLikes = likes.map(like => like.contentId).filter(Boolean);
+        userLikes = likes.map(like => like.commentId).filter(Boolean) as string[];
       }
 
       // Format comments with nested structure
@@ -496,8 +496,7 @@ export class CommentService {
       const existingLike = await prisma.like.findFirst({
         where: {
           userId,
-          contentId: commentId,
-          contentType: 'COMMENT'
+          commentId: commentId
         }
       });
 
@@ -515,8 +514,7 @@ export class CommentService {
         await prisma.like.create({
           data: {
             userId,
-            contentId: commentId,
-            contentType: 'COMMENT'
+            commentId: commentId
           }
         });
         isLiked = true;
@@ -525,7 +523,7 @@ export class CommentService {
 
       // Get updated like count
       const likeCount = await prisma.like.count({
-        where: { contentId: commentId, contentType: 'COMMENT' }
+        where: { commentId: commentId }
       });
 
       return { isLiked, likeCount };
@@ -609,8 +607,7 @@ export class CommentService {
         const like = await prisma.like.findFirst({
           where: {
             userId,
-            contentId: commentId,
-            contentType: 'COMMENT'
+            commentId: commentId
           }
         });
         isLiked = !!like;
@@ -770,11 +767,11 @@ export class SocialInteractionService {
   }> {
     try {
       const [likeCount, commentCount, shareCount, userLike, userShare] = await Promise.all([
-        prisma.like.count({ where: { contentId: postId, contentType: 'POST' } }),
+        prisma.like.count({ where: { postId: postId } }),
         prisma.comment.count({ where: { postId } }),
         prisma.share.count({ where: { postId } }),
         userId ? prisma.like.findFirst({
-          where: { userId, contentId: postId, contentType: 'POST' }
+          where: { userId, postId: postId }
         }) : null,
         userId ? prisma.share.findFirst({
           where: { userId, postId }

@@ -432,7 +432,7 @@ class QuestionBankService {
           OR: [
             { title: { contains: query, mode: 'insensitive' } },
             { description: { contains: query, mode: 'insensitive' } },
-            { level: { contains: query, mode: 'insensitive' } }
+            { level: { equals: query as any } }
           ],
           isActive: true
         },

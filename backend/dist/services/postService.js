@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PostService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const client_1 = require("@prisma/client");
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 class PostService {
     static async getAllPosts(pagination, filters, sort) {
         const { page, limit } = pagination;
@@ -453,7 +453,7 @@ class PostService {
             throw new Error('Access denied');
         }
         const [likes, comments, shares, views] = await Promise.all([
-            connection_1.prisma.like.count({ where: { contentId: postId, contentType: 'POST' } }),
+            connection_1.prisma.like.count({ where: { postId: postId } }),
             connection_1.prisma.comment.count({ where: { postId } }),
             connection_1.prisma.share.count({ where: { postId } }),
             post.viewCount

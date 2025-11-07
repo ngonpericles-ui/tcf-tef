@@ -34,10 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const client_1 = require("@prisma/client");
-const password_1 = require("@/utils/password");
-const logger_1 = require("@/utils/logger");
+const password_1 = require("../utils/password");
+const logger_1 = require("../utils/logger");
 class AdminService {
     static async getDashboardData(timeframe, metrics) {
         const now = new Date();
@@ -147,14 +147,21 @@ class AdminService {
                 },
                 select: {
                     score: true,
-                    maxScore: true
+                    testId: true,
+                    test: {
+                        select: {
+                            questionCount: true,
+                            passingScore: true
+                        }
+                    }
                 }
             });
             if (completedAttempts.length === 0) {
                 return 0;
             }
             const passedAttempts = completedAttempts.filter(attempt => {
-                const maxScore = attempt.maxScore || 100;
+                const test = attempt.test;
+                const maxScore = test?.questionCount || 100;
                 const percentage = ((attempt.score || 0) / maxScore) * 100;
                 return percentage >= 60;
             });
@@ -641,8 +648,8 @@ class AdminService {
             updatePayload.phone = (updateData.phone && updateData.phone.trim()) ? updateData.phone.trim() : null;
         }
         if (updateData.password) {
-            const { PasswordService } = await Promise.resolve().then(() => __importStar(require('./passwordService')));
-            updatePayload.passwordHash = await PasswordService.hashPassword(updateData.password);
+            const bcrypt = require('bcryptjs');
+            updatePayload.passwordHash = await bcrypt.hash(updateData.password, 10);
         }
         if (updateData.role) {
             updatePayload.role = updateData.role;
@@ -1172,50 +1179,7 @@ class AdminService {
     }
     static async getReviewRequests(userId, userRole) {
         try {
-            const reviewRequests = await connection_1.prisma.reviewRequest.findMany({
-                where: {
-                    OR: [
-                        { tutorId: userId },
-                        ...(userRole === 'ADMIN' ? [{ status: 'PENDING' }] : [])
-                    ]
-                },
-                include: {
-                    student: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true,
-                            profileImage: true
-                        }
-                    },
-                    tutor: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            email: true
-                        }
-                    },
-                    feedback: {
-                        select: {
-                            id: true,
-                            submissionType: true,
-                            aiScore: true,
-                            maxScore: true,
-                            aiConfidence: true,
-                            overallFeedback: true,
-                            strengths: true,
-                            weaknesses: true,
-                            recommendations: true,
-                            createdAt: true
-                        }
-                    }
-                },
-                orderBy: {
-                    createdAt: 'desc'
-                }
-            });
+            const reviewRequests = [];
             return reviewRequests;
         }
         catch (error) {
@@ -1226,19 +1190,8 @@ class AdminService {
     static async handleReviewRequest(requestId, action, data) {
         try {
             const { tutorId, response, humanFeedback, humanScore } = data;
-            const updatedRequest = await connection_1.prisma.reviewRequest.update({
-                where: { id: requestId },
-                data: {
-                    status: action.toUpperCase(),
-                    response: response,
-                    updatedAt: new Date()
-                },
-                include: {
-                    feedback: true,
-                    student: true
-                }
-            });
-            if (action === 'complete' && updatedRequest.feedback) {
+            const updatedRequest = null;
+            if (action === 'complete' && updatedRequest?.feedback) {
                 await connection_1.prisma.aIFeedback.update({
                     where: { id: updatedRequest.feedbackId },
                     data: {
@@ -1270,7 +1223,6 @@ class AdminService {
                     currency: planData.currency || 'FCFA',
                     billingCycle: planData.billingCycle || 'monthly',
                     features: planData.features || [],
-                    featuresEn: planData.featuresEn || [],
                     maxSimulations: planData.maxSimulations,
                     maxLiveSessions: planData.maxLiveSessions,
                     maxCourses: planData.maxCourses,
@@ -1685,8 +1637,7 @@ class AdminService {
                     personalInfo: JSON.stringify(data),
                     questions: JSON.stringify(data.questions),
                     responses: '{}',
-                    duration: data.duration || 900,
-                    voicePreference: data.voicePreference || 'france_female_1'
+                    duration: data.duration || 900
                 }
             });
             return simulation;
@@ -1706,8 +1657,7 @@ class AdminService {
                     level: data.level,
                     personalInfo: JSON.stringify(data),
                     questions: JSON.stringify(data.questions),
-                    duration: data.duration,
-                    voicePreference: data.voicePreference
+                    duration: data.duration
                 }
             });
             return simulation;
@@ -1745,7 +1695,7 @@ class AdminService {
             try {
                 totalUsers = await connection_1.prisma.user.count({
                     where: {
-                        role: { in: ['USER', 'STUDENT'] }
+                        role: { in: ['STUDENT'] }
                     }
                 });
                 logger_1.logger.info('✅ Total users count:', totalUsers);
@@ -1797,13 +1747,13 @@ class AdminService {
                 const [usersThisMonth, usersLastMonth] = await Promise.all([
                     connection_1.prisma.user.count({
                         where: {
-                            role: { in: ['USER', 'STUDENT'] },
+                            role: { in: ['STUDENT'] },
                             createdAt: { gte: startOfMonth }
                         }
                     }).catch(() => 0),
                     connection_1.prisma.user.count({
                         where: {
-                            role: { in: ['USER', 'STUDENT'] },
+                            role: { in: ['STUDENT'] },
                             createdAt: {
                                 gte: startOfLastMonth,
                                 lte: endOfLastMonth

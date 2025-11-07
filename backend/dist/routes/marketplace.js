@@ -130,31 +130,17 @@ router.get('/requests', auth_1.authenticate, async (req, res, next) => {
                         subscriptionTier: true
                     }
                 },
-                simulationResult: {
-                    include: {
-                        testAttempt: {
-                            include: {
-                                test: {
-                                    select: {
-                                        title: true,
-                                        type: true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             },
             orderBy: { createdAt: 'desc' }
         });
         const requests = pendingRequests.map(request => ({
             id: request.id,
             studentId: request.userId,
-            studentName: `${request.user.firstName} ${request.user.lastName}`,
-            studentEmail: request.user.email,
-            subscriptionPlan: request.user.subscriptionTier || 'FREE',
-            simulationTitle: request.simulationResult?.testAttempt?.test?.title || 'Unknown',
-            simulationType: request.simulationResult?.testAttempt?.test?.type || 'Unknown',
+            studentName: `${request.user?.firstName || ''} ${request.user?.lastName || ''}`,
+            studentEmail: request.user?.email || '',
+            subscriptionPlan: request.user?.subscriptionTier || 'FREE',
+            simulationTitle: 'Unknown',
+            simulationType: 'Unknown',
             submissionType: request.submissionType,
             submissionContent: request.submissionContent,
             submissionFileUrl: request.submissionFileUrl,
@@ -245,22 +231,12 @@ router.get('/my-requests', auth_1.authenticate, async (req, res, next) => {
                 userId,
                 status: { in: ['PENDING_HUMAN', 'HUMAN_COMPLETED'] }
             },
-            include: {
-                simulationResult: {
-                    include: {
-                        testAttempt: {
-                            include: {
-                                test: true
-                            }
-                        }
-                    }
-                }
-            },
+            include: {},
             orderBy: { createdAt: 'desc' }
         });
         const requests = feedbacks.map(feedback => ({
             id: feedback.id,
-            simulationTitle: feedback.simulationResult?.testAttempt?.test?.title || 'Unknown',
+            simulationTitle: 'Unknown',
             status: feedback.status,
             submissionDate: feedback.createdAt,
             tutorName: feedback.humanReviewerName,

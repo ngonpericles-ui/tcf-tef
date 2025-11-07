@@ -169,8 +169,8 @@ export class MonitoringService {
 
       // Active conversations
       try {
-        const activeConversations = await prisma.conversation.count({
-          where: { is_active: true }
+        const activeConversations = await prisma.chatSession.count({
+          where: { isActive: true }
         });
         this.metrics.set('active_conversations', activeConversations);
       } catch (error) {

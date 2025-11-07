@@ -1,4 +1,4 @@
-import { LoginRequest, RegisterRequest, RefreshTokenRequest, AuthTokens, UserProfile } from '@/types';
+import { LoginRequest, RegisterRequest, RefreshTokenRequest, AuthTokens, UserProfile } from '../types';
 export declare class AuthService {
     static register(data: RegisterRequest): Promise<{
         user: UserProfile;
@@ -36,6 +36,7 @@ export declare class AuthService {
                 role: import(".prisma/client").$Enums.UserRole;
                 status: import(".prisma/client").$Enums.UserStatus;
                 subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+                currentLevel: string | null;
                 profileImage: string | null;
                 phone: string | null;
                 dateOfBirth: Date | null;
@@ -74,6 +75,7 @@ export declare class AuthService {
                 role: import(".prisma/client").$Enums.UserRole;
                 status: import(".prisma/client").$Enums.UserStatus;
                 subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+                currentLevel: string | null;
                 profileImage: string | null;
                 phone: string | null;
                 dateOfBirth: Date | null;
@@ -112,6 +114,7 @@ export declare class AuthService {
                 role: import(".prisma/client").$Enums.UserRole;
                 status: import(".prisma/client").$Enums.UserStatus;
                 subscriptionTier: import(".prisma/client").$Enums.SubscriptionTier;
+                currentLevel: string | null;
                 profileImage: string | null;
                 phone: string | null;
                 dateOfBirth: Date | null;

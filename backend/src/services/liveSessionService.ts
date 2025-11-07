@@ -442,7 +442,7 @@ export class LiveSessionService {
       }
 
       // Check authorization - Allow admins, managers, and session creators
-      const isAdminOrManager = [UserRole.ADMIN, UserRole.SENIOR_MANAGER, UserRole.JUNIOR_MANAGER].includes(userRole);
+      const isAdminOrManager = userRole !== 'STUDENT' && [UserRole.ADMIN, UserRole.SENIOR_MANAGER, UserRole.JUNIOR_MANAGER].includes(userRole as any);
       const isCreator = existingSession.createdById === userId;
       
       console.log('🔐 Authorization check:', {

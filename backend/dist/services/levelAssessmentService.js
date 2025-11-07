@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LevelAssessmentService = void 0;
-const connection_1 = require("@/database/connection");
-const logger_1 = require("@/utils/logger");
+const connection_1 = require("../database/connection");
+const logger_1 = require("../utils/logger");
 const aiService_1 = require("./aiService");
 class LevelAssessmentService {
     static async assessLevel(userId, simulationResult) {
