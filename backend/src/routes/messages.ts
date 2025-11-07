@@ -4,7 +4,6 @@ import { NotificationService } from '../services/notificationService';
 import { pusherService } from '../services/pusherService';
 import { SecureSessionService } from '../services/secureSessionService';
 import { EmailService } from '../services/emailService';
-import { TwilioService } from '../services/twilioService';
 
 const router = express.Router();
 
@@ -1372,20 +1371,21 @@ ${secureLink}
     }
 
     // Send Twilio SMS and email notification
-    try {
-      if (student.phone) {
-        await TwilioService.sendSecureSessionNotification(
-          student.phone,
-          student.email,
-          title,
-          `${instructor.firstName} ${instructor.lastName}`,
-          secureLink
-        )
-      }
-    } catch (twilioError) {
-      console.warn('Failed to send Twilio notification:', twilioError)
-      // Continue even if Twilio fails
-    }
+    // TODO: Implement TwilioService.sendSecureSessionNotification
+    // try {
+    //   if (student.phone) {
+    //     await TwilioService.sendSecureSessionNotification(
+    //       student.phone,
+    //       student.email,
+    //       title,
+    //       `${instructor.firstName} ${instructor.lastName}`,
+    //       secureLink
+    //     )
+    //   }
+    // } catch (twilioError) {
+    //   console.warn('Failed to send Twilio notification:', twilioError)
+    //   // Continue even if Twilio fails
+    // }
 
     // Send Pusher notification
     try {
@@ -1917,3 +1917,4 @@ router.get('/validate-secure-session/:token', async (req: Request, res: Response
 })
 
 export default router;
+
