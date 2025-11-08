@@ -172,7 +172,7 @@ Here's what your Twilio section should look like in `.env`:
 # TWILIO SMS CONFIGURATION
 # ============================================
 # For SMS password reset codes
-TWILIO_ACCOUNT_SID=AC1234567890abcdef1234567890abcdef
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_32_character_auth_token_here
 TWILIO_PHONE_NUMBER=+237612345678
 
