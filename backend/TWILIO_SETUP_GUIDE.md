@@ -12,7 +12,7 @@ For **SMS functionality** (password reset codes via SMS), you need **3 environme
   - Go to https://console.twilio.com/
   - Login to your Twilio account
   - On the dashboard, you'll see "Account SID" - it starts with `AC` (e.g., `ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`)
-- **Example**: `TWILIO_ACCOUNT_SID=AC1234567890abcdef1234567890abcdef`
+- **Example**: `TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
 ### 2. `TWILIO_AUTH_TOKEN`
 - **What it is**: Your Twilio Auth Token (secret key for API authentication)
