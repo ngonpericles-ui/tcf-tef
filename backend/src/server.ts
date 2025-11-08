@@ -48,6 +48,8 @@ import messagesRoutes from './routes/messages';
 import fallbackRoutes from './routes/fallback';
 import aiAssistantRoutes from './routes/aiAssistant';
 import enhancedFileManagementRoutes from './routes/enhancedFileManagement';
+import { successStoriesRoutes } from './routes/successStories';
+import { testimonialRoutes } from './routes/testimonials';
 import likesRoutes from './routes/likes';
 import homeRoutes from './routes/home'
 import challengeRoutes from './routes/challenges';
@@ -207,6 +209,7 @@ app.use('/api', marketplaceRoutes);
 // Note: marketplaceApiRoutes is deprecated - using marketplaceRoutes instead
 // app.use('/api/marketplace', marketplaceApiRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/success-stories', successStoriesRoutes);
 app.use('/api/fallback', fallbackRoutes);
 app.use('/api/content-management', contentManagementRoutes);
 app.use('/api/ai-assistant', aiAssistantRoutes);

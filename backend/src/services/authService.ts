@@ -4,6 +4,8 @@ import { JWTService, TokenPayload } from '@/utils/jwt';
 import { OAuth2Client } from 'google-auth-library';
 import * as admin from 'firebase-admin';
 import path from 'path';
+import { EmailService } from '@/services/emailService';
+import TwilioService from '@/services/twilioService';
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
@@ -37,12 +39,12 @@ if (!admin.apps.length) {
     }
     // Option 3: Fallback to JSON file (for local development only)
     else {
-      const serviceAccountPath = path.join(__dirname, '../../tcftef-68b4c-firebase-adminsdk-fbsvc-49c8267271.json');
+  const serviceAccountPath = path.join(__dirname, '../../tcftef-68b4c-firebase-adminsdk-fbsvc-49c8267271.json');
       if (require('fs').existsSync(serviceAccountPath)) {
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccountPath),
-          projectId: 'tcftef-68b4c'
-        });
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccountPath),
+    projectId: 'tcftef-68b4c'
+  });
         console.log('✅ Firebase Admin SDK initialized with local JSON file');
       } else {
         console.warn('⚠️ Firebase credentials not found. Google authentication will not work.');
@@ -1016,5 +1018,343 @@ export class AuthService {
       logger.error('Firebase token verification failed', error);
       return null;
     }
+  }
+
+  /**
+   * Generate a 6-digit password reset code
+   */
+  private static generateResetCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  /**
+   * Request password reset - generates code and sends via email or SMS
+   */
+  static async requestPasswordReset(data: { email?: string; phone?: string; method: 'email' | 'phone'; lang?: 'fr' | 'en' }): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      // Find user by email or phone
+      let user;
+      if (data.method === 'email' && data.email) {
+        user = await prisma.user.findUnique({
+          where: { email: data.email.toLowerCase() }
+        });
+      } else if (data.method === 'phone' && data.phone) {
+        // Normalize phone number (remove spaces, dashes, etc.)
+        const normalizedPhone = data.phone.replace(/[\s\-\(\)]/g, '');
+        user = await prisma.user.findFirst({
+          where: {
+            phone: {
+              contains: normalizedPhone
+            }
+          }
+        });
+      }
+
+      // Don't reveal if user exists or not (security best practice)
+      if (!user) {
+        // Still return success to prevent user enumeration
+        logger.warn('Password reset requested for non-existent user', {
+          method: data.method,
+          identifier: data.method === 'email' ? data.email : data.phone
+        });
+        return {
+          success: true,
+          message: 'If an account exists with this information, a reset code has been sent.'
+        };
+      }
+
+      // Check if user has password (social auth users might not have password)
+      if (!user.passwordHash) {
+        return {
+          success: false,
+          error: 'This account does not have a password set. Please use social login.'
+        };
+      }
+
+      // Generate 6-digit code
+      const code = this.generateResetCode();
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 5); // 5 minutes expiration
+
+      // Invalidate any existing reset tokens for this user
+      await prisma.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          used: false,
+          expiresAt: {
+            gt: new Date()
+          }
+        },
+        data: {
+          used: true
+        }
+      });
+
+      // Create new reset token
+      const resetToken = await prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          code,
+          email: data.method === 'email' ? data.email : null,
+          phone: data.method === 'phone' ? data.phone : null,
+          method: data.method,
+          expiresAt
+        }
+      });
+
+      // Send code via email or SMS
+      if (data.method === 'email' && data.email) {
+        const emailSent = await EmailService.sendPasswordResetCode({
+          email: data.email,
+          code,
+          firstName: user.firstName,
+          lang: data.lang || 'fr'
+        });
+
+        if (!emailSent) {
+          logger.error('Failed to send password reset email', { userId: user.id, email: data.email });
+          // Don't fail the request, but log the error
+        }
+      } else if (data.method === 'phone' && data.phone) {
+        const isFrench = data.lang !== 'en';
+        const smsResult = isFrench
+          ? await TwilioService.sendPasswordResetCode(data.phone, code, user.firstName)
+          : await TwilioService.sendPasswordResetCodeEn(data.phone, code, user.firstName);
+
+        if (!smsResult.success) {
+          logger.error('Failed to send password reset SMS', {
+            userId: user.id,
+            phone: data.phone,
+            error: smsResult.error
+          });
+          // Don't fail the request, but log the error
+        }
+      }
+
+      logger.info('Password reset code generated', {
+        userId: user.id,
+        method: data.method,
+        expiresAt: resetToken.expiresAt
+      });
+
+      return {
+        success: true,
+        message: 'If an account exists with this information, a reset code has been sent.'
+      };
+    } catch (error: any) {
+      logger.error('Failed to request password reset', {
+        error: error.message,
+        method: data.method
+      });
+      return {
+        success: false,
+        error: 'Failed to process password reset request'
+      };
+    }
+  }
+
+  /**
+   * Verify password reset code
+   */
+  static async verifyPasswordResetCode(data: { code: string; email?: string; phone?: string; method: 'email' | 'phone' }): Promise<{ success: boolean; tokenId?: string; error?: string }> {
+    try {
+      // Find the reset token
+      const whereClause: any = {
+        code: data.code,
+        used: false,
+        expiresAt: {
+          gt: new Date()
+        },
+        method: data.method
+      };
+
+      if (data.method === 'email' && data.email) {
+        whereClause.email = data.email.toLowerCase();
+      } else if (data.method === 'phone' && data.phone) {
+        const normalizedPhone = data.phone.replace(/[\s\-\(\)]/g, '');
+        whereClause.phone = {
+          contains: normalizedPhone
+        };
+      }
+
+      const resetToken = await prisma.passwordResetToken.findFirst({
+        where: whereClause,
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      if (!resetToken) {
+        // Increment attempts for security tracking
+        await prisma.passwordResetToken.updateMany({
+          where: {
+            code: data.code,
+            used: false
+          },
+          data: {
+            attempts: {
+              increment: 1
+            }
+          }
+        });
+
+        return {
+          success: false,
+          error: 'Invalid or expired reset code'
+        };
+      }
+
+      // Check if too many attempts
+      if (resetToken.attempts >= 5) {
+        await prisma.passwordResetToken.update({
+          where: { id: resetToken.id },
+          data: { used: true }
+        });
+        return {
+          success: false,
+          error: 'Too many failed attempts. Please request a new code.'
+        };
+      }
+
+      logger.info('Password reset code verified', {
+        tokenId: resetToken.id,
+        userId: resetToken.userId
+      });
+
+      return {
+        success: true,
+        tokenId: resetToken.id
+      };
+    } catch (error: any) {
+      logger.error('Failed to verify password reset code', {
+        error: error.message
+      });
+      return {
+        success: false,
+        error: 'Failed to verify reset code'
+      };
+    }
+  }
+
+  /**
+   * Reset password using verified code
+   */
+  static async resetPassword(data: { tokenId: string; newPassword: string }): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      // Find the reset token
+      const resetToken = await prisma.passwordResetToken.findUnique({
+        where: { id: data.tokenId },
+        include: { user: true }
+      });
+
+      if (!resetToken) {
+        return {
+          success: false,
+          error: 'Invalid reset token'
+        };
+      }
+
+      if (resetToken.used) {
+        return {
+          success: false,
+          error: 'This reset code has already been used'
+        };
+      }
+
+      if (resetToken.expiresAt < new Date()) {
+        return {
+          success: false,
+          error: 'Reset code has expired'
+        };
+      }
+
+      // Validate new password
+      const passwordValidation = PasswordService.validatePasswordStrength(data.newPassword);
+      if (!passwordValidation.isValid) {
+        return {
+          success: false,
+          error: `Password validation failed: ${passwordValidation.errors.join(', ')}`
+        };
+      }
+
+      // Hash new password
+      const passwordHash = await PasswordService.hashPassword(data.newPassword, resetToken.user.role);
+
+      // Update user password
+      await prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash }
+      });
+
+      // Mark reset token as used
+      await prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { used: true }
+      });
+
+      // Invalidate all refresh tokens for security
+      await prisma.refreshToken.deleteMany({
+        where: { userId: resetToken.userId }
+      });
+
+      logger.info('Password reset successfully', {
+        userId: resetToken.userId
+      });
+
+      return {
+        success: true,
+        message: 'Password has been reset successfully'
+      };
+    } catch (error: any) {
+      logger.error('Failed to reset password', {
+        error: error.message
+      });
+      return {
+        success: false,
+        error: 'Failed to reset password'
+      };
+    }
+  }
+
+  /**
+   * Resend password reset code
+   */
+  static async resendPasswordResetCode(data: { email?: string; phone?: string; method: 'email' | 'phone'; lang?: 'fr' | 'en' }): Promise<{ success: boolean; message?: string; error?: string }> {
+    // Rate limiting: Check if user requested reset in last 60 seconds
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
+    
+    let recentRequest;
+    if (data.method === 'email' && data.email) {
+      recentRequest = await prisma.passwordResetToken.findFirst({
+        where: {
+          email: data.email.toLowerCase(),
+          createdAt: {
+            gte: oneMinuteAgo
+          }
+        }
+      });
+    } else if (data.method === 'phone' && data.phone) {
+      const normalizedPhone = data.phone.replace(/[\s\-\(\)]/g, '');
+      recentRequest = await prisma.passwordResetToken.findFirst({
+        where: {
+          phone: {
+            contains: normalizedPhone
+          },
+          createdAt: {
+            gte: oneMinuteAgo
+          }
+        }
+      });
+    }
+
+    if (recentRequest) {
+      return {
+        success: false,
+        error: 'Please wait 60 seconds before requesting a new code'
+      };
+    }
+
+    // Reuse the same logic as requestPasswordReset
+    return this.requestPasswordReset(data);
   }
 }

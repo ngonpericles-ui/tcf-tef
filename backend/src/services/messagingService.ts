@@ -69,7 +69,7 @@ export class MessagingService {
     this.rateLimiter = rateLimitRedis;
     
     if (messageQueueRedis && cacheRedis && rateLimitRedis) {
-      logger.info('MessagingService initialized with Redis');
+    logger.info('MessagingService initialized with Redis');
     } else {
       logger.warn('MessagingService initialized without Redis - some features may be limited');
     }

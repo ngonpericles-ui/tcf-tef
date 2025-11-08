@@ -43,6 +43,7 @@ model User {
   payments                     Payment[]
   posts                        Post[]                   @relation("UserPosts")
   refreshTokens                RefreshToken[]
+  passwordResetTokens          PasswordResetToken[]
   subscriptions                Subscription[]
   testAttempts                 TestAttempt[]
   createdTests                 Test[]                   @relation("TestCreator")
@@ -103,6 +104,26 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String   // 6-digit code
+  email     String?
+  phone     String?
+  method    String   // 'email' or 'phone'
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0) // Track verification attempts
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([code, expiresAt, used])
+  @@index([email])
+  @@index([phone])
+  @@map("password_reset_tokens")
 }
 
 model Subscription {

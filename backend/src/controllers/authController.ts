@@ -313,4 +313,117 @@ export class AuthController {
 
     res.status(200).json(response);
   });
+
+  /**
+   * Request password reset
+   */
+  static forgotPassword = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { method, email, phone, lang } = req.body;
+
+    const result = await AuthService.requestPasswordReset({
+      method,
+      email,
+      phone,
+      lang: lang || 'fr'
+    });
+
+    if (result.success) {
+      const response: ApiResponse = {
+        success: true,
+        message: result.message || 'Password reset code sent successfully'
+      };
+      res.status(200).json(response);
+    } else {
+      const response: ApiResponse = {
+        success: false,
+        error: { message: result.error || 'Failed to send password reset code' }
+      };
+      res.status(400).json(response);
+    }
+  });
+
+  /**
+   * Verify password reset code
+   */
+  static verifyResetCode = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { code, method, email, phone } = req.body;
+
+    const result = await AuthService.verifyPasswordResetCode({
+      code,
+      method,
+      email,
+      phone
+    });
+
+    if (result.success && result.tokenId) {
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          tokenId: result.tokenId
+        },
+        message: 'Reset code verified successfully'
+      };
+      res.status(200).json(response);
+    } else {
+      const response: ApiResponse = {
+        success: false,
+        error: { message: result.error || 'Invalid or expired reset code' }
+      };
+      res.status(400).json(response);
+    }
+  });
+
+  /**
+   * Reset password
+   */
+  static resetPassword = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { tokenId, newPassword } = req.body;
+
+    const result = await AuthService.resetPassword({
+      tokenId,
+      newPassword
+    });
+
+    if (result.success) {
+      const response: ApiResponse = {
+        success: true,
+        message: result.message || 'Password reset successfully'
+      };
+      res.status(200).json(response);
+    } else {
+      const response: ApiResponse = {
+        success: false,
+        error: { message: result.error || 'Failed to reset password' }
+      };
+      res.status(400).json(response);
+    }
+  });
+
+  /**
+   * Resend password reset code
+   */
+  static resendResetCode = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { method, email, phone, lang } = req.body;
+
+    const result = await AuthService.resendPasswordResetCode({
+      method,
+      email,
+      phone,
+      lang: lang || 'fr'
+    });
+
+    if (result.success) {
+      const response: ApiResponse = {
+        success: true,
+        message: result.message || 'Reset code resent successfully'
+      };
+      res.status(200).json(response);
+    } else {
+      const response: ApiResponse = {
+        success: false,
+        error: { message: result.error || 'Failed to resend reset code' }
+      };
+      res.status(400).json(response);
+    }
+  });
 }

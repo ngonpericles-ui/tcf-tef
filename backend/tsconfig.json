@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "typeRoots": ["./node_modules/@types"],
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
@@ -30,7 +31,6 @@
     "paths": {
       "@/*": ["src/*"]
     },
-
     "allowUnreachableCode": true,
     "allowUnusedLabels": true,
     "strictNullChecks": false,
@@ -44,6 +44,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "tests"
+    "tests",
+    "**/node_modules/**/@types/**"
   ]
 }

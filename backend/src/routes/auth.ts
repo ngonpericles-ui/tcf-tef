@@ -156,4 +156,32 @@ router.post('/generate-temporary-token', authenticate, async (req, res) => {
  */
 router.get('/health', AuthController.healthCheck);
 
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Request password reset code via email or SMS
+ * @access  Public
+ */
+router.post('/forgot-password', validate(authSchemas.forgotPassword), AuthController.forgotPassword);
+
+/**
+ * @route   POST /api/auth/verify-reset-code
+ * @desc    Verify password reset code
+ * @access  Public
+ */
+router.post('/verify-reset-code', validate(authSchemas.verifyResetCode), AuthController.verifyResetCode);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password using verified code
+ * @access  Public
+ */
+router.post('/reset-password', validate(authSchemas.resetPassword), AuthController.resetPassword);
+
+/**
+ * @route   POST /api/auth/resend-reset-code
+ * @desc    Resend password reset code
+ * @access  Public
+ */
+router.post('/resend-reset-code', validate(authSchemas.resendResetCode), AuthController.resendResetCode);
+
 export { router as authRoutes };

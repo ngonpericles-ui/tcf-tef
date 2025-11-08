@@ -351,7 +351,7 @@ export default function LoginPage() {
                         {t("Mot de passe", "Password")}
                       </Label>
                       <Link
-                        href="/forgot-password"
+                        href="/mot-de-passe-oublie"
                         className="text-sm text-[#007BFF] hover:text-[#0056b3] transition-colors"
                       >
                         {t("Mot de passe oublié ?", "Forgot your password?")}
@@ -381,12 +381,12 @@ export default function LoginPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 bg-[#2ECC71] hover:bg-[#27AE60] text-white font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full h-12 bg-[#2ECC71] hover:bg-[#27AE60] text-black font-semibold rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={isLoading}
                   >
                     {isLoading ? (
                       <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black mr-2"></div>
                         {t("Connexion...", "Logging in...")}
                       </div>
                     ) : (
@@ -394,17 +394,6 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </form>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200 dark:border-gray-700" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-4 bg-card text-muted-foreground font-medium">
-                      {t("ou", "or")}
-                    </span>
-                  </div>
-                </div>
 
                 <p className="text-center text-sm text-muted-foreground">
                   {t("Vous n'avez pas de compte ?", "Don't have an account?")}{" "}

@@ -14,10 +14,10 @@ export class MessageQueueWorker {
     // Only create Redis client if Redis is configured
     if (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'localhost') {
       try {
-        this.redis = new Redis({
+    this.redis = new Redis({
           host: process.env.REDIS_HOST,
-          port: parseInt(process.env.REDIS_PORT || '6379'),
-          password: process.env.REDIS_PASSWORD,
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD,
           lazyConnect: false, // Connect immediately
           maxRetriesPerRequest: 3,
           retryStrategy: (times) => times > 5 ? null : Math.min(times * 200, 2000),

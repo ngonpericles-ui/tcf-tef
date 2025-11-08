@@ -9,7 +9,7 @@ const ROLES = {
   JUNIOR_MANAGER: 'JUNIOR_MANAGER', 
   SENIOR_MANAGER: 'SENIOR_MANAGER',
   ADMIN: 'ADMIN'
-} as const
+};
 
 // Route categories
 const ADMIN_ROUTES = ['/admin']
@@ -136,8 +136,8 @@ export function middleware(req: NextRequest) {
 
   // 🚫 UNAUTHENTICATED USERS
   if (!isAuth) {
-    // Allow access to login pages, welcome page, inscription page, and static assets
-    if (url.pathname === '/connexion' || url.pathname === '/welcome' || url.pathname === '/inscription' || url.pathname === '/admin/login' || url.pathname === '/manager' || 
+    // Allow access to login pages, welcome page, inscription page, forgot password page, and static assets
+    if (url.pathname === '/connexion' || url.pathname === '/welcome' || url.pathname === '/inscription' || url.pathname === '/mot-de-passe-oublie' || url.pathname === '/admin/login' || url.pathname === '/manager' || 
         url.pathname.startsWith('/logo/') || url.pathname.startsWith('/images/') || url.pathname.startsWith('/_next/') || 
         url.pathname.startsWith('/favicon') || url.pathname.endsWith('.png') || url.pathname.endsWith('.jpg') || 
         url.pathname.endsWith('.jpeg') || url.pathname.endsWith('.gif') || url.pathname.endsWith('.svg') ||

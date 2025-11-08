@@ -1,16 +1,587 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/components/language-provider"
 import { useTheme } from "@/components/theme-provider"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
-import { Globe, Star, Shield, Sun, Moon, ArrowRight, ArrowLeft, Users, Award, BookOpen, Brain, Play, CheckCircle2, Zap, Target, TrendingUp, GraduationCap, Clock, Headphones, BarChart3, Smartphone, Monitor, Tablet } from "lucide-react"
+import { Globe, Star, Shield, Sun, Moon, ArrowRight, ArrowLeft, Users, Award, BookOpen, Brain, Play, CheckCircle2, Zap, Target, TrendingUp, GraduationCap, Clock, Headphones, BarChart3, Smartphone, Monitor, Tablet, Wallet, MessageCircle, XCircle, Sparkles, Cpu, DollarSign, HelpCircle, Layers, Package, AlertCircle, Ban, Settings } from "lucide-react"
 // import { Icons } from "@/lib/icons"
 import Image from "next/image"
 import AuraLogo from "@/components/aura-logo"
+import StudentTestimonials from "@/components/student-testimonials"
+import SiteFooter from "@/components/site-footer"
+import { motion, useInView } from "framer-motion"
+
+// Voice Simulation Card Component with Scroll Animations
+function VoiceSimulationCard({ t }: { t: (fr: string, en: string) => string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: false, amount: 0.2 })
+
+  const imageVariants = {
+    hidden: { opacity: 0, x: -100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+      },
+    },
+  }
+
+  const textVariants = {
+    hidden: { opacity: 0, x: 100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+        delay: 0.2,
+      },
+    },
+  }
+
+  return (
+    <div className="mb-20" ref={ref}>
+      <div className="bg-transparent rounded-3xl p-6 md:p-8 lg:p-11 min-h-[420px] md:min-h-[490px] flex items-center">
+        <div className="grid md:grid-cols-2 gap-6 md:gap-8 lg:gap-11 items-center w-full">
+          {/* Image - Left Side with Animation */}
+          <motion.div
+            className="order-2 md:order-1"
+            variants={imageVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <div className="relative w-full max-w-md mx-auto md:max-w-full">
+              <div className="rounded-2xl overflow-hidden shadow-2xl">
+                <Image
+                  src="/images/simution.png"
+                  alt={t("Simulation vocale", "Voice Simulation")}
+                  width={600}
+                  height={800}
+                  className="w-full h-auto object-contain"
+                  priority
+                />
+              </div>
+            </div>
+          </motion.div>
+          
+          {/* Text Content - Right Side with Animation */}
+          <motion.div
+            className="order-1 md:order-2"
+            variants={textVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-3 md:mb-4 text-gray-900 dark:text-white" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 700, lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+              {t("Simulation vocale", "Voice Simulation")}
+            </h3>
+            <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-2" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Pratiquez votre prononciation avec notre IA vocale avancée. Recevez des corrections en temps réel et améliorez votre accent français avec des exercices interactifs personnalisés.",
+                "Practice your pronunciation with our advanced voice AI. Receive real-time corrections and improve your French accent with personalized interactive exercises."
+              )}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 leading-relaxed" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Notre technologie de reconnaissance vocale analyse chaque mot et vous guide vers une prononciation parfaite, adaptée à votre niveau CEFR.",
+                "Our speech recognition technology analyzes every word and guides you toward perfect pronunciation, tailored to your CEFR level."
+              )}
+            </p>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// One-on-One Sessions Card Component with Scroll Animations
+function OneOnOneCard({ t }: { t: (fr: string, en: string) => string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: false, amount: 0.2 })
+
+  // Card 2 - Inverted: Text left, Image right
+  const imageVariants = {
+    hidden: { opacity: 0, x: 100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+      },
+    },
+  }
+
+  const textVariants = {
+    hidden: { opacity: 0, x: -100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+        delay: 0.2,
+      },
+    },
+  }
+
+  return (
+    <div className="mb-20" ref={ref}>
+      <div className="bg-transparent rounded-3xl p-6 md:p-8 lg:p-11 min-h-[420px] md:min-h-[490px] flex items-center">
+        <div className="grid md:grid-cols-2 gap-6 md:gap-8 lg:gap-11 items-center w-full">
+          {/* Text Content - Left Side with Animation (Card 2 - Inverted) */}
+          <motion.div
+            className="order-1 md:order-1"
+            variants={textVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-3 md:mb-4 text-gray-900 dark:text-white" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 700, lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+              {t("Sessions individuelles", "One-on-One Sessions")}
+            </h3>
+            <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-2" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "En plus des sessions de groupe, nous avons les sessions one-on-one pour nos apprenants pro. Bénéficiez d'un accompagnement personnalisé avec des tuteurs certifiés pour progresser à votre rythme.",
+                "In addition to group sessions, we offer one-on-one sessions for our pro learners. Benefit from personalized coaching with certified tutors to progress at your own pace."
+              )}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 leading-relaxed" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Nos sessions individuelles sont adaptées à vos besoins spécifiques et vous permettent d'atteindre vos objectifs d'apprentissage plus rapidement avec un suivi dédié.",
+                "Our one-on-one sessions are tailored to your specific needs and allow you to reach your learning goals faster with dedicated support."
+              )}
+            </p>
+          </motion.div>
+          
+          {/* Image - Right Side with Animation (Card 2 - Inverted) */}
+          <motion.div
+            className="order-2 md:order-2"
+            variants={imageVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <div className="relative w-full max-w-md mx-auto md:max-w-full">
+              <div className="rounded-2xl overflow-hidden shadow-2xl">
+                <Image
+                  src="/images/oneonone.png"
+                  alt={t("Sessions individuelles", "One-on-One Sessions")}
+                  width={600}
+                  height={800}
+                  className="w-full h-auto object-contain"
+                  priority
+                />
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Tutor Marketplace Card Component with Scroll Animations
+function TutorMarketplaceCard({ t }: { t: (fr: string, en: string) => string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: false, amount: 0.2 })
+
+  const imageVariants = {
+    hidden: { opacity: 0, x: -100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+      },
+    },
+  }
+
+  const textVariants = {
+    hidden: { opacity: 0, x: 100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+        delay: 0.2,
+      },
+    },
+  }
+
+  return (
+    <div className="mb-20" ref={ref}>
+      <div className="bg-transparent rounded-3xl p-6 md:p-8 lg:p-11 min-h-[420px] md:min-h-[490px] flex items-center">
+        <div className="grid md:grid-cols-2 gap-6 md:gap-8 lg:gap-11 items-center w-full">
+          {/* Image - Left Side with Animation */}
+          <motion.div
+            className="order-2 md:order-1"
+            variants={imageVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <div className="relative w-full max-w-md mx-auto md:max-w-full">
+              <div className="rounded-2xl overflow-hidden shadow-2xl">
+                <Image
+                  src="/images/marcher.png"
+                  alt={t("Marché des tuteurs", "Tutor Marketplace")}
+                  width={600}
+                  height={800}
+                  className="w-full h-auto object-contain"
+                  priority
+                />
+              </div>
+            </div>
+          </motion.div>
+          
+          {/* Text Content - Right Side with Animation */}
+          <motion.div
+            className="order-1 md:order-2"
+            variants={textVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-3 md:mb-4 text-gray-900 dark:text-white" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 700, lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+              {t("Marché des tuteurs", "Tutor Marketplace")}
+            </h3>
+            <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-2" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Connectez-vous avec des tuteurs certifiés via notre marché de tuteurs intelligent. Notre système de triage IA vous met en relation avec le tuteur idéal selon votre niveau, vos objectifs et vos préférences d'apprentissage.",
+                "Connect with certified tutors through our intelligent tutor marketplace. Our AI triage system matches you with the ideal tutor based on your level, goals, and learning preferences."
+              )}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 leading-relaxed" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Choisissez parmi une sélection de tuteurs expérimentés, consultez leurs profils, leurs spécialités et leurs tarifs. Réservez des sessions personnalisées qui correspondent parfaitement à vos besoins.",
+                "Choose from a selection of experienced tutors, view their profiles, specialties, and rates. Book personalized sessions that perfectly match your needs."
+              )}
+            </p>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Community and Messaging Card Component with Scroll Animations
+function CommunityMessagingCard({ t }: { t: (fr: string, en: string) => string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: false, amount: 0.2 })
+
+  const imageVariants = {
+    hidden: { opacity: 0, x: 100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+      },
+    },
+  }
+
+  const textVariants = {
+    hidden: { opacity: 0, x: -100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+        delay: 0.2,
+      },
+    },
+  }
+
+  return (
+    <div className="mb-20" ref={ref}>
+      <div className="bg-transparent rounded-3xl p-6 md:p-8 lg:p-11 min-h-[420px] md:min-h-[490px] flex items-center">
+        <div className="grid md:grid-cols-2 gap-6 md:gap-8 lg:gap-11 items-center w-full">
+          {/* Text Content - Left Side with Animation (Card 4 - Inverted) */}
+          <motion.div
+            className="order-1 md:order-1"
+            variants={textVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-3 md:mb-4 text-gray-900 dark:text-white" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 700, lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+              {t("Communauté et messagerie", "Community and Messaging")}
+            </h3>
+            <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-2" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Partagez vos expériences et communiquez directement avec vos tuteurs sur notre plateforme. Le feed vous permet de partager vos réussites, poser des questions et interagir avec la communauté d'apprenants.",
+                "Share your experiences and communicate directly with your tutors on our platform. The feed allows you to share your achievements, ask questions, and interact with the learning community."
+              )}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 leading-relaxed" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Notre système de messagerie intégré facilite la communication en temps réel entre étudiants et tuteurs. Partagez des fichiers, posez des questions et recevez des réponses rapides pour optimiser votre apprentissage.",
+                "Our integrated messaging system facilitates real-time communication between students and tutors. Share files, ask questions, and receive quick responses to optimize your learning."
+              )}
+            </p>
+          </motion.div>
+          
+          {/* Image - Right Side with Animation (Card 4 - Inverted) */}
+          <motion.div
+            className="order-2 md:order-2"
+            variants={imageVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <div className="relative w-full max-w-md mx-auto md:max-w-full">
+              <div className="rounded-2xl overflow-hidden shadow-2xl">
+                <Image
+                  src="/images/feed.png"
+                  alt={t("Communauté et messagerie", "Community and Messaging")}
+                  width={600}
+                  height={800}
+                  className="w-full h-auto object-contain"
+                  priority
+                />
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Plans Card Component with Scroll Animations
+function PlansCard({ t }: { t: (fr: string, en: string) => string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: false, amount: 0.2 })
+
+  // Card 5 - Image left, Text right (same as cards 1 & 3)
+  const imageVariants = {
+    hidden: { opacity: 0, x: -100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+      },
+    },
+  }
+
+  const textVariants = {
+    hidden: { opacity: 0, x: 100 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+        delay: 0.2,
+      },
+    },
+  }
+
+  return (
+    <div className="mb-20" ref={ref}>
+      <div className="bg-transparent rounded-3xl p-6 md:p-8 lg:p-11 min-h-[420px] md:min-h-[490px] flex items-center">
+        <div className="grid md:grid-cols-2 gap-6 md:gap-8 lg:gap-11 items-center w-full">
+          {/* Image - Left Side with Animation */}
+          <motion.div
+            className="order-2 md:order-1"
+            variants={imageVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <div className="relative w-full max-w-md mx-auto md:max-w-full">
+              <div className="rounded-2xl overflow-hidden shadow-2xl">
+                <Image
+                  src="/images/plans.png"
+                  alt={t("Nos plans", "Our Plans")}
+                  width={600}
+                  height={800}
+                  className="w-full h-auto object-contain"
+                  priority
+                />
+              </div>
+            </div>
+          </motion.div>
+          
+          {/* Text Content - Right Side with Animation */}
+          <motion.div
+            className="order-1 md:order-2"
+            variants={textVariants}
+            initial="hidden"
+            animate={isInView ? "visible" : "hidden"}
+          >
+            <h3 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-3 md:mb-4 text-gray-900 dark:text-white" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 700, lineHeight: '1.1', letterSpacing: '-0.02em' }}>
+              {t("Nos plans", "Our Plans")}
+            </h3>
+            <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 leading-relaxed mb-2" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Nous avons des plans flexibles et abordables pour votre préparation TCF/TEF. Choisissez le plan qui correspond le mieux à vos besoins et à votre budget, avec des options allant du plan gratuit aux plans premium avec accompagnement personnalisé.",
+                "We offer flexible and affordable plans for your TCF/TEF preparation. Choose the plan that best fits your needs and budget, with options ranging from the free plan to premium plans with personalized support."
+              )}
+            </p>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 leading-relaxed" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', fontWeight: 400, lineHeight: '1.6' }}>
+              {t(
+                "Tous nos plans incluent l'accès aux simulations d'examen, aux ressources d'apprentissage et au suivi de progression. Les plans premium offrent des sessions individuelles, un accès prioritaire aux tuteurs et des fonctionnalités avancées pour maximiser vos chances de réussite.",
+                "All our plans include access to exam simulations, learning resources, and progress tracking. Premium plans offer one-on-one sessions, priority access to tutors, and advanced features to maximize your chances of success."
+              )}
+            </p>
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Why Choose AURA Component with Image Right, Text Left, and 6 Transparent Cards
+function WhyChooseAuraCard({ t }: { t: (fr: string, en: string) => string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: false, amount: 0.2 })
+  const router = useRouter()
+
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.6,
+        ease: "easeOut" as const,
+        delay: 0.1 * i,
+      },
+    }),
+  }
+
+  return (
+    <div className="mb-20" ref={ref}>
+      <div className="text-center mb-12">
+        <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-white" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+          {t("Pourquoi", "Why")} <span className="text-[#2ECC71]">AURA</span> {t("est le bon choix pour vous", "is The Right Choice for You")}
+        </h2>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        {/* Top Left - Expert Instructors */}
+        <motion.div
+          custom={0}
+          variants={cardVariants}
+          initial="hidden"
+          animate={isInView ? "visible" : "hidden"}
+          className="group"
+        >
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-10 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 h-full">
+            <div className="w-14 h-14 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-6">
+              <GraduationCap className="w-7 h-7 text-gray-600 dark:text-gray-300" />
+            </div>
+            <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+              {t("Tuteurs Experts", "Expert")} <span className="text-[#2ECC71]">{t("Certifiés", "Tutors")}</span>
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-base">
+              {t(
+                "Apprenez auprès de professionnels certifiés qui apportent des années d'expérience réelle en enseignement du français. Bénéficiez des dernières méthodes, techniques et insights nécessaires pour exceller dans votre préparation TCF/TEF.",
+                "Learn from certified professionals who bring years of real-world experience in French teaching. Benefit from the latest methods, techniques, and insights needed to excel in your TCF/TEF preparation."
+              )}
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Top Right - Horaires d'Apprentissage Flexibles */}
+        <motion.div
+          custom={1}
+          variants={cardVariants}
+          initial="hidden"
+          animate={isInView ? "visible" : "hidden"}
+          className="group"
+        >
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-10 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 h-full">
+            <div className="w-14 h-14 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-6">
+              <Clock className="w-7 h-7 text-gray-600 dark:text-gray-300" />
+            </div>
+            <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+              <span className="text-[#2ECC71]">{t("Horaires", "Schedules")}</span> {t("d'Apprentissage Flexibles", "Flexible Learning")}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-base">
+              {t(
+                "Chez AURA.CA, nous comprenons l'importance d'équilibrer l'apprentissage avec un mode de vie chargé. C'est pourquoi nos cours sont disponibles à la demande, vous permettant d'apprendre à votre propre rythme, à tout moment et n'importe où.",
+                "At AURA.CA, we understand the importance of balancing learning with a busy lifestyle. That's why our courses are available on-demand, allowing you to learn at your own pace, anytime and anywhere."
+              )}
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Image Card - Right side spanning 2 rows */}
+        <motion.div
+          custom={3}
+          variants={cardVariants}
+          initial="hidden"
+          animate={isInView ? "visible" : "hidden"}
+          className="group md:row-span-2"
+        >
+          <div className="relative rounded-2xl p-10 shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between h-full overflow-hidden">
+            {/* Background Image */}
+            <div 
+              className="absolute inset-0 bg-cover bg-center"
+              style={{
+                backgroundImage: "url(https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80)"
+              }}
+            />
+            {/* Dark overlay for better text readability */}
+            <div className="absolute inset-0 bg-black/40" />
+            
+            {/* Content */}
+            <div className="relative z-10 flex flex-col justify-between h-full">
+              <div>
+                <h3 className="text-3xl font-bold mb-5 text-white">
+                  {t("Horaires", "Flexible")} <span className="text-[#2ECC71]">{t("d'Apprentissage Flexibles", "Learning Schedules")}</span>
+                </h3>
+                <p className="text-white/95 leading-relaxed mb-6 text-lg">
+                  {t(
+                    "Chez AURA.CA, nous comprenons l'importance d'équilibrer l'apprentissage avec un mode de vie chargé. C'est pourquoi nos cours sont disponibles à la demande, vous permettant d'apprendre à votre propre rythme, à tout moment et n'importe où.",
+                    "At AURA.CA, we understand the importance of balancing learning with a busy lifestyle. That's why our courses are available on-demand, allowing you to learn at your own pace, anytime and anywhere."
+                  )}
+                </p>
+              </div>
+              <Button
+                className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold px-6 py-3 text-base w-auto mx-auto mt-6"
+                onClick={() => router.push("/inscription")}
+              >
+                {t("Commencer gratuitement", "Start Free Trial")} →
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Bottom Left - 100+ Courses (wider card spanning 2 columns) */}
+        <motion.div
+          custom={2}
+          variants={cardVariants}
+          initial="hidden"
+          animate={isInView ? "visible" : "hidden"}
+          className="group md:col-span-2"
+        >
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-10 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 h-full">
+            <div className="w-14 h-14 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-6">
+              <BookOpen className="w-7 h-7 text-gray-600 dark:text-gray-300" />
+            </div>
+            <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+              <span className="text-[#2ECC71]">100+</span> {t("Cours à Impact Élevé", "High Impact Courses")}
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-base">
+              {t(
+                "AURA.CA propose plus de 100 cours qui couvrent les compétences essentielles pour la préparation TCF/TEF. Que vous soyez débutant ou professionnel expérimenté, nos cours offrent un apprentissage pratique et immédiatement applicable.",
+                "AURA.CA offers over 100 courses covering essential skills for TCF/TEF preparation. Whether you're a beginner or experienced professional, our courses provide practical, immediately applicable learning."
+              )}
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  )
+}
 
 export default function WelcomePage() {
   const { lang, setLang } = useLang()
@@ -139,53 +710,65 @@ export default function WelcomePage() {
         <div className="absolute top-20 left-10 w-72 h-72 bg-[#2ECC71]/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
         
-        {/* AURA.CA Logo - Top Left */}
-        <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
-          <AuraLogo
-            className="h-20 sm:h-24 md:h-32 lg:h-40 xl:h-48 w-auto"
-            width={1000}
-            height={300}
-            priority={true}
-          />
-        </div>
-          
-        {/* Top Controls - Integrated into Hero */}
-        <div className="absolute top-6 right-6 z-10 flex items-center gap-2">
-            <button
-              aria-label="Language"
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
-              onClick={() => setLang?.(lang === "fr" ? "en" : "fr")}
-            >
-              <Globe className="h-4 w-4" /> {lang.toUpperCase()}
-            </button>
-            <button
-              aria-label={`Switch theme (current: ${theme})`}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
-              onClick={cycleTheme}
-            >
-              {mounted && (theme === "light" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              ))}
-            </button>
-            <Link href="/connexion">
-              <Button className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-medium">
-              {t("Connexion", "Login")}
-              </Button>
-            </Link>
+        {/* Header - Eversend Style - Minimal Height */}
+        <header className="absolute top-0 left-0 right-0 z-10 px-6 sm:px-8 md:px-12 lg:px-16 py-0.5 sm:py-0.5 md:py-1 bg-background/95 backdrop-blur-sm border-b border-gray-200/50 dark:border-gray-700/50">
+          <div className="container mx-auto max-w-screen-2xl flex items-center justify-between">
+            {/* Left: Logo - Increased by 40% more (total 90% increase) */}
+            <div className="flex items-center -ml-2 sm:-ml-3 md:-ml-4">
+              <AuraLogo
+                className="h-[81px] sm:h-[101px] md:h-[132px] lg:h-[164px] xl:h-[197px] w-auto"
+                width={1000}
+                height={300}
+                priority={true}
+              />
+            </div>
+            
+            {/* Center: Navigation Links - Always visible, spaced out, bold */}
+            <nav className="flex items-center gap-8 md:gap-10 lg:gap-12 text-base md:text-lg font-bold text-foreground">
+              <Link href="/privacy" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t("Confidentialité", "Privacy")}
+              </Link>
+              <Link href="/terms" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t("Conditions", "Terms")}
+              </Link>
+              <Link href="/about" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t("À propos", "About")}
+              </Link>
+            </nav>
+            
+            {/* Right: Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="Language"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs md:text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
+                onClick={() => setLang?.(lang === "fr" ? "en" : "fr")}
+              >
+                <Globe className="h-4 w-4" /> {lang.toUpperCase()}
+              </button>
+              <button
+                aria-label={`Switch theme (current: ${theme})`}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs md:text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
+                onClick={cycleTheme}
+              >
+                {mounted && (theme === "light" ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                ))}
+              </button>
+              <Link href="/connexion">
+                <Button className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold px-4 py-1 text-xs md:text-sm">
+                  {t("Connexion", "Login")}
+                </Button>
+              </Link>
+            </div>
           </div>
+        </header>
         
-        <div className="container relative mx-auto max-w-screen-2xl px-4 md:px-8 py-16 md:py-24">
+        <div className="container relative mx-auto max-w-screen-2xl px-4 md:px-8 pt-44 md:pt-52 pb-16 md:pb-24">
           <div className="grid lg:grid-cols-2 gap-12 xl:gap-16 items-center">
-            {/* Left Content */}
-            <div className="space-y-10">
-              {/* Status Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#2ECC71]/10 border border-[#2ECC71]/20 text-sm font-medium animate-fade-in-up">
-                <div className="w-2 h-2 bg-[#2ECC71] rounded-full animate-pulse" />
-                {t("Plateforme IA de nouvelle génération", "Next-gen AI platform")}
-              </div>
-
+            {/* Left Content - Pushed to the left */}
+            <div className="space-y-8 -ml-2 sm:-ml-4 md:-ml-6 mt-4 md:mt-6">
               {/* Main Headline with Better Typography */}
               <div className="space-y-4">
                 <h1 className="font-bold text-5xl md:text-6xl xl:text-7xl leading-[1.1] tracking-tight">
@@ -198,19 +781,27 @@ export default function WelcomePage() {
                   >
                     AURA.CA
                   </span>
-            </h1>
-                <p className="text-xl md:text-2xl text-muted-foreground font-medium animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
+                </h1>
+                <p className="text-xl md:text-2xl text-[#2ECC71] font-semibold animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
                   {t("Plateforme IA de préparation TCF/TEF", "TCF/TEF AI Preparation Platform")}
                 </p>
               </div>
                 
-              {/* Enhanced Description */}
-              <p className="text-lg text-muted-foreground max-w-2xl leading-relaxed animate-fade-in-up" style={{ animationDelay: "0.7s" }}>
-              {t(
-                  "Préparation intelligente propulsée par l'IA explicable, l'adaptativité psychométrique et la modération humaine.",
-                  "Intelligent preparation powered by explainable AI, psychometric adaptivity, and human moderation.",
-              )}
-            </p>
+              {/* Enhanced Description - More interesting and engaging */}
+              <div className="space-y-4 animate-fade-in-up" style={{ animationDelay: "0.7s" }}>
+                <p className="text-lg md:text-xl text-foreground font-medium leading-relaxed max-w-2xl">
+                  {t(
+                    "Transformez votre préparation aux examens TCF/TEF avec notre plateforme révolutionnaire. Notre IA explicable analyse chaque réponse pour vous offrir un feedback détaillé et personnalisé, adapté à votre niveau CEFR.",
+                    "Transform your TCF/TEF exam preparation with our revolutionary platform. Our explainable AI analyzes every answer to provide you with detailed and personalized feedback, adapted to your CEFR level."
+                  )}
+                </p>
+                <p className="text-base md:text-lg text-muted-foreground leading-relaxed max-w-2xl">
+                  {t(
+                    "Bénéficiez de simulations vocales avancées, de tests blancs réalistes, et d'un accompagnement personnalisé par des tuteurs certifiés. Rejoignez des milliers d'étudiants qui ont réussi grâce à notre méthode pédagogique structurée en 5 étapes.",
+                    "Benefit from advanced voice simulations, realistic practice tests, and personalized coaching from certified tutors. Join thousands of students who have succeeded thanks to our structured 5-step pedagogical method."
+                  )}
+                </p>
+              </div>
                 
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 animate-fade-in-up" style={{ animationDelay: "0.9s" }}>
@@ -335,56 +926,22 @@ export default function WelcomePage() {
         </div>
       </section>
 
-      {/* Horizontal Scrolling Success Stories */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="container mx-auto px-6 mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold text-center mb-4">
-            {t("Ils ont réussi", "They succeeded")}
-          </h2>
-          <p className="text-center text-muted-foreground text-lg">
-            {t(
-              "Rejoignez des milliers d'étudiants qui ont transformé leur avenir",
-              "Join thousands of students who transformed their future",
-            )}
-          </p>
-        </div>
+      {/* Real Student Testimonials with Animated Profiles */}
+      <StudentTestimonials />
 
-        <div className="flex gap-6 animate-scroll-x overflow-x-auto pb-8 px-6 scrollbar-hide">
-          {[
-            { name: "Marie L.", score: "B2 → C1", quote: t("J'ai réussi mon TCF grâce à l'IA explicable", "I passed my TCF thanks to explainable AI") },
-            { name: "Ahmed K.", score: "A2 → B2", quote: t("La préparation adaptative a changé ma vie", "Adaptive preparation changed my life") },
-            { name: "Sophie M.", score: "B1 → C1", quote: t("Les sessions live sont incroyables", "Live sessions are incredible") },
-            { name: "Jean P.", score: "A1 → B1", quote: t("Meilleure plateforme de préparation", "Best preparation platform") },
-            { name: "Fatima Z.", score: "B2 → C2", quote: t("Le feedback IA est exceptionnel", "AI feedback is exceptional") }
-          ].map((story, idx) => (
-            <div
-              key={idx}
-              className="flex-shrink-0 w-80 p-6 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-[#2ECC71]/50 transition-all duration-300 hover:scale-105 hover:shadow-xl"
-            >
-              <div className="flex items-center gap-4 mb-4">
-                <div className="relative w-16 h-16 rounded-full overflow-hidden ring-2 ring-[#2ECC71]/20">
-                  <div className="w-full h-full bg-gradient-to-br from-[#2ECC71] to-[#27c066] flex items-center justify-center text-white font-bold text-xl">
-                    {story.name.charAt(0)}
-                  </div>
-                </div>
-                <div>
-                  <div className="font-semibold">{story.name}</div>
-                  <div className="text-sm text-[#2ECC71] font-bold">{story.score}</div>
-                </div>
-              </div>
-              <p className="text-muted-foreground italic">"{story.quote}"</p>
-              </div>
-            ))}
-        </div>
-      </section>
-
-      {/* Features Section - Inspired by Image Design */}
+      {/* Features Section - Eversend Style */}
       <section className="container mx-auto max-w-screen-2xl px-4 md:px-8 py-16 md:py-24">
         <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-black mb-6 text-foreground">
-            {t("Ce qui nous rend unique", "What makes us unique")}
+          {/* Features Badge - Like Eversend */}
+          <div className="inline-block mb-6">
+            <span className="px-4 py-2 rounded-full bg-purple-100 dark:bg-purple-900/30 text-blue-600 dark:text-blue-400 font-semibold text-sm md:text-base" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+              {t("Fonctionnalités", "Features")}
+            </span>
+          </div>
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-foreground" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            {t("Ce qui nous rend", "What makes us")} <span className="text-[#2ECC71]">{t("unique", "unique")}</span>
           </h2>
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto font-medium">
+          <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto font-normal" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
             {t(
               "Des fonctionnalités que vous ne trouverez nulle part ailleurs",
               "Features you won't find anywhere else",
@@ -392,335 +949,80 @@ export default function WelcomePage() {
           </p>
         </div>
 
-        {/* 2x2 Grid - Rectangular Cards with Exact Dark Mode */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          {/* Card 01 - IA Explicable */}
-          <div className="group relative p-8 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-900/30 dark:via-teal-900/30 dark:to-cyan-900/30 border border-emerald-200/50 dark:border-emerald-700/50 hover:shadow-xl transition-all duration-300 hover:scale-105 min-h-[280px] max-h-[320px]">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="text-6xl font-bold text-emerald-200 dark:text-emerald-400">01</div>
-              <Brain className="h-12 w-12 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-              {t("IA Explicable", "Explainable AI")}
-            </h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {t("Comprenez chaque correction avec des citations et exemples concrets", "Understand each correction with concrete citations and examples")}
-            </p>
-          </div>
+        {/* Card 1 - Voice Simulation - Eversend Exact Style with Animations */}
+        <VoiceSimulationCard t={t} />
 
-          {/* Card 02 - Adaptativité Psychométrique */}
-          <div className="group relative p-8 rounded-2xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/30 dark:via-indigo-900/30 dark:to-purple-900/30 border border-blue-200/50 dark:border-blue-700/50 hover:shadow-xl transition-all duration-300 hover:scale-105 min-h-[280px] max-h-[320px]">
-            <div className="text-6xl font-bold text-blue-200 dark:text-blue-400 mb-4">02</div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-              {t("Adaptativité Psychométrique", "Psychometric Adaptability")}
-            </h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {t("Cartographie CEFR précise avec bandes d'incertitude", "Precise CEFR mapping with uncertainty bands")}
-            </p>
-                </div>
+        {/* Card 2 - One-on-One Sessions - Eversend Exact Style with Animations */}
+        <OneOnOneCard t={t} />
 
-          {/* Card 03 - Modération Humaine */}
-          <div className="group relative p-8 rounded-2xl bg-gradient-to-br from-violet-50 via-fuchsia-50 to-pink-50 dark:from-violet-900/30 dark:via-fuchsia-900/30 dark:to-pink-900/30 border border-violet-200/50 dark:border-violet-700/50 hover:shadow-xl transition-all duration-300 hover:scale-105 min-h-[280px] max-h-[320px]">
-            <div className="text-6xl font-bold text-violet-200 dark:text-violet-400 mb-4">03</div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-              {t("Modération Humaine", "Human Moderation")}
-            </h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {t("Pipeline intégré avec intervention d'experts certifiés", "Integrated pipeline with certified expert intervention")}
-            </p>
-              </div>
+        {/* Card 3 - Tutor Marketplace - Eversend Exact Style with Animations */}
+        <TutorMarketplaceCard t={t} />
 
-          {/* Card 04 - Marché des Tuteurs */}
-          <div className="group relative p-8 rounded-2xl bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-orange-900/30 dark:via-amber-900/30 dark:to-yellow-900/30 border border-orange-200/50 dark:border-orange-700/50 hover:shadow-xl transition-all duration-300 hover:scale-105 min-h-[280px] max-h-[320px]">
-            <div className="text-6xl font-bold text-orange-200 dark:text-orange-400 mb-4">04</div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-              {t("Marché des Tuteurs", "Tutor Marketplace")}
-              </h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              {t("Connectez-vous avec des tuteurs via notre triage IA", "Connect with tutors via our AI triage")}
-              </p>
-              </div>
-        </div>
+        {/* Card 4 - Community and Messaging - Eversend Exact Style with Animations */}
+        <CommunityMessagingCard t={t} />
+
+        {/* Card 5 - Plans - Eversend Exact Style with Animations */}
+        <PlansCard t={t} />
       </section>
 
-      {/* Comparison Section - "Pourquoi choisir AURA ?" */}
-      <section className="py-24 relative bg-muted/30">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">{t("Pourquoi choisir AURA ?", "Why choose AURA?")}</h2>
-            <div className="mt-6">
-              <Link href="/aura-features" className="inline-flex items-center gap-2 text-[#2ECC71] hover:text-[#27c066] font-medium underline decoration-2 underline-offset-4 transition-colors">
-                {t("En savoir plus", "Learn more")} →
-              </Link>
-            </div>
-          </div>
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-3 gap-8">
-              {/* AURA - Recommended */}
-              <div className="relative p-8 rounded-3xl bg-card border-2 border-[#2ECC71] shadow-xl">
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gray-800 text-white text-sm font-bold">
-                  {t("Recommandé", "Recommended")}
-                </div>
-                <div className="text-center mt-4">
-                  <div className="text-5xl font-bold text-[#2ECC71] mb-2">6</div>
-                  <div className="text-sm text-muted-foreground mb-6">
-                    {t("Fonctionnalités uniques", "Unique features")}
-                  </div>
-                  <div className="space-y-2 text-left text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#2ECC71]/20 flex items-center justify-center text-[#2ECC71]">✓</div>
-                      <span>{t("IA Explicable", "Explainable AI")}</span>
-                        </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#2ECC71]/20 flex items-center justify-center text-[#2ECC71]">✓</div>
-                      <span>{t("Adaptativité", "Adaptability")}</span>
-                      </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#2ECC71]/20 flex items-center justify-center text-[#2ECC71]">✓</div>
-                      <span>{t("Modération", "Moderation")}</span>
-                    </div>
-                  </div>
-                        </div>
-                      </div>
-
-              {/* Competitors */}
-              <div className="p-8 rounded-3xl bg-card/50 border border-border">
-                <div className="text-center">
-                  <div className="text-5xl font-bold text-muted-foreground mb-2">0</div>
-                  <div className="text-sm text-muted-foreground mb-6">{t("Concurrents", "Competitors")}</div>
-                  <div className="space-y-2 text-left text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">✗</div>
-                      <span>{t("IA basique", "Basic AI")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">✗</div>
-                      <span>{t("Pas d'adaptativité", "No adaptivity")}</span>
-                        </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">✗</div>
-                      <span>{t("Feedback limité", "Limited feedback")}</span>
-                    </div>
-                  </div>
-                        </div>
-                      </div>
-
-              {/* Traditional Methods */}
-              <div className="p-8 rounded-3xl bg-card/50 border border-border">
-                <div className="text-center">
-                  <div className="text-5xl font-bold text-muted-foreground mb-2">0</div>
-                  <div className="text-sm text-muted-foreground mb-6">
-                    {t("Méthodes traditionnelles", "Traditional methods")}
-                  </div>
-                  <div className="space-y-2 text-left text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">✗</div>
-                      <span>{t("Pas d'IA", "No AI")}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">✗</div>
-                      <span>{t("Pas de suivi", "No tracking")}</span>
-                        </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">✗</div>
-                      <span>{t("Pas de personnalisation", "No personalization")}</span>
-                    </div>
-                        </div>
-                      </div>
-                    </div>
-                        </div>
-                      </div>
-                    </div>
-      </section>
-
-      {/* Platform Features Section */}
-      <section className="py-24 relative">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              {t("Pourquoi AURA.CA ?", "Why AURA.CA?")}
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              {t("Une plateforme révolutionnaire qui transforme l'apprentissage du français", "A revolutionary platform that transforms French learning")}
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* Feature 1 */}
-            <div className="group p-8 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800/30 dark:to-gray-700/30 border border-blue-200/50 dark:border-gray-600/30 hover:shadow-xl transition-all duration-300 hover:scale-105">
-              <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Brain className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
-                {t("IA Avancée", "Advanced AI")}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                {t("Notre intelligence artificielle analyse vos réponses en temps réel pour un feedback personnalisé", "Our artificial intelligence analyzes your responses in real-time for personalized feedback")}
-              </p>
-            </div>
-
-            {/* Feature 2 */}
-            <div className="group p-8 rounded-2xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-gray-800/30 dark:to-gray-700/30 border border-green-200/50 dark:border-gray-600/30 hover:shadow-xl transition-all duration-300 hover:scale-105">
-              <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Target className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
-                {t("Adaptation Intelligente", "Smart Adaptation")}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                {t("Le contenu s'adapte automatiquement à votre niveau et vos objectifs d'apprentissage", "Content automatically adapts to your level and learning objectives")}
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="group p-8 rounded-2xl bg-gradient-to-br from-purple-50 to-violet-50 dark:from-gray-800/30 dark:to-gray-700/30 border border-purple-200/50 dark:border-gray-600/30 hover:shadow-xl transition-all duration-300 hover:scale-105">
-              <div className="w-16 h-16 bg-purple-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Users className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
-                {t("Communauté Active", "Active Community")}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                {t("Rejoignez des milliers d'étudiants et bénéficiez du soutien de tuteurs certifiés", "Join thousands of students and benefit from certified tutor support")}
-              </p>
-                        </div>
-                      </div>
-                    </div>
+      {/* Why Choose AURA Section - New Design with Image Right, Text Left, 6 Transparent Cards */}
+      <section className="container mx-auto max-w-screen-2xl px-4 md:px-8 py-16 md:py-24">
+        <WhyChooseAuraCard t={t} />
       </section>
 
       {/* Learning Path Section */}
-      <section className="py-24 relative bg-muted/30">
+      <section className="py-24 relative bg-background">
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              {t("Votre Parcours d'Apprentissage", "Your Learning Journey")}
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">
+              {t("Votre Parcours", "Your Learning")} <span className="text-[#2ECC71]">{t("d'Apprentissage", "Journey")}</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
               {t("Un chemin structuré vers la maîtrise du français", "A structured path to French mastery")}
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto">
-            <div className="grid md:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Illustration Left */}
+            <div className="flex justify-center md:justify-end">
+              <div className="rounded-3xl overflow-hidden shadow-xl w-full max-w-xs md:max-w-md">
+                <img src="https://images.unsplash.com/photo-1513258496099-48168024aec0?auto=format&fit=crop&w=600&q=80" alt="Étudiante devant ordinateur pour apprentissage en ligne" className="w-full h-auto object-cover" />
+              </div>
+            </div>
+            {/* Steps Right */}
+            <div className="flex flex-col gap-8">
               {/* Step 1 */}
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-[#2ECC71] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-2xl font-bold text-white">1</span>
+              <div className="flex items-start gap-6">
+                <div className="w-14 h-14 bg-[#2ECC71] rounded-full flex items-center justify-center text-white font-bold text-2xl mt-1 shadow-lg">1</div>
+                <div>
+                  <h3 className="text-2xl font-bold mb-1 text-foreground">{t("Évaluation", "Assessment")} <span className="text-[#2ECC71]">{t("initiale", "Initial")}</span></h3>
+                  <p className="text-muted-foreground text-base">{t("Testez votre niveau par un diagnostic précis.", "Test your level with an accurate diagnostic.")}</p>
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">
-                  {t("Évaluation", "Assessment")}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {t("Testez votre niveau actuel", "Test your current level")}
-                </p>
               </div>
-
               {/* Step 2 */}
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-[#2ECC71] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-2xl font-bold text-white">2</span>
+              <div className="flex items-start gap-6">
+                <div className="w-14 h-14 bg-[#2ECC71] rounded-full flex items-center justify-center text-white font-bold text-2xl mt-1 shadow-lg">2</div>
+                <div>
+                  <h3 className="text-2xl font-bold mb-1 text-foreground"><span className="text-[#2ECC71]">{t("Parcours", "Path")}</span> {t("personnalisé", "Personalized")}</h3>
+                  <p className="text-muted-foreground text-base">{t("Recevez un plan d'études adapté à vos besoins et objectifs.", "Get a learning plan tailored to your needs and goals.")}</p>
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">
-                  {t("Personnalisation", "Personalization")}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {t("Plan d'apprentissage sur mesure", "Customized learning plan")}
-                </p>
               </div>
-
               {/* Step 3 */}
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-[#2ECC71] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-2xl font-bold text-white">3</span>
+              <div className="flex items-start gap-6">
+                <div className="w-14 h-14 bg-[#2ECC71] rounded-full flex items-center justify-center text-white font-bold text-2xl mt-1 shadow-lg">3</div>
+                <div>
+                  <h3 className="text-2xl font-bold mb-1 text-foreground"><span className="text-[#2ECC71]">{t("Pratique", "Practice")}</span> {t("interactive", "Interactive")}</h3>
+                  <p className="text-muted-foreground text-base">{t("Progression par exercices, simulations orales et écrites, et corrections intelligentes.", "Progress through exercises, oral & written simulations, and smart correction.")}</p>
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">
-                  {t("Pratique", "Practice")}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {t("Exercices adaptatifs quotidiens", "Daily adaptive exercises")}
-                </p>
               </div>
-
               {/* Step 4 */}
-              <div className="text-center group">
-                <div className="w-20 h-20 bg-[#2ECC71] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-2xl font-bold text-white">4</span>
+              <div className="flex items-start gap-6">
+                <div className="w-14 h-14 bg-[#2ECC71] rounded-full flex items-center justify-center text-white font-bold text-2xl mt-1 shadow-lg">4</div>
+                <div>
+                  <h3 className="text-2xl font-bold mb-1 text-foreground">{t("Suivi", "Coaching")} <span className="text-[#2ECC71]">&</span> {t("Certification", "Certification")}</h3>
+                  <p className="text-muted-foreground text-base">{t("Bénéficiez de retours IA/humains jusqu'à l'obtention de votre certification.", "Benefit from AI/human feedback until you get certified.")}</p>
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">
-                  {t("Certification", "Certification")}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {t("Obtenez votre certification TCF/TEF", "Get your TCF/TEF certification")}
-                </p>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Technology Section */}
-      <section className="py-24 relative">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              {t("Technologie de Pointe", "Cutting-Edge Technology")}
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              {t("Des outils avancés pour maximiser votre apprentissage", "Advanced tools to maximize your learning")}
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-            {/* Tech 1 */}
-            <div className="group p-6 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/40 border border-gray-200 dark:border-gray-600/40 hover:shadow-lg transition-all duration-300 hover:scale-105">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center mb-4">
-                <Smartphone className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-                {t("Mobile First", "Mobile First")}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {t("Apprenez partout, à tout moment", "Learn anywhere, anytime")}
-              </p>
-            </div>
-
-            {/* Tech 2 */}
-            <div className="group p-6 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/40 border border-gray-200 dark:border-gray-600/40 hover:shadow-lg transition-all duration-300 hover:scale-105">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-500 rounded-lg flex items-center justify-center mb-4">
-                <BarChart3 className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-                {t("Analytics", "Analytics")}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {t("Suivez vos progrès en détail", "Track your progress in detail")}
-              </p>
-            </div>
-
-            {/* Tech 3 */}
-            <div className="group p-6 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/40 border border-gray-200 dark:border-gray-600/40 hover:shadow-lg transition-all duration-300 hover:scale-105">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center mb-4">
-                <Headphones className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-                {t("Audio IA", "AI Audio")}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {t("Prononciation parfaite", "Perfect pronunciation")}
-              </p>
-            </div>
-
-            {/* Tech 4 */}
-            <div className="group p-6 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-700/40 border border-gray-200 dark:border-gray-600/40 hover:shadow-lg transition-all duration-300 hover:scale-105">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mb-4">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-                {t("Temps Réel", "Real Time")}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                {t("Feedback instantané", "Instant feedback")}
-              </p>
             </div>
           </div>
         </div>
@@ -731,53 +1033,17 @@ export default function WelcomePage() {
         <div className="container mx-auto px-6 relative z-10">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-5xl md:text-6xl font-bold mb-6">
-              {t("Prêt à transformer votre avenir ?", "Ready to transform your future?")}
+              {t("Prêt à transformer", "Ready to transform")} <span className="text-[#2ECC71]">{t("votre avenir ?", "your future?")}</span>
             </h2>
-            <p className="text-xl text-muted-foreground mb-12">
+            <p className="text-xl text-muted-foreground">
               {t("Rejoignez la révolution de l'apprentissage du français", "Join the revolution of French learning")}
             </p>
-            <Button 
-              size="lg" 
-              className="rounded-full bg-gray-800 hover:bg-gray-900 text-white font-semibold px-12 py-6 text-lg"
-              onClick={() => router.push("/inscription")}
-            >
-                {t("Commencer gratuitement", "Start for free")}
-              </Button>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 dark:border-gray-700 py-12">
-        <div className="container mx-auto max-w-screen-2xl px-4 md:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            {/* Left: Brand */}
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-xl">
-                AURA<span className="text-[#2ECC71]">.CA</span>
-              </span>
-              </div>
-            
-            {/* Center: Navigation Links */}
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link href="/privacy" className="hover:text-foreground transition-colors">
-                {t("Confidentialité", "Privacy")}
-              </Link>
-              <Link href="/terms" className="hover:text-foreground transition-colors">
-                {t("Conditions", "Terms")}
-              </Link>
-              <Link href="/about" className="hover:text-foreground transition-colors">
-                {t("À propos", "About")}
-              </Link>
-            </div>
-            
-            {/* Right: Copyright */}
-            <div className="text-sm text-muted-foreground">
-              © 2025 {t("Tous droits réservés", "All rights reserved")}
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </main>
   )
 }

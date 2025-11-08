@@ -242,12 +242,62 @@ export const authSchemas = {
   }),
 
   forgotPassword: Joi.object({
-    email: commonSchemas.email
+    method: Joi.string().valid('email', 'phone').required().messages({
+      'any.only': 'Method must be either email or phone',
+      'any.required': 'Recovery method is required'
+    }),
+    email: Joi.string().email().when('method', {
+      is: 'email',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('', null)
+    }),
+    phone: Joi.string().when('method', {
+      is: 'phone',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('', null)
+    }),
+    lang: Joi.string().valid('fr', 'en').optional()
+  }),
+
+  verifyResetCode: Joi.object({
+    code: Joi.string().length(6).pattern(/^[0-9]+$/).required().messages({
+      'string.length': 'Code must be exactly 6 digits',
+      'string.pattern.base': 'Code must contain only numbers'
+    }),
+    method: Joi.string().valid('email', 'phone').required(),
+    email: Joi.string().email().when('method', {
+      is: 'email',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('', null)
+    }),
+    phone: Joi.string().when('method', {
+      is: 'phone',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('', null)
+    })
   }),
 
   resetPassword: Joi.object({
-    token: Joi.string().required(),
-    password: commonSchemas.password
+    tokenId: Joi.string().required().messages({
+      'string.empty': 'Token ID is required',
+      'any.required': 'Token ID is required'
+    }),
+    newPassword: commonSchemas.password
+  }),
+
+  resendResetCode: Joi.object({
+    method: Joi.string().valid('email', 'phone').required(),
+    email: Joi.string().email().when('method', {
+      is: 'email',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('', null)
+    }),
+    phone: Joi.string().when('method', {
+      is: 'phone',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('', null)
+    }),
+    lang: Joi.string().valid('fr', 'en').optional()
   }),
 
   socialAuth: Joi.object({
