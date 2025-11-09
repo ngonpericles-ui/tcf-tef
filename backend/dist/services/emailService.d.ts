@@ -111,7 +111,8 @@ export interface OneOnOneSessionEmailData {
 export declare class EmailService {
     private static transporter;
     private static fromAddress;
-    private static getLogoUrl;
+    private static replyToAddress;
+    private static getLogoDataUri;
     private static wrapEmailWithLogo;
     static sendEmail(options: EmailOptions): Promise<boolean>;
     static sendWelcomeEmail(data: WelcomeEmailData): Promise<boolean>;
@@ -129,6 +130,12 @@ export declare class EmailService {
     static sendImmigrationSimulationReminderEmail(data: ImmigrationSimulationReminderEmailData): Promise<boolean>;
     static sendImmigrationSimulationResultsEmail(data: ImmigrationSimulationResultsEmailData): Promise<boolean>;
     static sendOneOnOneSessionEmail(data: OneOnOneSessionEmailData): Promise<boolean>;
+    static sendPasswordResetCode(data: {
+        email: string;
+        code: string;
+        firstName?: string;
+        lang?: 'fr' | 'en';
+    }): Promise<boolean>;
 }
 declare const _default: EmailService;
 export default _default;

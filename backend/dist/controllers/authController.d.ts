@@ -14,5 +14,9 @@ export declare class AuthController {
     static facebookAuth: (req: Request, res: Response, next: NextFunction) => void;
     static googleAuth: (req: Request, res: Response, next: NextFunction) => void;
     static healthCheck: (req: Request, res: Response, next: NextFunction) => void;
+    static forgotPassword: (req: Request, res: Response, next: NextFunction) => void;
+    static verifyResetCode: (req: Request, res: Response, next: NextFunction) => void;
+    static resetPassword: (req: Request, res: Response, next: NextFunction) => void;
+    static resendResetCode: (req: Request, res: Response, next: NextFunction) => void;
 }
 //# sourceMappingURL=authController.d.ts.map

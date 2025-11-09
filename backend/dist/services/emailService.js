@@ -7,13 +7,33 @@ exports.EmailService = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const logger_1 = require("../utils/logger");
 const temporaryTokenService_1 = __importDefault(require("./temporaryTokenService"));
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 class EmailService {
-    static getLogoUrl() {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        return `${frontendUrl}/logo/AURA.CA.png`;
+    static getLogoDataUri() {
+        try {
+            const logoPath = path_1.default.join(process.cwd(), '../../frontend/public/logo/AURA.CA.png');
+            if (fs_1.default.existsSync(logoPath)) {
+                const logoBuffer = fs_1.default.readFileSync(logoPath);
+                const base64 = logoBuffer.toString('base64');
+                return `data:image/png;base64,${base64}`;
+            }
+            const altPath = path_1.default.join(process.cwd(), '../frontend/public/logo/AURA.CA.png');
+            if (fs_1.default.existsSync(altPath)) {
+                const logoBuffer = fs_1.default.readFileSync(altPath);
+                const base64 = logoBuffer.toString('base64');
+                return `data:image/png;base64,${base64}`;
+            }
+            logger_1.logger.warn('Logo file not found, using placeholder');
+            return '';
+        }
+        catch (error) {
+            logger_1.logger.error('Error loading logo for email', { error });
+            return '';
+        }
     }
     static wrapEmailWithLogo(htmlContent, headerColor = '#667eea', headerGradient = '#764ba2') {
-        const logoUrl = this.getLogoUrl();
+        const logoDataUri = this.getLogoDataUri();
         let bodyContent = htmlContent;
         const bodyMatch = htmlContent.match(/<body[^>]*>([\s\S]*)<\/body>/i);
         if (bodyMatch) {
@@ -49,7 +69,8 @@ class EmailService {
                 background: linear-gradient(135deg, ${headerColor} 0%, ${headerGradient} 100%);
             }
             .logo-container img {
-                max-width: 200px;
+                max-width: 60%;
+                width: 60%;
                 height: auto;
                 display: block;
                 margin: 0 auto;
@@ -60,7 +81,7 @@ class EmailService {
     <body>
         <div class="email-wrapper">
             <div class="logo-container">
-                <img src="${logoUrl}" alt="AURA.CA Logo" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
+                ${logoDataUri ? `<img src="${logoDataUri}" alt="AURA.CA Logo" style="max-width: 60%; width: 60%; height: auto; display: block; margin: 0 auto;" />` : '<div style="color: white; font-size: 24px; font-weight: bold;">AURA.CA</div>'}
             </div>
             ${bodyContent}
         </div>
@@ -71,6 +92,7 @@ class EmailService {
         try {
             const mailOptions = {
                 from: this.fromAddress,
+                replyTo: this.replyToAddress,
                 to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
                 subject: options.subject,
                 html: options.html,
@@ -993,6 +1015,144 @@ class EmailService {
             html: this.wrapEmailWithLogo(html, '#667eea', '#764ba2')
         });
     }
+    static async sendPasswordResetCode(data) {
+        const isFrench = data.lang !== 'en';
+        const subject = isFrench
+            ? '🔐 Code de réinitialisation de mot de passe AURA.CA'
+            : '🔐 AURA.CA Password Reset Code';
+        const greeting = isFrench ? 'Bonjour' : 'Hello';
+        const name = data.firstName || '';
+        const codeDisplay = `<div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #2ECC71; text-align: center; padding: 20px; background: #f0f9f4; border-radius: 8px; margin: 20px 0;">${data.code}</div>`;
+        const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+                line-height: 1.6; 
+                color: #333; 
+                background-color: #f5f7fa;
+                margin: 0;
+                padding: 20px 0;
+            }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            .header h1 {
+                color: #2ECC71;
+                font-size: 24px;
+                margin-bottom: 10px;
+            }
+            .content {
+                margin-bottom: 30px;
+            }
+            .content h2 {
+                color: #333;
+                font-size: 20px;
+                margin-bottom: 15px;
+            }
+            .content p {
+                color: #666;
+                margin-bottom: 15px;
+            }
+            .code-container {
+                text-align: center;
+                margin: 30px 0;
+            }
+            .code-box {
+                display: inline-block;
+                font-size: 32px;
+                font-weight: bold;
+                letter-spacing: 8px;
+                color: #2ECC71;
+                padding: 20px 30px;
+                background: #f0f9f4;
+                border: 2px solid #2ECC71;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            .warning {
+                background: #fff3cd;
+                border-left: 4px solid #ffc107;
+                padding: 15px;
+                margin: 20px 0;
+                border-radius: 4px;
+            }
+            .warning p {
+                color: #856404;
+                margin: 0;
+            }
+            .footer {
+                text-align: center;
+                color: #999;
+                font-size: 14px;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #eee;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🔐 ${isFrench ? 'Réinitialisation de mot de passe' : 'Password Reset'}</h1>
+            </div>
+            
+            <div class="content">
+                <h2>${greeting}${name ? ` ${name}` : ''} !</h2>
+                
+                <p>${isFrench
+            ? 'Vous avez demandé à réinitialiser votre mot de passe pour votre compte AURA.CA.'
+            : 'You have requested to reset your password for your AURA.CA account.'}</p>
+                
+                <p>${isFrench
+            ? 'Utilisez le code suivant pour réinitialiser votre mot de passe :'
+            : 'Use the following code to reset your password:'}</p>
+                
+                <div class="code-container">
+                    <div class="code-box">${data.code}</div>
+                </div>
+                
+                <div class="warning">
+                    <p><strong>${isFrench ? '⚠️ Important :' : '⚠️ Important:'}</strong></p>
+                    <p>${isFrench
+            ? 'Ce code expire dans 5 minutes. Ne partagez jamais ce code avec personne. Si vous n\'avez pas demandé cette réinitialisation, ignorez cet email.'
+            : 'This code expires in 5 minutes. Never share this code with anyone. If you did not request this reset, please ignore this email.'}</p>
+                </div>
+                
+                <p>${isFrench
+            ? 'Si vous avez des questions ou besoin d\'aide, n\'hésitez pas à nous contacter.'
+            : 'If you have any questions or need assistance, please don\'t hesitate to contact us.'}</p>
+            </div>
+            
+            <div class="footer">
+                <p><strong>AURA.CA</strong></p>
+                <p>${isFrench
+            ? 'Plateforme IA de préparation TCF/TEF'
+            : 'TCF/TEF AI Preparation Platform'}</p>
+            </div>
+        </div>
+    </body>
+    </html>`;
+        return this.sendEmail({
+            to: data.email,
+            subject,
+            html: this.wrapEmailWithLogo(html, '#2ECC71', '#27c066')
+        });
+    }
 }
 exports.EmailService = EmailService;
 EmailService.transporter = nodemailer_1.default.createTransport({
@@ -1010,6 +1170,7 @@ EmailService.transporter = nodemailer_1.default.createTransport({
         rateLimit: 14
     })
 });
-EmailService.fromAddress = `${process.env.EMAIL_FROM_NAME || 'TCF/TEF Learning Platform'} <${process.env.SMTP_USER || process.env.TWILIO_SMTP_USER || process.env.EMAIL_FROM_ADDRESS || 'noreply@tcftef.com'}>`;
+EmailService.fromAddress = `${process.env.EMAIL_FROM_NAME || 'AURA.CA'} <${process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER || process.env.TWILIO_SMTP_USER || 'noreply@tcftef.com'}>`;
+EmailService.replyToAddress = process.env.EMAIL_REPLY_TO || process.env.EMAIL_FROM_ADDRESS || 'periclesngon01@gmail.com';
 exports.default = new EmailService();
 //# sourceMappingURL=emailService.js.map

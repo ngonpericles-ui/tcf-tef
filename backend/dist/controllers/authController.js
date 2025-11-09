@@ -226,4 +226,97 @@ AuthController.healthCheck = (0, errorHandler_1.asyncHandler)(async (req, res) =
     };
     res.status(200).json(response);
 });
+AuthController.forgotPassword = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { method, email, phone, lang } = req.body;
+    const result = await authService_1.AuthService.requestPasswordReset({
+        method,
+        email,
+        phone,
+        lang: lang || 'fr'
+    });
+    if (result.success) {
+        const response = {
+            success: true,
+            message: result.message || 'Password reset code sent successfully'
+        };
+        res.status(200).json(response);
+    }
+    else {
+        const response = {
+            success: false,
+            error: { message: result.error || 'Failed to send password reset code' }
+        };
+        res.status(400).json(response);
+    }
+});
+AuthController.verifyResetCode = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { code, method, email, phone } = req.body;
+    const result = await authService_1.AuthService.verifyPasswordResetCode({
+        code,
+        method,
+        email,
+        phone
+    });
+    if (result.success && result.tokenId) {
+        const response = {
+            success: true,
+            data: {
+                tokenId: result.tokenId
+            },
+            message: 'Reset code verified successfully'
+        };
+        res.status(200).json(response);
+    }
+    else {
+        const response = {
+            success: false,
+            error: { message: result.error || 'Invalid or expired reset code' }
+        };
+        res.status(400).json(response);
+    }
+});
+AuthController.resetPassword = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { tokenId, newPassword } = req.body;
+    const result = await authService_1.AuthService.resetPassword({
+        tokenId,
+        newPassword
+    });
+    if (result.success) {
+        const response = {
+            success: true,
+            message: result.message || 'Password reset successfully'
+        };
+        res.status(200).json(response);
+    }
+    else {
+        const response = {
+            success: false,
+            error: { message: result.error || 'Failed to reset password' }
+        };
+        res.status(400).json(response);
+    }
+});
+AuthController.resendResetCode = (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { method, email, phone, lang } = req.body;
+    const result = await authService_1.AuthService.resendPasswordResetCode({
+        method,
+        email,
+        phone,
+        lang: lang || 'fr'
+    });
+    if (result.success) {
+        const response = {
+            success: true,
+            message: result.message || 'Reset code resent successfully'
+        };
+        res.status(200).json(response);
+    }
+    else {
+        const response = {
+            success: false,
+            error: { message: result.error || 'Failed to resend reset code' }
+        };
+        res.status(400).json(response);
+    }
+});
 //# sourceMappingURL=authController.js.map

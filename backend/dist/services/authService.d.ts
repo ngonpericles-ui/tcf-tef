@@ -154,5 +154,44 @@ export declare class AuthService {
         };
     }>;
     private static verifyGoogleToken;
+    private static generateResetCode;
+    static requestPasswordReset(data: {
+        email?: string;
+        phone?: string;
+        method: 'email' | 'phone';
+        lang?: 'fr' | 'en';
+    }): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
+    static verifyPasswordResetCode(data: {
+        code: string;
+        email?: string;
+        phone?: string;
+        method: 'email' | 'phone';
+    }): Promise<{
+        success: boolean;
+        tokenId?: string;
+        error?: string;
+    }>;
+    static resetPassword(data: {
+        tokenId: string;
+        newPassword: string;
+    }): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
+    static resendPasswordResetCode(data: {
+        email?: string;
+        phone?: string;
+        method: 'email' | 'phone';
+        lang?: 'fr' | 'en';
+    }): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
 }
 //# sourceMappingURL=authService.d.ts.map

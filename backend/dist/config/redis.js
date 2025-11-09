@@ -95,18 +95,18 @@ exports.rateLimitRedis = createSafeRedisClient({
     db: 3,
     maxRetriesPerRequest: 1,
 }, 'ratelimit');
-exports.sessionRedis = createSafeRedisClient({ keyPrefix: 'aura:session:' }, 'session');
-exports.presenceRedis = createSafeRedisClient({ keyPrefix: 'aura:presence:' }, 'presence');
-exports.typingRedis = createSafeRedisClient({ keyPrefix: 'aura:typing:' }, 'typing');
-exports.notificationRedis = createSafeRedisClient({ keyPrefix: 'aura:notification:' }, 'notification');
-exports.analyticsRedis = createSafeRedisClient({ keyPrefix: 'aura:analytics:' }, 'analytics');
-exports.searchRedis = createSafeRedisClient({ keyPrefix: 'aura:search:' }, 'search');
-exports.uploadRedis = createSafeRedisClient({ keyPrefix: 'aura:upload:' }, 'upload');
-exports.encryptionRedis = createSafeRedisClient({ keyPrefix: 'aura:encryption:' }, 'encryption');
-exports.webhookRedis = createSafeRedisClient({ keyPrefix: 'aura:webhook:' }, 'webhook');
-exports.deadLetterRedis = createSafeRedisClient({ keyPrefix: 'aura:deadletter:' }, 'deadletter');
+exports.sessionRedis = exports.redis;
+exports.presenceRedis = exports.redis;
+exports.typingRedis = exports.redis;
+exports.notificationRedis = exports.redis;
+exports.analyticsRedis = exports.redis;
+exports.searchRedis = exports.redis;
+exports.uploadRedis = exports.redis;
+exports.encryptionRedis = exports.redis;
+exports.webhookRedis = exports.redis;
+exports.deadLetterRedis = exports.messageQueueRedis;
 exports.monitoringRedis = createSafeRedisClient({ keyPrefix: 'aura:monitoring:' }, 'monitoring');
-exports.testRedis = createSafeRedisClient({ keyPrefix: 'aura:test:' }, 'test');
+exports.testRedis = exports.redis;
 const createRedisCluster = () => {
     if (process.env.REDIS_CLUSTER_NODES) {
         const nodes = process.env.REDIS_CLUSTER_NODES.split(',').map(node => {
@@ -206,15 +206,19 @@ const shutdownRedis = async () => {
         return;
     }
     logger_1.logger.info('Shutting down Redis connections...');
-    const clients = [
-        exports.redis, exports.redisPubClient, exports.redisSubClient, exports.messageQueueRedis,
-        exports.cacheRedis, exports.sessionRedis, exports.rateLimitRedis, exports.presenceRedis,
-        exports.typingRedis, exports.notificationRedis, exports.analyticsRedis, exports.searchRedis,
-        exports.uploadRedis, exports.encryptionRedis, exports.webhookRedis, exports.deadLetterRedis,
-        exports.monitoringRedis, exports.testRedis
-    ].filter(Boolean);
-    await Promise.allSettled(clients.map(client => client.quit().catch(err => logger_1.logger.warn('Error closing Redis client:', err))));
-    logger_1.logger.info('All Redis connections closed');
+    const uniqueClients = [
+        exports.redis,
+        exports.redisPubClient,
+        exports.redisSubClient,
+        exports.messageQueueRedis,
+        exports.cacheRedis,
+        exports.rateLimitRedis,
+        exports.monitoringRedis
+    ].filter((client, index, self) => {
+        return client && self.indexOf(client) === index;
+    });
+    await Promise.allSettled(uniqueClients.map(client => client.quit().catch(err => logger_1.logger.warn('Error closing Redis client:', err))));
+    logger_1.logger.info(`All Redis connections closed (${uniqueClients.length} unique clients)`);
 };
 exports.shutdownRedis = shutdownRedis;
 process.on('SIGINT', exports.shutdownRedis);

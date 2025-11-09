@@ -14,6 +14,7 @@ export declare class RealTimeMessagingService {
     private typingUsers;
     private messageQueue;
     constructor(server: any);
+    private setupRedisAdapter;
     private initializeSocketHandlers;
     private handleConnection;
     private handleMessagingEvents;

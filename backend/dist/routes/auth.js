@@ -62,4 +62,8 @@ router.post('/generate-temporary-token', auth_1.authenticate, async (req, res) =
     }
 });
 router.get('/health', authController_1.AuthController.healthCheck);
+router.post('/forgot-password', (0, validation_1.validate)(validation_1.authSchemas.forgotPassword), authController_1.AuthController.forgotPassword);
+router.post('/verify-reset-code', (0, validation_1.validate)(validation_1.authSchemas.verifyResetCode), authController_1.AuthController.verifyResetCode);
+router.post('/reset-password', (0, validation_1.validate)(validation_1.authSchemas.resetPassword), authController_1.AuthController.resetPassword);
+router.post('/resend-reset-code', (0, validation_1.validate)(validation_1.authSchemas.resendResetCode), authController_1.AuthController.resendResetCode);
 //# sourceMappingURL=auth.js.map

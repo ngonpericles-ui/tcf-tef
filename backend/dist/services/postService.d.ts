@@ -33,6 +33,11 @@ export declare class PostService {
     }>;
     static getPostById(postId: string, userId?: string): Promise<{
         userLiked: boolean;
+        _count: {
+            comments: number;
+            likes: number;
+            shares: number;
+        };
         comments: ({
             _count: {
                 replies: number;
@@ -51,11 +56,6 @@ export declare class PostService {
             postId: string;
             parentId: string | null;
         })[];
-        _count: {
-            comments: number;
-            likes: number;
-            shares: number;
-        };
         author: {
             id: string;
             firstName: string;

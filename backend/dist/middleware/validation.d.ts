@@ -30,7 +30,9 @@ export declare const authSchemas: {
     login: Joi.ObjectSchema<any>;
     refreshToken: Joi.ObjectSchema<any>;
     forgotPassword: Joi.ObjectSchema<any>;
+    verifyResetCode: Joi.ObjectSchema<any>;
     resetPassword: Joi.ObjectSchema<any>;
+    resendResetCode: Joi.ObjectSchema<any>;
     socialAuth: Joi.ObjectSchema<any>;
     googleAuth: Joi.ObjectSchema<any>;
 };

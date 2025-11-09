@@ -189,11 +189,59 @@ exports.authSchemas = {
         })
     }),
     forgotPassword: joi_1.default.object({
-        email: exports.commonSchemas.email
+        method: joi_1.default.string().valid('email', 'phone').required().messages({
+            'any.only': 'Method must be either email or phone',
+            'any.required': 'Recovery method is required'
+        }),
+        email: joi_1.default.string().email().when('method', {
+            is: 'email',
+            then: joi_1.default.required(),
+            otherwise: joi_1.default.optional().allow('', null)
+        }),
+        phone: joi_1.default.string().when('method', {
+            is: 'phone',
+            then: joi_1.default.required(),
+            otherwise: joi_1.default.optional().allow('', null)
+        }),
+        lang: joi_1.default.string().valid('fr', 'en').optional()
+    }),
+    verifyResetCode: joi_1.default.object({
+        code: joi_1.default.string().length(6).pattern(/^[0-9]+$/).required().messages({
+            'string.length': 'Code must be exactly 6 digits',
+            'string.pattern.base': 'Code must contain only numbers'
+        }),
+        method: joi_1.default.string().valid('email', 'phone').required(),
+        email: joi_1.default.string().email().when('method', {
+            is: 'email',
+            then: joi_1.default.required(),
+            otherwise: joi_1.default.optional().allow('', null)
+        }),
+        phone: joi_1.default.string().when('method', {
+            is: 'phone',
+            then: joi_1.default.required(),
+            otherwise: joi_1.default.optional().allow('', null)
+        })
     }),
     resetPassword: joi_1.default.object({
-        token: joi_1.default.string().required(),
-        password: exports.commonSchemas.password
+        tokenId: joi_1.default.string().required().messages({
+            'string.empty': 'Token ID is required',
+            'any.required': 'Token ID is required'
+        }),
+        newPassword: exports.commonSchemas.password
+    }),
+    resendResetCode: joi_1.default.object({
+        method: joi_1.default.string().valid('email', 'phone').required(),
+        email: joi_1.default.string().email().when('method', {
+            is: 'email',
+            then: joi_1.default.required(),
+            otherwise: joi_1.default.optional().allow('', null)
+        }),
+        phone: joi_1.default.string().when('method', {
+            is: 'phone',
+            then: joi_1.default.required(),
+            otherwise: joi_1.default.optional().allow('', null)
+        }),
+        lang: joi_1.default.string().valid('fr', 'en').optional()
     }),
     socialAuth: joi_1.default.object({
         idToken: joi_1.default.string().required().messages({

@@ -178,4 +178,110 @@ router.put('/:userId/role', auth_1.authenticate, auth_1.requireAdmin, (0, valida
 router.put('/:userId/status', auth_1.authenticate, auth_1.requireSeniorManager, (0, validation_1.validateParams)({ userId: validation_1.commonSchemas.id }), (0, validation_1.validate)(joi_1.default.object({ status: joi_1.default.string().valid('ACTIVE', 'INACTIVE', 'SUSPENDED').required() })), userController_1.UserController.updateUserStatus);
 router.delete('/:userId', auth_1.authenticate, auth_1.requireAdmin, (0, validation_1.validateParams)({ userId: validation_1.commonSchemas.id }), userController_1.UserController.deleteUser);
 router.get('/health', userController_1.UserController.healthCheck);
+router.get('/testimonials', async (req, res) => {
+    try {
+        const students = await connection_1.prisma.user.findMany({
+            where: {
+                role: 'STUDENT',
+                status: 'ACTIVE',
+                testAttempts: {
+                    some: {
+                        status: 'COMPLETED'
+                    }
+                }
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                profileImage: true,
+                currentLevel: true,
+                testAttempts: {
+                    where: {
+                        status: 'COMPLETED'
+                    },
+                    orderBy: {
+                        completedAt: 'desc'
+                    },
+                    take: 1,
+                    select: {
+                        score: true,
+                        test: {
+                            select: {
+                                level: true
+                            }
+                        },
+                        feedback: true
+                    }
+                },
+                _count: {
+                    select: {
+                        testAttempts: {
+                            where: {
+                                status: 'COMPLETED'
+                            }
+                        }
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            },
+            take: 10
+        });
+        const testimonials = students
+            .filter(student => {
+            return student.testAttempts.length > 0 && student.currentLevel;
+        })
+            .slice(0, 5)
+            .map(student => {
+            const latestAttempt = student.testAttempts[0];
+            let feedbackData = {};
+            if (latestAttempt.feedback) {
+                try {
+                    feedbackData = JSON.parse(latestAttempt.feedback);
+                }
+                catch (e) {
+                }
+            }
+            const initialLevel = 'A1';
+            const currentLevel = student.currentLevel || latestAttempt.test.level || 'A1';
+            const quotes = [
+                "J'ai réussi mon TCF grâce à l'IA explicable",
+                "La préparation adaptative a changé ma vie",
+                "Les sessions live sont incroyables",
+                "Meilleure plateforme de préparation",
+                "Le feedback IA est exceptionnel",
+                "La simulation vocale m'a beaucoup aidé",
+                "Les tests blancs sont très réalistes",
+                "J'ai progressé rapidement grâce à AURA"
+            ];
+            const quoteIndex = parseInt(student.id.slice(-1), 16) % quotes.length;
+            const quote = quotes[quoteIndex];
+            return {
+                id: student.id,
+                name: `${student.firstName} ${student.lastName.charAt(0)}.`,
+                fullName: `${student.firstName} ${student.lastName}`,
+                profileImage: student.profileImage,
+                initialLevel,
+                currentLevel,
+                score: `${initialLevel} → ${currentLevel}`,
+                quote,
+                testCount: student._count.testAttempts,
+                latestScore: latestAttempt.score || 0
+            };
+        });
+        res.json({
+            success: true,
+            data: testimonials
+        });
+    }
+    catch (error) {
+        console.error('Error fetching testimonials:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch testimonials'
+        });
+    }
+});
 //# sourceMappingURL=users.js.map

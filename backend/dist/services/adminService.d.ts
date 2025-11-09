@@ -210,6 +210,12 @@ export declare class AdminService {
     }>;
     static getUserAnalytics(userId: string, period: string): Promise<{
         user: {
+            _count: {
+                comments: number;
+                courseEnrollments: number;
+                posts: number;
+                testAttempts: number;
+            };
             subscriptions: {
                 id: string;
                 status: import(".prisma/client").$Enums.SubscriptionStatus;
@@ -227,12 +233,6 @@ export declare class AdminService {
                 currentPeriodStart: Date | null;
                 currentPeriodEnd: Date | null;
             }[];
-            _count: {
-                comments: number;
-                courseEnrollments: number;
-                posts: number;
-                testAttempts: number;
-            };
         } & {
             email: string;
             id: string;
@@ -635,10 +635,10 @@ export declare class AdminService {
             userId: string;
             duration: number;
             feedback: string | null;
-            voicePreference: import(".prisma/client").$Enums.VoiceType;
             scheduledDate: Date;
-            questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+            voicePreference: import(".prisma/client").$Enums.VoiceType;
             vapiSessionId: string | null;
+            questionsData: import("@prisma/client/runtime/library").JsonValue | null;
             resultsData: import("@prisma/client/runtime/library").JsonValue | null;
             overallScore: number | null;
             fluencyScore: number | null;
@@ -663,10 +663,10 @@ export declare class AdminService {
         userId: string;
         duration: number;
         feedback: string | null;
-        voicePreference: import(".prisma/client").$Enums.VoiceType;
         scheduledDate: Date;
-        questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+        voicePreference: import(".prisma/client").$Enums.VoiceType;
         vapiSessionId: string | null;
+        questionsData: import("@prisma/client/runtime/library").JsonValue | null;
         resultsData: import("@prisma/client/runtime/library").JsonValue | null;
         overallScore: number | null;
         fluencyScore: number | null;
@@ -684,10 +684,10 @@ export declare class AdminService {
         userId: string;
         duration: number;
         feedback: string | null;
-        voicePreference: import(".prisma/client").$Enums.VoiceType;
         scheduledDate: Date;
-        questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+        voicePreference: import(".prisma/client").$Enums.VoiceType;
         vapiSessionId: string | null;
+        questionsData: import("@prisma/client/runtime/library").JsonValue | null;
         resultsData: import("@prisma/client/runtime/library").JsonValue | null;
         overallScore: number | null;
         fluencyScore: number | null;
@@ -705,10 +705,10 @@ export declare class AdminService {
         userId: string;
         duration: number;
         feedback: string | null;
-        voicePreference: import(".prisma/client").$Enums.VoiceType;
         scheduledDate: Date;
-        questionsData: import("@prisma/client/runtime/library").JsonValue | null;
+        voicePreference: import(".prisma/client").$Enums.VoiceType;
         vapiSessionId: string | null;
+        questionsData: import("@prisma/client/runtime/library").JsonValue | null;
         resultsData: import("@prisma/client/runtime/library").JsonValue | null;
         overallScore: number | null;
         fluencyScore: number | null;
@@ -730,9 +730,9 @@ export declare class AdminService {
             duration: number;
             completedAt: Date | null;
             startedAt: Date | null;
-            questions: string;
             immigrationType: string;
             personalInfo: string;
+            questions: string;
             responses: string;
             currentQuestionIndex: number;
             finalScore: number | null;
@@ -755,9 +755,9 @@ export declare class AdminService {
         duration: number;
         completedAt: Date | null;
         startedAt: Date | null;
-        questions: string;
         immigrationType: string;
         personalInfo: string;
+        questions: string;
         responses: string;
         currentQuestionIndex: number;
         finalScore: number | null;
@@ -773,9 +773,9 @@ export declare class AdminService {
         duration: number;
         completedAt: Date | null;
         startedAt: Date | null;
-        questions: string;
         immigrationType: string;
         personalInfo: string;
+        questions: string;
         responses: string;
         currentQuestionIndex: number;
         finalScore: number | null;
@@ -791,9 +791,9 @@ export declare class AdminService {
         duration: number;
         completedAt: Date | null;
         startedAt: Date | null;
-        questions: string;
         immigrationType: string;
         personalInfo: string;
+        questions: string;
         responses: string;
         currentQuestionIndex: number;
         finalScore: number | null;
