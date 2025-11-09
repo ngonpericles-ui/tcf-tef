@@ -50,6 +50,9 @@ import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import { useTheme } from '@/components/theme-provider';
+import Link from 'next/link';
+import { Globe, Sun, Moon } from 'lucide-react';
 
 interface VoiceSimulation {
   id: string;
@@ -69,11 +72,20 @@ interface VoiceSimulation {
 
 function SimulationPageContent() {
   const { userProfile } = useSharedData();
-  const { t, lang } = useLanguage();
+  const { t, lang, setLang } = useLanguage();
+  const { theme, setTheme } = useTheme();
   const router = useRouter();
   
   // Helper function for translations
   const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
+  
+  const cycleTheme = () => {
+    if (theme === "dark") {
+      setTheme("light");
+    } else {
+      setTheme("dark");
+    }
+  };
 
   const [simulations, setSimulations] = useState<VoiceSimulation[]>([]);
   const [monthlyCount, setMonthlyCount] = useState(0);
@@ -227,164 +239,129 @@ function SimulationPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-      {/* Enhanced Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-b border-gray-200 dark:border-gray-800">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(147,51,234,0.1)_1px,transparent_0)] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]"></div>
-        
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-200/30 dark:bg-purple-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-200/30 dark:bg-indigo-900/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+    <div className="min-h-screen bg-white dark:bg-black">
+      {/* Header - Transparent Blurry Top Container */}
+      <header className="absolute top-0 left-0 right-0 z-10 px-6 sm:px-8 md:px-12 lg:px-16 py-0.5 sm:py-0.5 md:py-1 bg-background/95 backdrop-blur-sm border-b border-gray-200/50 dark:border-gray-700/50">
+        <div className="container mx-auto max-w-screen-2xl flex items-center justify-between">
+          {/* Left: Logo and Title */}
+          <div className="flex items-center gap-3">
+            <Mic className="w-6 h-6 text-[#2ECC71]" />
+            <span className="text-lg md:text-xl font-bold text-black dark:text-white">
+              {t_("Pratique d'Entretien IA", "AI Interview Practice")}
+            </span>
+          </div>
+          
+          {/* Center: Navigation Links */}
+          <nav className="hidden md:flex items-center gap-8 md:gap-10 lg:gap-12 text-base md:text-lg font-bold text-foreground">
+            <Link href="/simulation-vocale/booking" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+              {t_("Nouvelle Simulation", "New Simulation")}
+            </Link>
+            <Link href="/simulation-vocale/usage" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+              {t_("Historique", "History")}
+            </Link>
+            <Link href="/simulation-vocale/results" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+              {t_("Feedback", "Feedback")}
+            </Link>
+            <Link href="/settings" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+              {t_("Paramètres", "Settings")}
+            </Link>
+          </nav>
+          
+          {/* Right: Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              aria-label="Language"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs md:text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
+              onClick={() => setLang?.(lang === "fr" ? "en" : "fr")}
+            >
+              <Globe className="h-4 w-4" /> {lang.toUpperCase()}
+            </button>
+            <button
+              aria-label={`Switch theme (current: ${theme})`}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs md:text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
+              onClick={cycleTheme}
+            >
+              {theme === "light" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+      {/* Hero Section - White Background */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-black pt-24">
+        {/* Floating Background Elements */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-[#2ECC71]/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-[#2ECC71]/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
+
+        <div className="container relative mx-auto max-w-screen-2xl px-4 md:px-8 pt-16 md:pt-24 pb-16 md:pb-24">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left Side: Text Content */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }}
-              className="text-center lg:text-left"
+              className="text-center lg:text-left space-y-6"
             >
-              {/* Badge */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800"
+              {/* Main Title - Green */}
+              <h1 
+                className="text-5xl md:text-6xl xl:text-7xl font-bold leading-[1.1] tracking-tight"
+                style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.02em' }}
               >
-                <Mic className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">
-                  {t_("Simulation Orale", "Oral Simulation")}
+                <span className="text-[#2ECC71]">
+                  {t_("Pratiquez votre", "Practice Your")}
                 </span>
-              </motion.div>
+                <br />
+                <span className="text-[#2ECC71]">
+                  {t_("Entretien en Français", "French Interview")}
+                </span>
+              </h1>
 
-              {/* Main Title */}
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 dark:from-purple-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent leading-tight">
-                {t_("Simulation Vocale avec IA", "AI Voice Simulation")}
-            </h1>
-
-              {/* Description */}
-              <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed">
-                  {t_(
-                    "Pratiquez vos entretiens en français avec notre IA avancée. Entraînez-vous à parler, améliorez votre prononciation et recevez des retours détaillés pour exceller lors de vos examens et entretiens professionnels.",
-                    "Practice your French interviews with our advanced AI. Train your speaking skills, improve your pronunciation, and receive detailed feedback to excel in your exams and professional interviews."
-                  )}
+              {/* Description - White/Black based on theme */}
+              <p 
+                className="text-xl md:text-2xl text-foreground font-medium leading-relaxed"
+                style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
+              >
+                {t_(
+                  "Améliorez votre fluidité et développez votre confiance pour votre prochain entretien avec notre IA avancée.",
+                  "Improve your fluency and build confidence for your next interview with our advanced AI."
+                )}
               </p>
 
-              {/* Key Features */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                {[
-                  { icon: Mic, text: t_("Pratique Orale", "Speaking Practice"), desc: t_("Entretiens réalistes", "Realistic Interviews") },
-                  { icon: MessageSquare, text: t_("Feedback IA", "AI Feedback"), desc: t_("Analyse détaillée", "Detailed Analysis") },
-                  { icon: TrendingUp, text: t_("Progression", "Progress"), desc: t_("Suivi continu", "Continuous Tracking") }
-                ].map((feature, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + idx * 0.1 }}
-                    className="flex flex-col items-center lg:items-start gap-2 p-4 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-gray-200 dark:border-gray-700"
-                  >
-                    <feature.icon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{feature.text}</div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">{feature.desc}</div>
-                  </motion.div>
-                ))}
-      </div>
-
-              {/* CTA Button */}
+              {/* CTA Button - Green */}
               {accessGranted && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 }}
-                  className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+                  transition={{ delay: 0.3 }}
+                  className="flex justify-center lg:justify-start"
                 >
                   <Button
                     onClick={() => router.push('/simulation-vocale/booking')}
-                    className="bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl transition-all"
+                    className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold px-8 py-4 text-lg relative overflow-hidden group transition-all duration-300 hover:scale-105"
                     size="lg"
                   >
-                    <CalendarIcon className="w-5 h-5 mr-2" />
-                    {t_("Réserver une Simulation", "Book a Simulation")}
+                    <Play className="w-5 h-5 mr-2" />
+                    <span className="relative z-10">{t_("Démarrer une Simulation", "Start Simulation")}</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                   </Button>
-            <Button
-                    variant="outline"
-                    onClick={() => router.push('/simulation-vocale/results')}
-                    className="border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                    size="lg"
-            >
-                    <Trophy className="w-5 h-5 mr-2" />
-                    {t_("Voir les Résultats", "View Results")}
-            </Button>
                 </motion.div>
               )}
             </motion.div>
 
-            {/* Right Side: Visual Element */}
+            {/* Right Side: Calendar with Green Icons */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
               className="flex flex-col items-center justify-center"
             >
-              {/* Visual Illustration - Interview/Conversation */}
-              <div className="relative w-full max-w-md">
-                {/* SVG Illustration */}
-                <svg viewBox="0 0 400 350" className="w-full h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Background circles */}
-                  <circle cx="200" cy="175" r="130" fill="url(#gradient1)" opacity="0.1"/>
-                  <circle cx="200" cy="175" r="90" fill="url(#gradient2)" opacity="0.15"/>
-                  
-                  {/* Person on left (Interviewer) */}
-                  <circle cx="120" cy="140" r="25" fill="#8B5CF6" opacity="0.2"/>
-                  <rect x="95" y="165" width="50" height="60" rx="25" fill="#8B5CF6" opacity="0.3"/>
-                  
-                  {/* Speech bubble left */}
-                  <path d="M 80 100 Q 60 90 50 110 L 60 120 Q 70 115 80 120 Z" fill="#8B5CF6" opacity="0.2"/>
-                  <circle cx="65" cy="85" r="8" fill="#8B5CF6" opacity="0.3"/>
-                  <circle cx="55" cy="75" r="6" fill="#8B5CF6" opacity="0.3"/>
-                  
-                  {/* Microphone center */}
-                  <rect x="185" y="120" width="8" height="50" rx="4" fill="#EC4899"/>
-                  <ellipse cx="189" cy="120" rx="12" ry="8" fill="#EC4899"/>
-                  <line x1="175" y1="130" x2="203" y2="130" stroke="#EC4899" strokeWidth="2" opacity="0.5"/>
-                  <line x1="175" y1="140" x2="203" y2="140" stroke="#EC4899" strokeWidth="2" opacity="0.5"/>
-                  
-                  {/* Person on right (Student) */}
-                  <circle cx="280" cy="140" r="25" fill="#06B6D4" opacity="0.2"/>
-                  <rect x="255" y="165" width="50" height="60" rx="25" fill="#06B6D4" opacity="0.3"/>
-                  
-                  {/* Speech bubble right */}
-                  <path d="M 320 100 Q 340 90 350 110 L 340 120 Q 330 115 320 120 Z" fill="#06B6D4" opacity="0.2"/>
-                  <circle cx="335" cy="85" r="8" fill="#06B6D4" opacity="0.3"/>
-                  <circle cx="345" cy="75" r="6" fill="#06B6D4" opacity="0.3"/>
-                  
-                  {/* Sound waves */}
-                  <path d="M 200 100 Q 210 90 220 100 Q 210 110 200 100" stroke="#10B981" strokeWidth="2" fill="none" opacity="0.4"/>
-                  <path d="M 200 110 Q 215 95 230 110 Q 215 125 200 110" stroke="#10B981" strokeWidth="2" fill="none" opacity="0.4"/>
-                  <path d="M 200 120 Q 220 100 240 120 Q 220 140 200 120" stroke="#10B981" strokeWidth="2" fill="none" opacity="0.4"/>
-                  
-                  {/* Conversation line */}
-                  <line x1="150" y1="175" x2="250" y2="175" stroke="#6366F1" strokeWidth="2" strokeDasharray="5,5" opacity="0.3"/>
-                  
-                  <defs>
-                    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#8B5CF6"/>
-                      <stop offset="100%" stopColor="#EC4899"/>
-                    </linearGradient>
-                    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#EC4899"/>
-                      <stop offset="100%" stopColor="#06B6D4"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-
-              {/* How It Works - Simplified */}
-              <div className="mt-8 w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-xl border-2 border-purple-100 dark:border-purple-900">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 text-center">
+              {/* Calendar Card */}
+              <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-xl border-2 border-gray-100 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-black dark:text-white mb-4 text-center" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                   {t_("Comment commencer", "How to Start")}
                 </h3>
                 <div className="space-y-3">
@@ -393,20 +370,20 @@ function SimulationPageContent() {
                     { step: "2", icon: Mic, text: t_("Pratiquez à l'oral", "Practice speaking") },
                     { step: "3", icon: Trophy, text: t_("Recevez vos résultats", "Get your results") }
                   ].map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                      <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
+                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                      <div className="w-8 h-8 rounded-full bg-[#2ECC71] text-white flex items-center justify-center text-sm font-bold">
                         {item.step}
-          </div>
-                      <item.icon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.text}</span>
-            </div>
+                      </div>
+                      <item.icon className="w-5 h-5 text-[#2ECC71]" />
+                      <span className="text-sm font-medium text-foreground">{item.text}</span>
+                    </div>
                   ))}
-            </div>
-            </div>
+                </div>
+              </div>
             </motion.div>
           </div>
         </div>
-      </div>
+      </section>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
