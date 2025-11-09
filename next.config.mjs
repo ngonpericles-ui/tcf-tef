@@ -38,6 +38,15 @@ const nextConfig = {
     webpackBuildWorker: true,
     optimizeCss: false,
   },
+  // Force Webpack instead of Turbopack to handle native modules properly
+  webpack: (config) => {
+    // Any webpack config forces Next.js to use Webpack instead of Turbopack
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+    };
+    return config;
+  },
   // Modern routing configuration
   // Note: middleware.ts is still functional but deprecated
   // Consider migrating to route handlers or server components for auth logic
