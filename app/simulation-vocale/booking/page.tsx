@@ -27,8 +27,17 @@ import {
   CalendarDays,
   CalendarClock,
   Sparkles,
-  Zap
+  Zap,
+  Bell,
+  Search,
+  Globe,
+  ChevronLeft,
+  ChevronRight,
+  Volume2
 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getComprehensiveProfilePictureUrl } from '@/lib/utils/profilePicture';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
@@ -62,6 +71,20 @@ function BookingPageContent() {
   
   // Helper function for translations
   const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
+  
+  // Get profile picture URL
+  const profileImageUrl = userProfile?.avatar
+    ? getComprehensiveProfilePictureUrl(userProfile.email || '', userProfile.avatar)
+    : userProfile?.email
+      ? getComprehensiveProfilePictureUrl(userProfile.email, '')
+      : '';
+  
+  // Get user initials from name or email
+  const userInitials = userProfile?.name
+    ? userProfile.name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2) || userProfile.email?.charAt(0).toUpperCase() || 'U'
+    : userProfile?.email
+      ? userProfile.email.charAt(0).toUpperCase()
+      : 'U';
 
   const [bookingType, setBookingType] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -532,651 +555,601 @@ function BookingPageContent() {
     );
   }
 
+  // Calendar navigation - sync with selectedDate
+  const [calendarMonth, setCalendarMonth] = useState(selectedDate || new Date());
+  
+  useEffect(() => {
+    if (selectedDate) {
+      setCalendarMonth(selectedDate);
+    }
+  }, [selectedDate]);
+  
+  // Get current month/year for calendar display
+  const currentMonth = calendarMonth.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
+  const capitalizedMonth = currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1);
+  
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newDate = new Date(calendarMonth);
+    if (direction === 'prev') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setCalendarMonth(newDate);
+  };
+  
+  // Get days of month for calendar display
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    // Add empty cells for days before month starts
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    // Add days of month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+    return days;
+  };
+  
+  const calendarDays = getDaysInMonth(calendarMonth);
+  const today = new Date();
+  const isToday = (day: number) => {
+    return day === today.getDate() && 
+           calendarMonth.getMonth() === today.getMonth() && 
+           calendarMonth.getFullYear() === today.getFullYear();
+  };
+  const isSelected = (day: number) => {
+    if (!selectedDate) return false;
+    return day === selectedDate.getDate() && 
+           calendarMonth.getMonth() === selectedDate.getMonth() && 
+           calendarMonth.getFullYear() === selectedDate.getFullYear();
+  };
+  const isPast = (day: number) => {
+    const checkDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+    return checkDate < today;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Hero Section - Dribbble Inspired */}
-      <div className="relative bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 overflow-hidden border-b border-gray-200 dark:border-gray-800">
-        {/* Decorative Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-purple-200/30 to-pink-200/30 dark:from-purple-900/20 dark:to-pink-900/20 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-blue-200/30 to-indigo-200/30 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-full blur-3xl"></div>
-        </div>
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left Column - Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              className="space-y-6"
-            >
-              {/* Badge */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.1 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 rounded-full border border-purple-200 dark:border-purple-800"
-              >
-                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                  {t_("Planification Intelligente", "Smart Scheduling")}
-                </span>
-              </motion.div>
-
-              {/* Main Title */}
-              <motion.h1
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white leading-tight"
-              >
-                {t_("Réservez vos", "Book Your")}{' '}
-                <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 bg-clip-text text-transparent">
-                  {t_("Simulations", "Simulations")}
-                </span>
-              </motion.h1>
-
-              {/* Description */}
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="text-lg md:text-xl text-gray-600 dark:text-gray-300 leading-relaxed"
-              >
-                {t_(
-                  "Planifiez vos simulations vocales selon votre emploi du temps. Réservez vos créneaux en toute simplicité et gérez vos rendez-vous facilement.",
-                  "Schedule your voice simulations according to your schedule. Book your slots with ease and manage your appointments effortlessly."
-                )}
-              </motion.p>
-
-              {/* Feature Cards */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-                className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4"
-              >
-                <div className="flex flex-col items-start gap-2 p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <CalendarClock className="w-5 h-5 text-white" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
-                    {t_("Planification", "Scheduling")}
-                  </h3>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    {t_("Flexible", "Flexible")}
-                  </p>
-                </div>
-
-                <div className="flex flex-col items-start gap-2 p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-5 h-5 text-white" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
-                    {t_("Créneaux", "Time Slots")}
-                  </h3>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    {t_("Disponibles", "Available")}
-                  </p>
-                </div>
-
-                <div className="flex flex-col items-start gap-2 p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow">
-                  <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <CheckCircle className="w-5 h-5 text-white" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
-                    {t_("Confirmation", "Confirmation")}
-                  </h3>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    {t_("Instantanée", "Instant")}
-                  </p>
-                </div>
-              </motion.div>
-            </motion.div>
-
-            {/* Right Column - Illustration */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative hidden lg:block"
-            >
-              <div className="relative w-full max-w-lg mx-auto">
-                {/* SVG Calendar Illustration - Dynamic */}
-                {(() => {
-                  const now = new Date();
-                  const currentDay = now.getDate();
-                  const currentMonth = now.toLocaleDateString('fr-FR', { month: 'long' });
-                  const capitalizedMonth = currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1);
-                  
-                  // Calculate calendar layout positions
-                  // Calendar grid: 7 columns (days), ~5 rows
-                  // Position calculation: start at x=120, y=225, step 35px horizontally, 40px vertically
-                  const getDatePosition = (day: number) => {
-                    // Find which week and day of week
-                    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                    const firstDayWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, etc.
-                    // Adjust for Monday start (0 = Monday)
-                    const mondayStart = firstDayWeek === 0 ? 6 : firstDayWeek - 1;
-                    
-                    const week = Math.floor((day - 1 + mondayStart) / 7);
-                    const dayOfWeek = (day - 1 + mondayStart) % 7;
-                    
-                    const x = 120 + (dayOfWeek * 35);
-                    const y = 225 + (week * 40);
-                    
-                    return { x, y, week, dayOfWeek };
-                  };
-                  
-                  const todayPos = getDatePosition(currentDay);
-                  
-                  // Generate some sample dates around today (for visual interest)
-                  const sampleDates = [];
-                  for (let i = Math.max(1, currentDay - 2); i <= Math.min(31, currentDay + 4); i++) {
-                    if (i !== currentDay) {
-                      sampleDates.push(i);
-                    }
-                  }
-                  
-                  return (
-                    <svg
-                      viewBox="0 0 400 400"
-                      className="w-full h-auto"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      {/* Background Circles */}
-                      <circle cx="200" cy="200" r="160" fill="url(#gradient1)" opacity="0.1"/>
-                      <circle cx="200" cy="200" r="120" fill="url(#gradient2)" opacity="0.15"/>
-                      
-                      {/* Calendar Base */}
-                      <rect x="100" y="120" width="200" height="220" rx="12" fill="white" stroke="#8B5CF6" strokeWidth="3"/>
-                      
-                      {/* Calendar Header */}
-                      <rect x="100" y="120" width="200" height="50" rx="12" fill="url(#gradient3)"/>
-                      <text x="200" y="150" textAnchor="middle" fill="white" fontSize="20" fontWeight="bold">{capitalizedMonth}</text>
-                      
-                      {/* Calendar Grid */}
-                      {/* Week Days */}
-                      <text x="120" y="195" fill="#6B7280" fontSize="11" fontWeight="600">L</text>
-                      <text x="155" y="195" fill="#6B7280" fontSize="11" fontWeight="600">M</text>
-                      <text x="190" y="195" fill="#6B7280" fontSize="11" fontWeight="600">M</text>
-                      <text x="225" y="195" fill="#6B7280" fontSize="11" fontWeight="600">J</text>
-                      <text x="260" y="195" fill="#6B7280" fontSize="11" fontWeight="600">V</text>
-                      <text x="295" y="195" fill="#6B7280" fontSize="11" fontWeight="600">S</text>
-                      
-                      {/* Calendar Days - Sample dates with subtle highlights */}
-                      {sampleDates.slice(0, 6).map((day, idx) => {
-                        const pos = getDatePosition(day);
-                        const colors = ['#8B5CF6', '#10B981', '#3B82F6'];
-                        const color = colors[idx % colors.length];
-                        return (
-                          <g key={day}>
-                            <circle cx={pos.x} cy={pos.y} r="15" fill={color} opacity="0.2"/>
-                            <text x={pos.x} y={pos.y + 5} textAnchor="middle" fill="#1F2937" fontSize="12" fontWeight="600">{day}</text>
-                          </g>
-                        );
-                      })}
-                      
-                      {/* Current Day - Highlighted */}
-                      <circle cx={todayPos.x} cy={todayPos.y} r="18" fill="url(#gradient4)" stroke="#8B5CF6" strokeWidth="2"/>
-                      <text x={todayPos.x} y={todayPos.y + 5} textAnchor="middle" fill="white" fontSize="13" fontWeight="bold">{currentDay}</text>
-                      
-                      {/* Clock Icon */}
-                      <circle cx="320" cy="180" r="30" fill="url(#gradient5)" opacity="0.9"/>
-                      <path d="M320 170 L320 180 L325 185" stroke="white" strokeWidth="2" strokeLinecap="round"/>
-                      
-                      {/* Notification Badge */}
-                      <circle cx="300" cy="280" r="25" fill="#EF4444" opacity="0.9"/>
-                      <path d="M290 280 L310 280 M300 270 L300 290" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-                      
-                      {/* Checkmark */}
-                      <circle cx="80" cy="280" r="25" fill="#10B981" opacity="0.9"/>
-                      <path d="M72 280 L78 286 L88 276" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      
-                      <defs>
-                        <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#8B5CF6"/>
-                          <stop offset="100%" stopColor="#EC4899"/>
-                        </linearGradient>
-                        <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#3B82F6"/>
-                          <stop offset="100%" stopColor="#8B5CF6"/>
-                        </linearGradient>
-                        <linearGradient id="gradient3" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#8B5CF6"/>
-                          <stop offset="100%" stopColor="#EC4899"/>
-                        </linearGradient>
-                        <linearGradient id="gradient4" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#8B5CF6"/>
-                          <stop offset="100%" stopColor="#EC4899"/>
-                        </linearGradient>
-                        <linearGradient id="gradient5" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" stopColor="#3B82F6"/>
-                          <stop offset="100%" stopColor="#8B5CF6"/>
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                  );
-                })()}
-
-                {/* Floating Elements */}
-                <motion.div
-                  animate={{
-                    y: [0, -10, 0],
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                  className="absolute top-10 right-10 w-16 h-16 bg-gradient-to-br from-purple-400 to-pink-400 rounded-2xl flex items-center justify-center shadow-xl"
-                >
-                  <CalendarCheck className="w-8 h-8 text-white" />
-                </motion.div>
-
-                <motion.div
-                  animate={{
-                    y: [0, 10, 0],
-                  }}
-                  transition={{
-                    duration: 2.5,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                    delay: 0.5
-                  }}
-                  className="absolute bottom-20 left-10 w-12 h-12 bg-gradient-to-br from-blue-400 to-indigo-400 rounded-xl flex items-center justify-center shadow-lg"
-                >
-                  <Zap className="w-6 h-6 text-white" />
-                </motion.div>
+    <div className="min-h-screen bg-white dark:bg-black">
+      {/* Rounded Dark Container with Liquid Glass Effect - Header */}
+      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 w-[95%] max-w-6xl">
+        <div className="bg-slate-900/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Left: Sound Wave Icon and Title */}
+            <div className="flex items-center gap-3">
+              {/* Sound Wave Icon - Green */}
+              <div className="flex items-end gap-1 h-6">
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '12px', animation: 'pulse 1s ease-in-out infinite' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '18px', animation: 'pulse 1s ease-in-out infinite 0.2s' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '24px', animation: 'pulse 1s ease-in-out infinite 0.4s' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '18px', animation: 'pulse 1s ease-in-out infinite 0.6s' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '12px', animation: 'pulse 1s ease-in-out infinite 0.8s' }} />
               </div>
-            </motion.div>
+              <span className="text-lg md:text-xl text-white font-normal">
+                {t_("Pratique d'Entretien IA", "AI Interview Practice")}
+              </span>
+            </div>
+            
+            {/* Center: Navigation Links */}
+            <nav className="hidden md:flex items-center gap-6 md:gap-8 text-base md:text-lg text-white font-normal">
+              <Link href="/simulation-vocale" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Tableau de bord", "Dashboard")}
+              </Link>
+              <Link href="/simulation-vocale/booking" className="text-white font-bold hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Réserver une Simulation", "Book a Simulation")}
+              </Link>
+              <Link href="/simulation-vocale/results" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Feedback", "Feedback")}
+              </Link>
+              <Link href="/settings" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Profil", "Profile")}
+              </Link>
+            </nav>
+            
+            {/* Right: Bell and Profile Picture */}
+            <div className="flex items-center gap-4">
+              <button
+                aria-label="Notifications"
+                className="relative p-2 text-white hover:text-[#2ECC71] transition-colors rounded-full h-10 w-10 flex items-center justify-center"
+              >
+                <Bell className="w-5 h-5" />
+              </button>
+              <Avatar className="w-10 h-10 border-2 border-[#2ECC71]/50">
+                <AvatarImage 
+                  src={profileImageUrl}
+                  alt={userProfile?.name || 'User'}
+                />
+                <AvatarFallback className="bg-[#2ECC71] text-white font-semibold">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </div>
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Book New Simulation - Modern Redesign */}
-        <Card className="mb-8 shadow-lg border-2 border-purple-100 dark:border-purple-900/50">
-          <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-b border-purple-200 dark:border-purple-800">
-            <CardTitle className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <CalendarCheck className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              {t_("Réserver une Simulation", "Book a Simulation")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-8">
-            {/* Booking Type Selection - Card Based */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-4">
-                {t_("Type de Réservation", "Booking Type")}
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <div
-                    onClick={() => setBookingType('AUTO')}
-                    className={`p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                      bookingType === 'AUTO'
-                        ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 shadow-lg'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        bookingType === 'AUTO'
-                          ? 'bg-gradient-to-br from-purple-500 to-pink-500'
-                          : 'bg-gray-100 dark:bg-gray-800'
-                      }`}>
-                        <Zap className={`w-6 h-6 ${bookingType === 'AUTO' ? 'text-white' : 'text-gray-500'}`} />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                          {t_("Automatique", "Automatic")}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {t_("Nous planifierons automatiquement le prochain créneau disponible", "We will automatically schedule the next available slot")}
-                        </p>
-                      </div>
-                      {bookingType === 'AUTO' && (
-                        <CheckCircle className="w-6 h-6 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <div
-                    onClick={() => setBookingType('MANUAL')}
-                    className={`p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                      bookingType === 'MANUAL'
-                        ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 shadow-lg'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        bookingType === 'MANUAL'
-                          ? 'bg-gradient-to-br from-blue-500 to-indigo-500'
-                          : 'bg-gray-100 dark:bg-gray-800'
-                      }`}>
-                        <CalendarIcon className={`w-6 h-6 ${bookingType === 'MANUAL' ? 'text-white' : 'text-gray-500'}`} />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                          {t_("Manuelle", "Manual")}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {t_("Choisissez votre date et heure préférées", "Choose your preferred date and time")}
-                        </p>
-                      </div>
-                      {bookingType === 'MANUAL' && (
-                        <CheckCircle className="w-6 h-6 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-16 bg-white dark:bg-black">
+        <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-6 px-4 py-10 text-center items-center">
+            <div className="flex flex-col gap-4 max-w-3xl">
+              <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight text-black dark:text-white">
+                {t_("Planification Intelligente pour un Français Impeccable", "Smart Scheduling for Flawless French")}
+              </h1>
+              <h2 className="text-base md:text-lg text-muted-foreground font-normal leading-normal">
+                {t_("Maîtrisez vos compétences d'entretien avec une planification alimentée par l'IA et des sessions de pratique réalistes. Obtenez des commentaires instantanés pour parler en toute confiance.", "Master your interview skills with AI-powered scheduling and realistic practice sessions. Get instant feedback to speak with confidence.")}
+              </h2>
             </div>
+            <Button 
+              className="rounded-full h-12 px-6 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-base"
+              onClick={() => {
+                const bookingSection = document.getElementById('booking-section');
+                bookingSection?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              {t_("Réserver votre Première Simulation", "Book Your First Simulation")}
+            </Button>
+          </div>
+        </div>
+      </section>
 
-            {/* Simulation Topics Explanation - Always Visible */}
-            <Alert className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
-              <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              <AlertDescription className="text-gray-700 dark:text-gray-300">
-                <strong className="font-semibold text-gray-900 dark:text-white">
-                  {t_("À propos de la simulation:", "About the simulation:")}
-                </strong>
-                <p className="mt-2">
-                  {t_(
-                    "Vous serez interrogé sur plusieurs sujets variés pour évaluer votre niveau de français. Les questions porteront sur différents thèmes pour tester votre compréhension, expression orale, et capacité à communiquer en français dans des situations variées.",
-                    "You will be questioned on several varied topics to assess your French level. Questions will cover different themes to test your comprehension, oral expression, and ability to communicate in French in various situations."
-                  )}
-                </p>
-                {topics.length > 0 && (
-                  <>
-                    <p className="mt-3 font-medium text-gray-900 dark:text-white">
-                      {t_("Exemples de thèmes abordés:", "Example themes covered:")}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {topics.slice(0, 6).map((topic, idx) => (
-                        <Badge key={idx} variant="secondary" className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                          {topic}
-                        </Badge>
-                      ))}
-                      {topics.length > 6 && (
-                        <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
-                          +{topics.length - 6} {t_("autres", "more")}
-                        </Badge>
-                      )}
-                    </div>
-                  </>
-                )}
-              </AlertDescription>
-            </Alert>
+      <main className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 md:py-16" id="booking-section">
+        {/* Book a Simulation Section */}
+        <section className="flex flex-col gap-8 mb-16">
+          <div className="px-4">
+            <h2 className="text-2xl font-bold leading-tight text-black dark:text-white mb-1">
+              {t_("Réserver une Simulation", "Book a Simulation")}
+            </h2>
+            <p className="text-muted-foreground">
+              {t_("Choisissez votre méthode préférée pour planifier votre prochaine session.", "Choose your preferred method to schedule your next session.")}
+            </p>
+          </div>
 
-            {/* Manual Booking Options */}
-            {bookingType === 'MANUAL' && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl"
-              >
-                {/* Calendar */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-3">
-                    {t_("Sélectionner la Date", "Select Date")}
-                  </label>
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    className="rounded-lg border-2 border-gray-200 dark:border-gray-700"
-                    disabled={(date) => {
-                      // Only disable past dates (before today)
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const checkDate = new Date(date);
-                      checkDate.setHours(0, 0, 0, 0);
-                      return checkDate < today;
-                    }}
-                    fromDate={new Date()} // Allow booking from today onwards
-                  />
-                </div>
+          {/* Booking Method Toggle */}
+          <div className="flex px-4 py-3 justify-center">
+            <div className="flex h-12 w-full max-w-md items-center justify-center rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm p-1.5 border border-white/20">
+              <label className={`flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 transition-all ${
+                bookingType === 'AUTO'
+                  ? 'bg-[#2ECC71] text-black shadow-lg'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}>
+                <span className="truncate text-sm font-medium">{t_("Réservation Automatique", "Automatic Booking")}</span>
+                <input 
+                  className="invisible w-0" 
+                  name="booking-method" 
+                  type="radio" 
+                  value="AUTO"
+                  checked={bookingType === 'AUTO'}
+                  onChange={() => setBookingType('AUTO')}
+                />
+              </label>
+              <label className={`flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 transition-all ${
+                bookingType === 'MANUAL'
+                  ? 'bg-[#2ECC71] text-black shadow-lg'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}>
+                <span className="truncate text-sm font-medium">{t_("Réservation Manuelle", "Manual Booking")}</span>
+                <input 
+                  className="invisible w-0" 
+                  name="booking-method" 
+                  type="radio" 
+                  value="MANUAL"
+                  checked={bookingType === 'MANUAL'}
+                  onChange={() => setBookingType('MANUAL')}
+                />
+              </label>
+            </div>
+          </div>
 
-                {/* Time Slots */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-3">
-                    {t_("Sélectionner l'Heure", "Select Time")}
-                  </label>
-                  <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                    {availableSlots.map((slot) => (
-                      <Button
-                        key={slot.id}
-                        variant={selectedTime === slot.time ? "default" : "outline"}
-                        size="sm"
-                        disabled={!slot.available}
-                        onClick={() => setSelectedTime(slot.time)}
-                        className={`text-xs transition-all ${
-                          !slot.available 
-                            ? 'opacity-40 cursor-not-allowed grayscale' 
-                            : selectedTime === slot.time 
-                              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0' 
-                              : 'hover:border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-                        }`}
-                      >
-                        {slot.time}
-                      </Button>
-                    ))}
+          {/* Two Column Layout: Date/Time Selection and Interviewer Selection */}
+          {bookingType === 'MANUAL' && (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 p-4">
+              {/* Left Card: Select Date & Time */}
+              <div className="lg:col-span-3 flex flex-col gap-6 p-6 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <p className="text-lg font-bold text-black dark:text-white">
+                    {t_("Sélectionner la Date et l'Heure", "Select Date & Time")}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Globe className="w-4 h-4" />
+                    <span>UTC-5 (EST)</span>
                   </div>
                 </div>
-              </motion.div>
-            )}
 
-            {/* Voice Preference Selection */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-4">
-                {t_("Préférence Vocale", "Voice Preference")}
-              </label>
-              {loadingVoices ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{t_("Chargement des voix...", "Loading voices...")}</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {availableVoices.map((voice) => {
-                    const isSelected = voicePreference === voice.id;
-                    const accentFlags: Record<string, string> = {
-                      'FRANCE': '🇫🇷',
-                      'QUEBEC': '🇨🇦',
-                      'BELGIUM': '🇧🇪'
-                    };
-                    return (
-                      <motion.div
-                        key={voice.id}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Calendar */}
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center p-1 justify-between mb-2">
+                      <button 
+                        onClick={() => navigateMonth('prev')}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
                       >
+                        <ChevronLeft className="w-10 h-10 flex items-center justify-center" />
+                      </button>
+                      <p className="text-base font-bold leading-tight flex-1 text-center text-black dark:text-white">
+                        {capitalizedMonth}
+                      </p>
+                      <button 
+                        onClick={() => navigateMonth('next')}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronRight className="w-10 h-10 flex items-center justify-center" />
+                      </button>
+                    </div>
+
+                    {/* Days of Week */}
+                    <div className="grid grid-cols-7 text-center mb-2">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                        <p key={idx} className="text-xs font-bold leading-normal text-muted-foreground flex h-10 w-full items-center justify-center">
+                          {day}
+                        </p>
+                      ))}
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-0">
+                      {calendarDays.map((day, idx) => {
+                        if (day === null) {
+                          return <div key={idx} className="h-10 w-full" />;
+                        }
+                        const dayIsPast = isPast(day);
+                        const dayIsSelected = isSelected(day);
+                        const dayIsToday = isToday(day);
+                        
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              if (!dayIsPast) {
+                                const newDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+                                setSelectedDate(newDate);
+                              }
+                            }}
+                            disabled={dayIsPast}
+                            className={`h-10 w-full text-sm font-medium leading-normal transition-all ${
+                              dayIsPast
+                                ? 'text-muted-foreground opacity-50 cursor-not-allowed'
+                                : dayIsSelected
+                                  ? 'text-black bg-[#2ECC71] rounded-full'
+                                  : 'text-muted-foreground hover:bg-white/10 dark:hover:bg-white/5 rounded-full'
+                            }`}
+                          >
+                            <div className="flex size-full items-center justify-center rounded-full">
+                              {day}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Available Time Slots */}
+                  <div className="flex flex-col gap-3">
+                    <p className="text-base font-bold text-black dark:text-white">
+                      {t_("Créneaux Disponibles", "Available Slots")}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {availableSlots.slice(0, 6).map((slot) => {
+                        const isSelectedSlot = selectedTime === slot.time;
+                        const isDisabled = !slot.available;
+                        
+                        return (
+                          <button
+                            key={slot.id}
+                            onClick={() => !isDisabled && setSelectedTime(slot.time)}
+                            disabled={isDisabled}
+                            className={`rounded-full h-10 text-sm transition-all border-2 ${
+                              isSelectedSlot
+                                ? 'bg-[#2ECC71] border-[#2ECC71] text-black font-bold'
+                                : isDisabled
+                                  ? 'bg-white/5 dark:bg-white/5 cursor-not-allowed text-muted-foreground border-transparent'
+                                  : 'bg-white/10 dark:bg-white/5 hover:border-[#2ECC71] border-transparent text-black dark:text-white'
+                            }`}
+                          >
+                            {slot.time}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Card: Select Your Interviewer */}
+              <div className="lg:col-span-2 flex flex-col gap-4 p-6 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 shadow-xl">
+                <h3 className="text-lg font-bold text-black dark:text-white">
+                  {t_("Sélectionner votre Intervieweur", "Select Your Interviewer")}
+                </h3>
+                
+                <div className="flex flex-col gap-4">
+                  {loadingVoices ? (
+                    <div className="text-center py-8">
+                      <div className="w-8 h-8 border-2 border-[#2ECC71] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">{t_("Chargement des voix...", "Loading voices...")}</p>
+                    </div>
+                  ) : (
+                    availableVoices.slice(0, 2).map((voice) => {
+                      const isSelected = voicePreference === voice.id;
+                      const voiceName = voice.name || voice.id;
+                      const voiceAccent = voice.accent || '';
+                      const voiceGender = voice.gender === 'MALE' ? t_('Masculin', 'Male') : t_('Féminin', 'Female');
+                      
+                      return (
                         <div
+                          key={voice.id}
                           onClick={() => setVoicePreference(voice.id)}
-                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                          className={`flex items-center gap-4 p-4 rounded-lg cursor-pointer transition-all border-2 ${
                             isSelected
-                              ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 shadow-md'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
+                              ? 'bg-white/20 dark:bg-white/10 border-[#2ECC71]'
+                              : 'bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border-transparent'
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{accentFlags[voice.accent]}</span>
-                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                                {voice.accent}
-                              </span>
-                            </div>
-                            {isSelected && (
-                              <CheckCircle className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                            )}
-                          </div>
-                          <h4 className="font-semibold text-gray-900 dark:text-white text-sm mb-1">
-                            {voice.name}
-                          </h4>
-                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                            {voice.description}
-                          </p>
-                          <Badge variant={voice.gender === 'MALE' ? 'default' : 'secondary'} className="text-xs">
-                            {voice.gender === 'MALE' ? t_("Masculin", "Male") : t_("Féminin", "Female")}
-                          </Badge>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Book Button */}
-            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
-              <Button 
-                onClick={handleBookSimulation}
-                size="lg"
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                {t_("Réserver la Simulation", "Book Simulation")}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Booking History - Modern Redesign */}
-        <Card className="shadow-lg border-2 border-purple-100 dark:border-purple-900/50">
-          <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-b border-purple-200 dark:border-purple-800">
-            <CardTitle className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Clock className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              {t_("Historique des Réservations", "Booking History")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="w-8 h-8 border-2 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-sm text-gray-600 dark:text-gray-400">{t_("Chargement...", "Loading...")}</p>
-              </div>
-            ) : bookings.length === 0 ? (
-              <div className="px-6 py-12 text-center">
-                <CalendarIcon className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  {t_("Aucune réservation", "No bookings yet")}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {t_("Réservez votre première simulation pour commencer", "Book your first simulation to get started")}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {bookings.map((booking) => {
-                  const scheduledDate = booking.scheduledDate ? new Date(booking.scheduledDate) : null;
-                  const isValidDate = scheduledDate && !isNaN(scheduledDate.getTime());
-                  
-                  // Get voice ID from questionsData if available, otherwise try voicePreference
-                  let voiceId: string | undefined;
-                  if (booking.questionsData && typeof booking.questionsData === 'object') {
-                    voiceId = (booking.questionsData as any).voiceId;
-                  }
-                  if (!voiceId && booking.voicePreference && typeof booking.voicePreference === 'string' && booking.voicePreference.includes('_')) {
-                    voiceId = booking.voicePreference;
-                  }
-                  
-                  const selectedVoice = voiceId ? availableVoices.find(v => v.id === voiceId) : undefined;
-                  
-                  return (
-                    <motion.div
-                      key={booking.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 transition-all bg-white dark:bg-gray-800/50"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4 flex-1">
-                          <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center flex-shrink-0">
-                            <Mic className="w-6 h-6 text-white" />
-                          </div>
+                          <div 
+                            className="size-12 rounded-full bg-cover bg-center"
+                            style={{
+                              backgroundImage: voice.avatar ? `url(${voice.avatar})` : 'none',
+                              backgroundColor: voice.avatar ? 'transparent' : '#2ECC71'
+                            }}
+                          />
                           <div className="flex-1">
-                            {isValidDate ? (
-                              <>
-                                <div className="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                                  {scheduledDate.toLocaleDateString('fr-FR', { 
-                                    weekday: 'long', 
-                                    year: 'numeric', 
-                                    month: 'long', 
-                                    day: 'numeric' 
-                                  })}
-                                </div>
-                                <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                  {t_("à", "at")} {scheduledDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              </>
-                            ) : (
-                              <div className="text-base font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                                {t_("Date non disponible", "Date not available")}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-3 flex-wrap">
-                              {selectedVoice ? (
-                                <Badge variant="secondary" className="text-xs">
-                                  {selectedVoice.name} • {selectedVoice.accent}
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="text-xs">
-                                  {t_("Voix sélectionnée", "Selected voice")}
-                                </Badge>
-                              )}
-                              <Badge variant="outline" className="text-xs">
-                                {booking.duration ? Math.floor(booking.duration / 60) : 5} {t_("minutes", "minutes")}
-                              </Badge>
-                            </div>
+                            <p className="font-bold text-black dark:text-white">{voiceName}</p>
+                            <p className="text-sm text-muted-foreground">{voiceAccent} ({voiceGender})</p>
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                            {getStatusIcon(booking.status)}
-                            <span className="ml-2">{t_(booking.status, booking.status)}</span>
-                          </span>
-                          {booking.status === 'SCHEDULED' && (
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRescheduleBooking(booking)}
-                                className="hover:border-blue-300"
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                {t_("Reporter", "Reschedule")}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleCancelBooking(booking)}
-                                className="text-red-600 hover:text-red-700 hover:border-red-300"
-                              >
-                                <Trash2 className="w-4 h-4 mr-1" />
-                                {t_("Annuler", "Cancel")}
-                              </Button>
+                          <button className="flex items-center justify-center size-10 rounded-full bg-[#2ECC71] text-black hover:bg-[#27c066] transition-colors">
+                            <Volume2 className="w-5 h-5" />
+                          </button>
+                          {isSelected && (
+                            <div className="size-6 flex items-center justify-center rounded-full bg-[#2ECC71] text-black">
+                              <CheckCircle className="w-4 h-4" />
                             </div>
                           )}
                         </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                      );
+                    })
+                  )}
+                </div>
+
+                <Button 
+                  className="mt-auto w-full rounded-full h-12 px-6 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-base"
+                  onClick={handleBookSimulation}
+                  disabled={!selectedDate || !selectedTime}
+                >
+                  {t_("Confirmer la Réservation", "Confirm Booking")}
+                </Button>
               </div>
+            </div>
+          )}
+
+          {/* Automatic Booking - Simplified */}
+          {bookingType === 'AUTO' && (
+            <div className="p-6 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 shadow-xl">
+              <div className="flex flex-col gap-4">
+                <h3 className="text-lg font-bold text-black dark:text-white">
+                  {t_("Sélectionner votre Intervieweur", "Select Your Interviewer")}
+                </h3>
+                
+                {loadingVoices ? (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 border-2 border-[#2ECC71] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">{t_("Chargement des voix...", "Loading voices...")}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {availableVoices.slice(0, 2).map((voice) => {
+                      const isSelected = voicePreference === voice.id;
+                      const voiceName = voice.name || voice.id;
+                      const voiceAccent = voice.accent || '';
+                      const voiceGender = voice.gender === 'MALE' ? t_('Masculin', 'Male') : t_('Féminin', 'Female');
+                      
+                      return (
+                        <div
+                          key={voice.id}
+                          onClick={() => setVoicePreference(voice.id)}
+                          className={`flex items-center gap-4 p-4 rounded-lg cursor-pointer transition-all border-2 ${
+                            isSelected
+                              ? 'bg-white/20 dark:bg-white/10 border-[#2ECC71]'
+                              : 'bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border-transparent'
+                          }`}
+                        >
+                          <div 
+                            className="size-12 rounded-full bg-cover bg-center"
+                            style={{
+                              backgroundImage: voice.avatar ? `url(${voice.avatar})` : 'none',
+                              backgroundColor: voice.avatar ? 'transparent' : '#2ECC71'
+                            }}
+                          />
+                          <div className="flex-1">
+                            <p className="font-bold text-black dark:text-white">{voiceName}</p>
+                            <p className="text-sm text-muted-foreground">{voiceAccent} ({voiceGender})</p>
+                          </div>
+                          <button className="flex items-center justify-center size-10 rounded-full bg-[#2ECC71] text-black hover:bg-[#27c066] transition-colors">
+                            <Volume2 className="w-5 h-5" />
+                          </button>
+                          {isSelected && (
+                            <div className="size-6 flex items-center justify-center rounded-full bg-[#2ECC71] text-black">
+                              <CheckCircle className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Button 
+                  className="w-full rounded-full h-12 px-6 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-base"
+                  onClick={handleBookSimulation}
+                >
+                  {t_("Confirmer la Réservation", "Confirm Booking")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Booking History Section */}
+        <section className="flex flex-col gap-6 px-4">
+          <h2 className="text-2xl font-bold leading-tight text-black dark:text-white">
+            {t_("Historique des Réservations", "Booking History")}
+          </h2>
+
+          {/* Search and Filters */}
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative w-full md:flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <input 
+                className="w-full h-12 pl-10 pr-4 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm text-black dark:text-white placeholder:text-muted-foreground border border-white/20 focus:border-[#2ECC71] focus:ring-0 text-sm"
+                placeholder={t_("Rechercher par date, voix, statut...", "Search by date, voice, status...")}
+                type="text"
+              />
+            </div>
+            <div className="flex w-full md:w-auto items-center gap-4">
+              <Select defaultValue="all-statuses">
+                <SelectTrigger className="w-full md:w-auto h-12 px-4 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 focus:border-[#2ECC71] text-sm">
+                  <SelectValue>{t_("Tous les Statuts", "All Statuses")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-statuses">{t_("Tous les Statuts", "All Statuses")}</SelectItem>
+                  <SelectItem value="scheduled">{t_("Programmée", "Scheduled")}</SelectItem>
+                  <SelectItem value="completed">{t_("Terminée", "Completed")}</SelectItem>
+                  <SelectItem value="cancelled">{t_("Annulée", "Cancelled")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select defaultValue="all-voices">
+                <SelectTrigger className="w-full md:w-auto h-12 px-4 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm border border-white/20 focus:border-[#2ECC71] text-sm">
+                  <SelectValue>{t_("Toutes les Voix", "All Voices")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-voices">{t_("Toutes les Voix", "All Voices")}</SelectItem>
+                  <SelectItem value="male">{t_("Masculin", "Male")}</SelectItem>
+                  <SelectItem value="female">{t_("Féminin", "Female")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Booking History Cards */}
+          <div className="flex flex-col gap-4">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="w-8 h-8 border-2 border-[#2ECC71] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">{t_("Chargement...", "Loading...")}</p>
+              </div>
+            ) : bookings.length === 0 ? (
+              <div className="text-center py-12 p-4 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20">
+                <p className="text-muted-foreground">{t_("Aucune réservation pour le moment", "No bookings yet")}</p>
+              </div>
+            ) : (
+              bookings.slice(0, 5).map((booking) => {
+                const scheduledDate = booking.scheduledDate ? new Date(booking.scheduledDate) : null;
+                const isValidDate = scheduledDate && !isNaN(scheduledDate.getTime());
+                const selectedVoice = availableVoices.find(v => v.id === booking.voicePreference || booking.questionsData?.voiceId === v.id);
+                
+                return (
+                  <div
+                    key={booking.id}
+                    className={`grid grid-cols-2 md:grid-cols-6 items-center gap-4 p-4 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 ${
+                      booking.status === 'COMPLETED' ? 'opacity-70' : ''
+                    }`}
+                  >
+                    <div className="md:col-span-2">
+                      {isValidDate && scheduledDate ? (
+                        <>
+                          <p className="font-bold text-black dark:text-white">
+                            {scheduledDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { 
+                              day: 'numeric', 
+                              month: 'short', 
+                              year: 'numeric' 
+                            })}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {scheduledDate.toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })} - {new Date(scheduledDate.getTime() + 30 * 60000).toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-US', { 
+                              hour: '2-digit', 
+                              minute: '2-digit' 
+                            })}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-muted-foreground">{t_("Date non disponible", "Date not available")}</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">{t_("Voix", "Voice")}</p>
+                      <p className="font-medium text-black dark:text-white">
+                        {selectedVoice?.name || t_("Non spécifiée", "Not specified")}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">{t_("Statut", "Status")}</p>
+                      <div className="flex items-center gap-2">
+                        {booking.status === 'SCHEDULED' && (
+                          <>
+                            <div className="relative flex h-2 w-2">
+                              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-[#2ECC71] opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#2ECC71]"></span>
+                            </div>
+                            <p className="text-[#2ECC71] font-medium text-sm">{t_("Programmée", "Scheduled")}</p>
+                          </>
+                        )}
+                        {booking.status === 'COMPLETED' && (
+                          <>
+                            <div className="size-2 rounded-full bg-[#2ECC71]"></div>
+                            <p className="text-[#2ECC71] font-medium text-sm">{t_("Terminée", "Completed")}</p>
+                          </>
+                        )}
+                        {booking.status === 'CANCELLED' && (
+                          <p className="text-red-500 font-medium text-sm">{t_("Annulée", "Cancelled")}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="col-span-2 flex justify-end gap-2">
+                      {booking.status === 'SCHEDULED' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full h-10 px-4 bg-white/10 dark:bg-white/5 border border-white/20 text-black dark:text-white text-sm font-medium"
+                            onClick={() => handleRescheduleBooking(booking)}
+                          >
+                            {t_("Reporter", "Reschedule")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full h-10 px-4 border border-white/20 text-black dark:text-white text-sm font-medium"
+                            onClick={() => handleCancelBooking(booking)}
+                          >
+                            {t_("Annuler", "Cancel")}
+                          </Button>
+                        </>
+                      )}
+                      {booking.status === 'COMPLETED' && (
+                        <Button
+                          size="sm"
+                          className="rounded-full h-10 px-4 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-sm"
+                          onClick={() => router.push(`/simulation-vocale/results`)}
+                        >
+                          {t_("Voir les Commentaires", "View Feedback")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </main>
 
       {/* Booking Confirmation Modal */}

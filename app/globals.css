@@ -1,8 +1,8 @@
+@import "tw-animate-css";
+@import "../styles/animations.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import "tw-animate-css";
-@import "../styles/animations.css";
 
 /* Custom scrollbar styles for WhatsApp-like messaging */
 .scrollbar-thin {

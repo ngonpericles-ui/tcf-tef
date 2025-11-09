@@ -52,7 +52,10 @@ import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 import { useTheme } from '@/components/theme-provider';
 import Link from 'next/link';
-import { Globe, Sun, Moon } from 'lucide-react';
+import { Bell } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getComprehensiveProfilePictureUrl } from '@/lib/utils/profilePicture';
+import GlobeAnimation from '@/components/GlobeAnimation';
 
 interface VoiceSimulation {
   id: string;
@@ -72,20 +75,25 @@ interface VoiceSimulation {
 
 function SimulationPageContent() {
   const { userProfile } = useSharedData();
-  const { t, lang, setLang } = useLanguage();
-  const { theme, setTheme } = useTheme();
+  const { t, lang } = useLanguage();
   const router = useRouter();
   
   // Helper function for translations
   const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
   
-  const cycleTheme = () => {
-    if (theme === "dark") {
-      setTheme("light");
-    } else {
-      setTheme("dark");
-    }
-  };
+  // Get profile picture URL
+  const profileImageUrl = userProfile?.avatar
+    ? getComprehensiveProfilePictureUrl(userProfile.email || '', userProfile.avatar)
+    : userProfile?.email
+      ? getComprehensiveProfilePictureUrl(userProfile.email, '')
+      : '';
+  
+  // Get user initials from name or email
+  const userInitials = userProfile?.name
+    ? userProfile.name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2) || userProfile.email?.charAt(0).toUpperCase() || 'U'
+    : userProfile?.email
+      ? userProfile.email.charAt(0).toUpperCase()
+      : 'U';
 
   const [simulations, setSimulations] = useState<VoiceSimulation[]>([]);
   const [monthlyCount, setMonthlyCount] = useState(0);
@@ -240,59 +248,65 @@ function SimulationPageContent() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
-      {/* Header - Transparent Blurry Top Container */}
-      <header className="absolute top-0 left-0 right-0 z-10 px-6 sm:px-8 md:px-12 lg:px-16 py-0.5 sm:py-0.5 md:py-1 bg-background/95 backdrop-blur-sm border-b border-gray-200/50 dark:border-gray-700/50">
-        <div className="container mx-auto max-w-screen-2xl flex items-center justify-between">
-          {/* Left: Logo and Title */}
-          <div className="flex items-center gap-3">
-            <Mic className="w-6 h-6 text-[#2ECC71]" />
-            <span className="text-lg md:text-xl font-bold text-black dark:text-white">
-              {t_("Pratique d'Entretien IA", "AI Interview Practice")}
-            </span>
-          </div>
-          
-          {/* Center: Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 md:gap-10 lg:gap-12 text-base md:text-lg font-bold text-foreground">
-            <Link href="/simulation-vocale/booking" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-              {t_("Nouvelle Simulation", "New Simulation")}
-            </Link>
-            <Link href="/simulation-vocale/usage" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-              {t_("Historique", "History")}
-            </Link>
-            <Link href="/simulation-vocale/results" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-              {t_("Feedback", "Feedback")}
-            </Link>
-            <Link href="/settings" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-              {t_("Paramètres", "Settings")}
-            </Link>
-          </nav>
-          
-          {/* Right: Controls */}
-          <div className="flex items-center gap-2">
-            <button
-              aria-label="Language"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs md:text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
-              onClick={() => setLang?.(lang === "fr" ? "en" : "fr")}
-            >
-              <Globe className="h-4 w-4" /> {lang.toUpperCase()}
-            </button>
-            <button
-              aria-label={`Switch theme (current: ${theme})`}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs md:text-sm border border-gray-200 dark:border-gray-700 hover:bg-accent transition-colors bg-background/80 backdrop-blur-sm"
-              onClick={cycleTheme}
-            >
-              {theme === "light" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
-            </button>
+      {/* Rounded Dark Container with Liquid Glass Effect - Header */}
+      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 w-[95%] max-w-6xl">
+        <div className="bg-slate-900/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Left: Sound Wave Icon and Title */}
+            <div className="flex items-center gap-3">
+              {/* Sound Wave Icon - Green */}
+              <div className="flex items-end gap-1 h-6">
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '12px', animation: 'pulse 1s ease-in-out infinite' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '18px', animation: 'pulse 1s ease-in-out infinite 0.2s' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '24px', animation: 'pulse 1s ease-in-out infinite 0.4s' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '18px', animation: 'pulse 1s ease-in-out infinite 0.6s' }} />
+                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '12px', animation: 'pulse 1s ease-in-out infinite 0.8s' }} />
+              </div>
+              <span className="text-lg md:text-xl text-white font-normal">
+                {t_("Pratique d'Entretien IA", "AI Interview Practice")}
+              </span>
+            </div>
+            
+            {/* Center: Navigation Links */}
+            <nav className="hidden md:flex items-center gap-6 md:gap-8 text-base md:text-lg text-white font-normal">
+              <Link href="/simulation-vocale/booking" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Nouvelle Simulation", "New Simulation")}
+              </Link>
+              <Link href="/simulation-vocale/usage" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Historique", "History")}
+              </Link>
+              <Link href="/simulation-vocale/results" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Feedback", "Feedback")}
+              </Link>
+              <Link href="/settings" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
+                {t_("Paramètres", "Settings")}
+              </Link>
+            </nav>
+            
+            {/* Right: Bell and Profile Picture */}
+            <div className="flex items-center gap-4">
+              <button
+                aria-label="Notifications"
+                className="relative p-2 text-white hover:text-[#2ECC71] transition-colors"
+              >
+                <Bell className="w-5 h-5" />
+              </button>
+              <Avatar className="w-10 h-10 border-2 border-[#2ECC71]/50">
+                <AvatarImage 
+                  src={profileImageUrl}
+                  alt={userProfile?.name || 'User'}
+                />
+                <AvatarFallback className="bg-[#2ECC71] text-white font-semibold">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Hero Section - White Background */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-black pt-24">
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-black pt-32">
         {/* Floating Background Elements */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-[#2ECC71]/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-[#2ECC71]/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
@@ -306,19 +320,24 @@ function SimulationPageContent() {
               transition={{ duration: 0.6 }}
               className="text-center lg:text-left space-y-6"
             >
-              {/* Main Title - Green */}
-              <h1 
-                className="text-5xl md:text-6xl xl:text-7xl font-bold leading-[1.1] tracking-tight"
-                style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.02em' }}
-              >
-                <span className="text-[#2ECC71]">
-                  {t_("Pratiquez votre", "Practice Your")}
-                </span>
-                <br />
-                <span className="text-[#2ECC71]">
-                  {t_("Entretien en Français", "French Interview")}
-                </span>
-              </h1>
+              {/* Main Title - Green with Globe Animation */}
+              <div className="flex items-center gap-4 justify-center lg:justify-start">
+                <h1 
+                  className="text-5xl md:text-6xl xl:text-7xl font-bold leading-[1.1] tracking-tight"
+                  style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.02em' }}
+                >
+                  <span className="text-[#2ECC71]">
+                    {t_("Pratiquez votre", "Practice Your")}
+                  </span>
+                  <br />
+                  <span className="text-[#2ECC71]">
+                    {t_("Entretien en Français", "French Interview")}
+                  </span>
+                </h1>
+                <div className="hidden lg:block w-20 h-20">
+                  <GlobeAnimation className="w-full h-full" />
+                </div>
+              </div>
 
               {/* Description - White/Black based on theme */}
               <p 
@@ -457,12 +476,13 @@ function SimulationPageContent() {
           </div>
         )}
 
-        {/* Section Header */}
+        {/* Section Header - Green & Black */}
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {t_("Vos Statistiques", "Your Statistics")}
+          <h2 className="text-2xl md:text-3xl font-bold mb-2">
+            <span className="text-[#2ECC71]">{t_("Vos", "Your")}</span>{' '}
+            <span className="text-black dark:text-white">{t_("Statistiques", "Statistics")}</span>
           </h2>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground">
             {t_("Un aperçu de votre activité et de vos performances", "An overview of your activity and performance")}
           </p>
         </div>
@@ -475,29 +495,29 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
                       {t_("Utilisation mensuelle", "Monthly Usage")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+                    <p className="text-3xl font-bold text-[#2ECC71]">
                       {monthlyCount}/2
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {t_("simulations utilisées", "simulations used")}
                     </p>
                 </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <BarChart3 className="w-7 h-7 text-white" />
                 </div>
               </div>
               <div className="mt-4">
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
                     <motion.div 
-                      className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2.5 rounded-full"
+                      className="bg-[#2ECC71] h-2.5 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min((monthlyCount / 2) * 100, 100)}%` }}
                       transition={{ duration: 0.8, delay: 0.2 }}
@@ -521,22 +541,22 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-green-100 dark:border-green-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
                       {t_("Terminées", "Completed")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
+                    <p className="text-3xl font-bold text-[#2ECC71]">
                       {simulations.filter(s => s.status === 'COMPLETED').length}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {t_("simulations terminées", "simulations completed")}
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <CheckCircle className="w-7 h-7 text-white" />
                 </div>
               </div>
@@ -550,22 +570,22 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.2 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-yellow-100 dark:border-yellow-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
                       {t_("Programmées", "Scheduled")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-yellow-600 to-amber-600 dark:from-yellow-400 dark:to-amber-400 bg-clip-text text-transparent">
+                    <p className="text-3xl font-bold text-[#2ECC71]">
                     {simulations.filter(s => s.status === 'SCHEDULED').length}
                   </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {t_("en attente", "pending")}
                     </p>
                 </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <Clock className="w-7 h-7 text-white" />
                 </div>
               </div>
@@ -579,28 +599,28 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.3 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-purple-100 dark:border-purple-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
                       {t_("Score moyen", "Average Score")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
+                    <p className="text-3xl font-bold text-[#2ECC71]">
                     {simulations.filter(s => s.overallScore).length > 0 
                         ? `${Math.round(simulations.filter(s => s.overallScore).reduce((acc, s) => acc + (s.overallScore || 0), 0) / simulations.filter(s => s.overallScore).length)}%`
                       : '--'
                       }
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {simulations.filter(s => s.overallScore).length > 0 
                         ? t_("basé sur vos résultats", "based on your results")
                         : t_("aucun score disponible", "no scores available")
                       }
                   </p>
                 </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <Trophy className="w-7 h-7 text-white" />
                 </div>
               </div>
@@ -629,25 +649,25 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/usage')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <BarChart3 className="w-7 h-7 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Aperçu de l'utilisation", "Usage Overview")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   {t_("Surveillez votre utilisation mensuelle des simulations, suivez vos progrès et consultez des analyses détaillées", 
                       "Monitor your monthly simulation usage, track your progress, and view detailed analytics")}
                 </p>
-                <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Voir les détails", "View Details")}
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -663,25 +683,25 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-green-100 dark:border-green-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/voice')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <Settings className="w-7 h-7 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-green-600 dark:group-hover:text-green-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Paramètres vocaux", "Voice Settings")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   {t_("Choisissez votre voix préférée, accent et prévisualisez différentes options pour vos simulations", 
                       "Choose your preferred voice, accent, and preview different options for your simulations")}
                 </p>
-                <div className="flex items-center text-sm text-green-600 dark:text-green-400 font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Configurer", "Configure")}
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -697,25 +717,25 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-yellow-100 dark:border-yellow-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/booking')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/10 to-amber-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-yellow-500 to-amber-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <CalendarIcon className="w-7 h-7 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-yellow-600 dark:group-hover:text-yellow-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
+                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Réserver une simulation", "Book a Simulation")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   {t_("Planifiez votre prochaine session de simulation vocale avec des options de réservation flexibles et des créneaux horaires", 
                       "Schedule your next voice simulation session with flexible booking options and time slots")}
                 </p>
-                <div className="flex items-center text-sm text-yellow-600 dark:text-yellow-400 font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Réserver maintenant", "Book Now")}
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -731,25 +751,25 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-purple-100 dark:border-purple-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/results')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
                     <Trophy className="w-7 h-7 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-purple-600 dark:group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Résultats et performance", "Results & Performance")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
+                <p className="text-sm text-muted-foreground mb-4 flex-grow">
                   {t_("Analysez vos résultats de simulation, suivez les tendances d'amélioration et consultez des métriques de performance détaillées", 
                       "Analyze your simulation results, track improvement trends, and view detailed performance metrics")}
                 </p>
-                <div className="flex items-center text-sm text-purple-600 dark:text-purple-400 font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Voir les résultats", "View Results")}
                   <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -759,35 +779,19 @@ function SimulationPageContent() {
         </div>
 
 
-        {/* Recent Activity - Enhanced */}
-        <Card className="dark:bg-gray-800 dark:border-gray-700 shadow-lg">
-          <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center text-gray-900 dark:text-gray-100">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center mr-3">
-                  <History className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold">{t_("Activité récente", "Recent Activity")}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                    {t_("Vos dernières simulations", "Your latest simulations")}
-                  </p>
-                </div>
-              </div>
-              {simulations.length > 5 && (
-                <Button 
-                  variant="ghost"
-                  size="sm"
-                  className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
-                  onClick={() => router.push('/simulation-vocale/usage')}
-                >
-                  {t_("Voir tout", "View All")}
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
+        {/* Recent Activity - Blue Transparent Liquid Glass */}
+        <div className="mb-6">
+          <h2 className="text-2xl md:text-3xl font-bold mb-2">
+            <span className="text-[#2ECC71]">{t_("Activité", "Activity")}</span>{' '}
+            <span className="text-black dark:text-white">{t_("récente", "Recent")}</span>
+          </h2>
+          <p className="text-muted-foreground mb-4">
+            {t_("Vos dernières simulations", "Your latest simulations")}
+          </p>
+        </div>
+        
+        <div className="bg-blue-500/10 dark:bg-blue-500/5 backdrop-blur-xl rounded-2xl border border-blue-200/30 dark:border-blue-700/30 shadow-xl p-6">
+          <div className="space-y-3">
             {simulations.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -801,7 +805,7 @@ function SimulationPageContent() {
                       "Start your journey by booking your first voice simulation")}
                 </p>
                 <Button 
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg"
+                  className="bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold shadow-lg"
                   onClick={() => router.push('/simulation-vocale/booking')}
                   size="lg"
                 >
@@ -856,19 +860,19 @@ function SimulationPageContent() {
                         key={simulation.id}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
-                        className="group relative overflow-hidden rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 bg-white dark:bg-gray-800/50 hover:shadow-lg transition-all duration-300"
+                        className="group relative overflow-hidden rounded-xl bg-blue-500/20 dark:bg-blue-500/10 backdrop-blur-sm border border-blue-200/40 dark:border-blue-700/40 hover:border-blue-300/60 dark:hover:border-blue-600/60 hover:shadow-lg transition-all duration-300"
                       >
                         <div className="p-5 flex items-center justify-between">
                           <div className="flex items-center space-x-4 flex-1">
                             {/* Icon */}
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 ${
                               simulation.status === 'COMPLETED' 
-                                ? 'bg-gradient-to-br from-green-500 to-emerald-500' 
+                                ? 'bg-[#2ECC71]' 
                                 : simulation.status === 'SCHEDULED'
-                                ? 'bg-gradient-to-br from-blue-500 to-cyan-500'
+                                ? 'bg-blue-500'
                                 : simulation.status === 'ACTIVE'
-                                ? 'bg-gradient-to-br from-yellow-500 to-amber-500'
-                                : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                                ? 'bg-yellow-500'
+                                : 'bg-gray-500'
                             }`}>
                               {simulation.status === 'COMPLETED' ? (
                                 <CheckCircle className="w-6 h-6 text-white" />
@@ -880,21 +884,21 @@ function SimulationPageContent() {
                             {/* Details */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                <div className="text-base font-semibold text-foreground">
                                   {formattedDate}
                         </div>
                                 {formattedTime && (
                                   <>
-                                    <span className="text-gray-400">•</span>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    <span className="text-muted-foreground">•</span>
+                        <div className="text-sm text-muted-foreground">
                                       {formattedTime}
                                     </div>
                                   </>
                                 )}
                               </div>
                               <div className="flex items-center gap-3 flex-wrap">
-                                <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                                  <Volume2 className="w-4 h-4" />
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                  <Volume2 className="w-4 h-4 text-[#2ECC71]" />
                                   <span>
                                     {simulation.voicePreference === 'MALE' 
                                       ? t_('Voix masculine', 'Male voice')
@@ -903,9 +907,9 @@ function SimulationPageContent() {
                                 </div>
                                 {simulation.duration && (
                                   <>
-                                    <span className="text-gray-400">•</span>
-                                    <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                                      <Clock className="w-4 h-4" />
+                                    <span className="text-muted-foreground">•</span>
+                                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                      <Clock className="w-4 h-4 text-[#2ECC71]" />
                                       <span>{Math.floor(simulation.duration / 60)} {t_('min', 'min')}</span>
                                     </div>
                                   </>
@@ -923,9 +927,9 @@ function SimulationPageContent() {
                               {statusLabel}
                       </span>
                       {simulation.overallScore && (
-                              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-200 dark:border-purple-800">
-                                <Trophy className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                                <span className="text-sm font-bold text-purple-700 dark:text-purple-300">
+                              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2ECC71]/10 border border-[#2ECC71]/30">
+                                <Trophy className="w-4 h-4 text-[#2ECC71]" />
+                                <span className="text-sm font-bold text-[#2ECC71]">
                             {simulation.overallScore}%
                           </span>
                               </div>
@@ -937,8 +941,8 @@ function SimulationPageContent() {
                   })}
             </div>
           )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </main>
     </div>
   );

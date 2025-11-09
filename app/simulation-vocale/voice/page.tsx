@@ -54,20 +54,46 @@ function VoicePageContent() {
   const [voicePreference, setVoicePreference] = useState<string>('TOUS'); // TOUS, MALE, FEMALE
   const [accentPreference, setAccentPreference] = useState<string>('TOUS'); // TOUS, FRANCE, QUEBEC, BELGIUM
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false for immediate UI render
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [loadingPreview, setLoadingPreview] = useState<Set<string>>(new Set());
+  const voicesCacheRef = useRef<{ data: VoiceOption[]; timestamp: number } | null>(null);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
   useEffect(() => {
+    // Load cached data immediately for instant UI
+    const cached = voicesCacheRef.current;
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      setAvailableVoices(cached.data);
+      applyFilter(cached.data, accentPreference, voicePreference);
+      setLoading(false);
+    } else {
+      // Show loading only if no cache
+      setLoading(true);
+    }
+    
+    // Fetch fresh data in background
     fetchAvailableVoices();
   }, []);
 
   const fetchAvailableVoices = async () => {
     try {
+      // Use AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      
       const response = await apiClient.get('/voice-simulation/voices');
+      clearTimeout(timeoutId);
+      
       if (response.success && response.data) {
-        const voices = response.data || [];
+        const voices = (Array.isArray(response.data) ? response.data : []) as VoiceOption[];
         setAvailableVoices(voices);
+        
+        // Cache the data
+        voicesCacheRef.current = {
+          data: voices,
+          timestamp: Date.now()
+        };
         
         // Load saved preference if exists
         const savedPreference = localStorage.getItem('voicePreference');
@@ -93,11 +119,19 @@ function VoicePageContent() {
         setAvailableVoices([]);
         setFilteredVoices([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching voices:', error);
-      toast.error(t_('Erreur lors du chargement des voix', 'Error loading voices'));
-      setAvailableVoices([]);
-      setFilteredVoices([]);
+      // Only show error if we don't have cached data
+      if (!voicesCacheRef.current) {
+        toast.error(t_('Erreur lors du chargement des voix', 'Error loading voices'));
+        setAvailableVoices([]);
+        setFilteredVoices([]);
+      } else {
+        // Use cached data if available
+        const cached = voicesCacheRef.current;
+        setAvailableVoices(cached.data);
+        applyFilter(cached.data, accentPreference, voicePreference);
+      }
     } finally {
       setLoading(false);
     }
@@ -176,7 +210,8 @@ function VoicePageContent() {
       const response = await apiClient.post('/voice-simulation/preview', { voiceId });
       
       if (response.success && response.data) {
-        const { audioBase64, previewText, useBrowserTTS, voiceId_11labs } = response.data;
+        const data = response.data as any;
+        const { audioBase64, previewText, useBrowserTTS, voiceId_11labs } = data;
         console.log('✅ Preview response:', {
           voiceId,
           voiceId_11labs,
@@ -399,13 +434,14 @@ function VoicePageContent() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
-      </div>
-    );
-  }
+  // Show skeleton loading instead of blocking spinner
+  const SkeletonCard = () => (
+    <div className="animate-pulse">
+      <div className="h-48 bg-gray-200 dark:bg-gray-700 rounded-lg mb-4"></div>
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
@@ -623,7 +659,13 @@ function VoicePageContent() {
             </div>
           </CardHeader>
           <CardContent className="p-6">
-            {filteredVoices.length === 0 ? (
+            {loading && filteredVoices.length === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            ) : filteredVoices.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Volume2 className="w-10 h-10 text-purple-600 dark:text-purple-400" />
