@@ -39,6 +39,8 @@ const nextConfig = {
     optimizeCss: false,
   },
   // Force Webpack instead of Turbopack to handle native modules properly
+  // Add empty turbopack config to silence the warning about webpack config
+  turbopack: {},
   webpack: (config) => {
     // Any webpack config forces Next.js to use Webpack instead of Turbopack
     config.resolve.fallback = {
