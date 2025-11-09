@@ -39,24 +39,67 @@ export default function GoogleAuthButton({
       // Get ID token
       const idToken = await user.getIdToken()
       
+      // Extract user info from Firebase user
+      const email = user.email || ''
+      const displayName = user.displayName || ''
+      const nameParts = displayName.split(' ').filter(part => part.trim().length > 0)
+      // If no display name, use email prefix as fallback
+      const firstName = nameParts[0] || email.split('@')[0] || 'User'
+      const lastName = nameParts.slice(1).join(' ') || ''
+      const profileImage = user.photoURL || undefined
+      
+      // Get API URL - check both client and server side
+      const apiUrl = typeof window !== 'undefined'
+        ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+      
+      console.log('🔍 Google Auth - API URL:', apiUrl)
+      console.log('🔍 Google Auth - Sending request to:', `${apiUrl}/auth/social/google`)
+      
       // Send to backend for verification and user creation
-      const response = await fetch(`${(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) || 'http://localhost:3001/api'}/auth/social/google`, {
+      const response = await fetch(`${apiUrl}/auth/social/google`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ idToken })
+        body: JSON.stringify({ 
+          idToken,
+          email,
+          firstName,
+          lastName,
+          profileImage
+        })
       })
       
-      const data = await response.json()
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Google Auth - Backend error:', response.status, errorText)
+        throw new Error(`Backend error: ${response.status} - ${errorText}`)
+      }
       
-      if (data.success) {
+      const data = await response.json()
+      console.log('✅ Google Auth - Backend response:', data)
+      
+      if (data.success && data.data) {
+        // Store tokens if provided
+        if (data.data.tokens) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('accessToken', data.data.tokens.accessToken)
+            localStorage.setItem('refreshToken', data.data.tokens.refreshToken)
+            if (data.data.user) {
+              localStorage.setItem('user', JSON.stringify(data.data.user))
+            }
+          }
+        }
+        
         // Use the existing login function to set the user state
         await login(user.email || '', '') // Empty password for social auth
         
         onSuccess?.()
       } else {
-        throw new Error(data.error || 'Google authentication failed')
+        const errorMsg = data.error?.message || data.message || data.error || 'Google authentication failed'
+        console.error('❌ Google Auth - Failed:', errorMsg)
+        throw new Error(errorMsg)
       }
     } catch (error: any) {
       console.error('Google sign-in error:', error)
