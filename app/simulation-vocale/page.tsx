@@ -49,6 +49,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api-client';
 
 interface VoiceSimulation {
   id: string;
@@ -102,18 +103,13 @@ function SimulationPageContent() {
       setHasCheckedAccess(true);
 
       // STEP 1: Check free attempts FIRST (all users get 5 free simulations)
-      const freeAttemptsResponse = await fetch('http://localhost:3001/api/simulations/free-attempts/count', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
-        }
-      });
+      const freeAttemptsResponse = await apiClient.get('/simulations/free-attempts/count');
       
-      if (freeAttemptsResponse.ok) {
-        const freeAttemptsData = await freeAttemptsResponse.json();
-        
-        if (freeAttemptsData.success && freeAttemptsData.data.remainingFreeAttempts > 0) {
+      if (freeAttemptsResponse.success && freeAttemptsResponse.data) {
+        const freeAttemptsData = freeAttemptsResponse.data as any;
+        if (freeAttemptsData.remainingFreeAttempts > 0) {
           // User has free attempts - ALLOW ACCESS
-          console.log('✅ Access granted: User has free attempts remaining', freeAttemptsData.data.remainingFreeAttempts);
+          console.log('✅ Access granted: User has free attempts remaining', freeAttemptsData.remainingFreeAttempts);
           setSubscriptionTier('FREE_WITH_ATTEMPTS');
           setAccessGranted(true);
           setLoading(false);
@@ -122,26 +118,19 @@ function SimulationPageContent() {
       }
       
       // STEP 2: If no free attempts, check REAL subscription from API (not userProfile)
-      const subscriptionResponse = await fetch('http://localhost:3001/api/subscriptions/active', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
-        }
-      });
+      const subscriptionResponse = await apiClient.get('/subscriptions/active');
       
-      if (subscriptionResponse.ok) {
-        const subscriptionData = await subscriptionResponse.json();
+      if (subscriptionResponse.success && subscriptionResponse.data) {
+        const subscriptionData = subscriptionResponse.data as any;
+        const tier = subscriptionData.subscription?.tier;
+        setSubscriptionTier(tier);
         
-        if (subscriptionData.success && subscriptionData.data?.subscription) {
-          const tier = subscriptionData.data.subscription.tier;
-          setSubscriptionTier(tier);
-          
-          // Voice simulations require PREMIUM or PRO subscription
-          if (tier === 'PREMIUM' || tier === 'PRO') {
-            console.log('✅ Access granted: User has valid subscription', tier);
-            setAccessGranted(true);
-            setLoading(false);
-            return;
-          }
+        // Voice simulations require PREMIUM or PRO subscription
+        if (tier === 'PREMIUM' || tier === 'PRO') {
+          console.log('✅ Access granted: User has valid subscription', tier);
+          setAccessGranted(true);
+          setLoading(false);
+          return;
         }
       }
       
@@ -173,44 +162,19 @@ function SimulationPageContent() {
         return;
       }
       
-      const response = await fetch('/api/voice-simulation/history', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get('/voice-simulation/history');
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.success && response.data) {
+        const simulationsData = Array.isArray(response.data) ? response.data : [];
         console.log('✅ Simulations fetched:', {
-          count: data.data?.length || 0,
-          scheduled: (data.data || []).filter((s: VoiceSimulation) => s.status === 'SCHEDULED').length,
-          completed: (data.data || []).filter((s: VoiceSimulation) => s.status === 'COMPLETED').length
+          count: simulationsData.length || 0,
+          scheduled: simulationsData.filter((s: VoiceSimulation) => s.status === 'SCHEDULED').length,
+          completed: simulationsData.filter((s: VoiceSimulation) => s.status === 'COMPLETED').length
         });
-        setSimulations(data.data || []);
+        setSimulations(simulationsData);
       } else {
-        const contentType = response.headers.get('content-type');
-        let errorData: any = {};
-        
-        try {
-          if (contentType && contentType.includes('application/json')) {
-            errorData = await response.json();
-          } else {
-            const text = await response.text();
-            console.error('❌ Non-JSON error response:', text.substring(0, 200));
-            errorData = { message: text.substring(0, 100) || 'Backend error' };
-          }
-        } catch (parseError) {
-          console.error('❌ Error parsing error response:', parseError);
-          errorData = { message: `HTTP ${response.status}: ${response.statusText}` };
-        }
-        
-        console.error('❌ Error loading simulations:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData
-        });
-        
-        const errorMessage = errorData?.message || errorData?.error?.message || errorData?.error || t_('Erreur lors du chargement des simulations', 'Error loading simulations');
+        console.error('❌ Error loading simulations:', response.error);
+        const errorMessage = response.error?.message || t_('Erreur lors du chargement des simulations', 'Error loading simulations');
         toast.error(errorMessage);
       }
     } catch (error: any) {
@@ -223,15 +187,11 @@ function SimulationPageContent() {
 
   const fetchMonthlyCount = async () => {
     try {
-      const response = await fetch('/api/voice-simulation/monthly-count', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await apiClient.get('/voice-simulation/monthly-count');
 
-      if (response.ok) {
-        const data = await response.json();
-        setMonthlyCount(data.count || 0);
+      if (response.success && response.data) {
+        const monthlyData = response.data as any;
+        setMonthlyCount(monthlyData.monthlyCount || 0);
       }
     } catch (error) {
       console.error('Error fetching monthly count:', error);

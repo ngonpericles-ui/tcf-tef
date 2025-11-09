@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 
 interface BookingSlot {
   id: string;
@@ -126,19 +127,15 @@ function BookingPageContent() {
       
       // Si pas dans localStorage, vérifier backend
       try {
-        const response = await fetch('/api/users/preferences/voice', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+        const response = await apiClient.get('/users/preferences/voice');
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data?.voiceId) {
-            setVoicePreference(data.data.voiceId);
+        if (response.success && response.data) {
+          const voiceData = response.data as any;
+          if (voiceData.voiceId) {
+            setVoicePreference(voiceData.voiceId);
             // Sauvegarder aussi dans localStorage pour rapidité
-            localStorage.setItem('voicePreference', JSON.stringify(data.data));
-            console.log('✅ Voix préférée chargée depuis backend:', data.data.voiceId);
+            localStorage.setItem('voicePreference', JSON.stringify(voiceData));
+            console.log('✅ Voix préférée chargée depuis backend:', voiceData.voiceId);
           }
         }
       } catch (backendError) {
@@ -152,14 +149,10 @@ function BookingPageContent() {
   const fetchAvailableVoices = async () => {
     try {
       setLoadingVoices(true);
-      const response = await fetch('/api/voice-simulation/voices', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableVoices(data.data || []);
+      const response = await apiClient.get('/voice-simulation/voices');
+      if (response.success && response.data) {
+        const voicesData = Array.isArray(response.data) ? response.data : [];
+        setAvailableVoices(voicesData);
       }
     } catch (error) {
       console.error('Error fetching voices:', error);
@@ -171,14 +164,10 @@ function BookingPageContent() {
   const fetchTopics = async () => {
     try {
       setLoadingTopics(true);
-      const response = await fetch('/api/voice-simulation/question-bank/sujets', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTopics(data.data?.sujets || []);
+      const response = await apiClient.get('/voice-simulation/question-bank/sujets');
+      if (response.success && response.data) {
+        const topicsData = response.data as any;
+        setTopics(topicsData?.sujets || []);
       }
     } catch (error) {
       console.error('Error fetching topics:', error);
@@ -197,22 +186,18 @@ function BookingPageContent() {
         return;
       }
 
-      const response = await fetch('/api/voice-simulation/history', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get('/voice-simulation/history');
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.success && response.data) {
+        const bookingsData = Array.isArray(response.data) ? response.data : [];
         console.log('📋 Fetched bookings:', {
-          total: data.data?.length || 0,
-          bookings: data.data,
-          rawBookings: JSON.stringify(data.data, null, 2)
+          total: bookingsData.length || 0,
+          bookings: bookingsData,
+          rawBookings: JSON.stringify(bookingsData, null, 2)
         });
         
         // Filter out bookings with invalid dates (mock data)
-        const validBookings = (data.data || []).filter((booking: VoiceSimulation) => {
+        const validBookings = bookingsData.filter((booking: VoiceSimulation) => {
           console.log('🔍 Checking booking:', {
             id: booking.id,
             scheduledDate: booking.scheduledDate,
@@ -248,11 +233,7 @@ function BookingPageContent() {
         console.log('✅ Valid bookings:', validBookings.length, validBookings);
         setBookings(validBookings);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Error loading bookings:', {
-          status: response.status,
-          error: errorData
-        });
+        console.error('❌ Error loading bookings:', response.error);
         toast.error(t_('Erreur lors du chargement des réservations', 'Error loading bookings'));
       }
     } catch (error) {
@@ -360,102 +341,9 @@ function BookingPageContent() {
         return;
       }
 
-      const response = await fetch('/api/voice-simulation/book', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(bookingData)
-      });
+      const response = await apiClient.post('/voice-simulation/book', bookingData);
 
-      // Vérifier le Content-Type avant de parser JSON
-      const contentType = response.headers.get('content-type');
-      
-      if (!response.ok) {
-        // Si la réponse n'est pas OK, essayer de lire le message d'erreur
-        let errorMessage = t_('Erreur lors de la réservation', 'Failed to book simulation');
-        
-        // Vérifier si c'est une erreur d'authentification
-        if (response.status === 401 || response.status === 403) {
-          errorMessage = t_('Session expirée. Veuillez vous reconnecter', 'Session expired. Please log in again');
-          localStorage.removeItem('token');
-          localStorage.removeItem('access_token');
-          toast.error(errorMessage);
-          router.push('/login');
-          return;
-        }
-        
-        // Lire le texte de la réponse
-        const text = await response.text();
-        
-        if (contentType && contentType.includes('application/json')) {
-          try {
-            const errorData = JSON.parse(text);
-            // Extract error message from various possible locations
-            errorMessage = errorData.message 
-              || errorData.error?.message 
-              || errorData.error 
-              || (typeof errorData.error === 'string' ? errorData.error : null)
-              || errorMessage;
-            
-            // Log detailed error for debugging - check all possible error formats
-            const errorMsg = errorData.message 
-              || errorData.error?.message 
-              || (typeof errorData.error === 'string' ? errorData.error : null)
-              || errorData.error?.error?.message
-              || 'Unknown error';
-            
-            console.error('❌ Booking error (JSON):', {
-              status: response.status,
-              errorData,
-              extractedMessage: errorMsg,
-              errorDataKeys: Object.keys(errorData),
-              bookingData
-            });
-            
-            // Extract message from various possible locations
-            errorMessage = errorMsg || errorMessage;
-            
-            // If still no message found, provide default
-            if (!errorMessage || errorMessage === 'Unknown error') {
-              console.error('⚠️ No error message found in response:', errorData);
-              errorMessage = t_('Erreur lors de la réservation. Veuillez réessayer.', 'Booking error. Please try again.');
-            }
-          } catch (e) {
-            // Si le parsing JSON échoue
-            console.error('❌ Erreur serveur (JSON attendu mais invalide):', {
-              error: e,
-              text: text.substring(0, 500)
-            });
-            errorMessage = t_('Erreur serveur: réponse invalide', 'Server error: invalid response');
-          }
-        } else {
-          // Réponse HTML ou autre format
-          console.error('❌ Réponse non-JSON reçue:', {
-            status: response.status,
-            contentType,
-            text: text.substring(0, 500),
-            bookingData
-          });
-          errorMessage = t_('Erreur serveur: réponse invalide', 'Server error: invalid response');
-        }
-        
-        toast.error(errorMessage);
-        return;
-      }
-
-      // Réponse OK - parser JSON
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('❌ Réponse non-JSON reçue (OK status):', text.substring(0, 200));
-        toast.error(t_('Erreur serveur: réponse invalide', 'Server error: invalid response'));
-        return;
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
+      if (response.success) {
         // Success message with email confirmation info
         toast.success(
           t_(
@@ -478,10 +366,9 @@ function BookingPageContent() {
         }, 1000); // Wait 1 second for backend to process
       } else {
         // Better error message
-        const errorMsg = data.message || data.error?.message || t_('Échec de la réservation', 'Failed to book simulation');
+        const errorMsg = response.error?.message || response.message || t_('Échec de la réservation', 'Failed to book simulation');
         console.error('❌ Booking failed:', {
-          status: response.status,
-          data,
+          error: response.error,
           bookingData
         });
         toast.error(errorMsg);
@@ -518,35 +405,9 @@ function BookingPageContent() {
         throw new Error(t_('ID de simulation manquant', 'Simulation ID missing'));
       }
       
-      const response = await fetch(`/api/voice-simulation/cancel/${selectedBooking.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const contentType = response.headers.get('content-type');
-      let data: any;
+      const response = await apiClient.delete(`/voice-simulation/cancel/${selectedBooking.id}`);
       
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        console.error('❌ Non-JSON response from cancel:', text.substring(0, 200));
-        throw new Error(t_('Erreur serveur: réponse invalide', 'Server error: invalid response'));
-      }
-
-      if (!response.ok) {
-        console.error('❌ Cancel failed:', {
-          status: response.status,
-          data: data
-        });
-        const errorMessage = data?.message || data?.error?.message || data?.error || t_('Échec de l\'annulation', 'Failed to cancel');
-        throw new Error(errorMessage);
-      }
-      
-      if (data.success) {
+      if (response.success) {
         toast.success(
           t_('Simulation annulée avec succès', 'Simulation cancelled successfully'),
           { duration: 3000 }
@@ -556,7 +417,7 @@ function BookingPageContent() {
         // Refresh bookings without await to prevent blocking
         fetchBookings();
       } else {
-        const errorMessage = data?.message || data?.error?.message || data?.error || t_('Échec de l\'annulation', 'Failed to cancel');
+        const errorMessage = response.error?.message || response.message || t_('Échec de l\'annulation', 'Failed to cancel');
         throw new Error(errorMessage);
       }
     } catch (error: any) {
@@ -613,39 +474,12 @@ function BookingPageContent() {
         throw new Error(t_('ID de simulation manquant', 'Simulation ID missing'));
       }
 
-      const response = await fetch(`/api/voice-simulation/reschedule/${selectedBooking.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          newDate: newDate.toISOString(),
-          voicePreference: voicePreference || undefined
-        })
+      const response = await apiClient.put(`/voice-simulation/reschedule/${selectedBooking.id}`, {
+        newDate: newDate.toISOString(),
+        voicePreference: voicePreference || undefined
       });
 
-      const contentType = response.headers.get('content-type');
-      let data: any;
-      
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        console.error('❌ Non-JSON response from reschedule:', text.substring(0, 200));
-        throw new Error(t_('Erreur serveur: réponse invalide', 'Server error: invalid response'));
-      }
-
-      if (!response.ok) {
-        console.error('❌ Reschedule failed:', {
-          status: response.status,
-          data: data
-        });
-        const errorMessage = data?.message || data?.error?.message || data?.error || t_('Échec de la reprogrammation', 'Failed to reschedule');
-        throw new Error(errorMessage);
-      }
-      
-      if (data.success) {
+      if (response.success) {
         toast.success(
           t_('Simulation reprogrammée avec succès', 'Simulation rescheduled successfully'),
           { duration: 3000 }
@@ -657,7 +491,7 @@ function BookingPageContent() {
         // Refresh bookings without await to prevent loading loop
         fetchBookings();
       } else {
-        const errorMessage = data?.message || data?.error?.message || data?.error || t_('Échec de la reprogrammation', 'Failed to reschedule');
+        const errorMessage = response.error?.message || response.message || t_('Échec de la reprogrammation', 'Failed to reschedule');
         throw new Error(errorMessage);
       }
     } catch (error: any) {
