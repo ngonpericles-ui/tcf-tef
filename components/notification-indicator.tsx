@@ -127,15 +127,27 @@ export default function NotificationIndicator({ type }: NotificationIndicatorPro
       const response = await apiClient.get<NotificationsResponse | MessagesResponse>(endpoint)
       if (response.success && response.data) {
         if (type === 'notifications') {
-          setNotifications((response.data as NotificationsResponse).notifications)
+          // Handle different response structures
+          const notificationsData = (response.data as any).notifications || 
+                                   (response.data as any).data?.notifications || 
+                                   []
+          setNotifications(notificationsData.map((n: any) => ({
+            ...n,
+            isRead: n.read || n.userNotification?.status === 'READ' || n.isRead || false,
+            read: n.read || n.userNotification?.status === 'READ' || n.isRead || false
+          })))
         } else {
           // Transform messages to notification format
-          const messages = (response.data as MessagesResponse).messages.map((msg: any) => ({
+          const messagesData = (response.data as any).messages || 
+                              (response.data as any).data?.messages || 
+                              []
+          const messages = messagesData.map((msg: any) => ({
             id: msg.id,
             type: 'MESSAGE',
-            title: `${msg.sender.firstName} ${msg.sender.lastName}`,
-            message: msg.subject || msg.content.substring(0, 100) + '...',
-            isRead: msg.isRead,
+            title: `${msg.sender?.firstName || ''} ${msg.sender?.lastName || ''}`.trim() || 'Message',
+            message: msg.subject || msg.content?.substring(0, 100) + '...' || '',
+            isRead: msg.isRead || msg.read || false,
+            read: msg.isRead || msg.read || false,
             priority: 'MEDIUM',
             actionUrl: `${getMessagingRoute()}/${msg.id}`,
             createdAt: msg.createdAt
@@ -164,9 +176,16 @@ export default function NotificationIndicator({ type }: NotificationIndicatorPro
       
       // Update local state
       setNotifications(prev => 
-        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+        prev.map(n => n.id === notificationId ? { ...n, isRead: true, read: true } : n)
       )
-      setUnreadCount(prev => Math.max(0, prev - 1))
+      
+      // Refresh unread count from server
+      await fetchUnreadCount()
+      
+      // Also refresh notifications list if dropdown is open
+      if (isOpen) {
+        await fetchNotifications()
+      }
     } catch (error) {
       console.error('Error marking as read:', error)
     }

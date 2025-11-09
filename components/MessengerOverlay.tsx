@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useLanguage } from '@/components/language-provider'
 import { usePusher } from '@/hooks/usePusher'
 import { messageService, Message, Contact } from '@/lib/services/messageService'
+import { apiClient } from '@/lib/api-client'
 import { getComprehensiveProfilePictureUrl, createProfilePictureWithFallback } from '@/lib/utils/profilePicture'
 import EmojiPicker from './EmojiPicker'
 import MessageContextMenu from './MessageContextMenu'
@@ -336,30 +337,14 @@ export default function MessengerOverlay({
 
       console.log('📤 Sending message to:', selectedContact.email)
       
-      // Send message in background
-      const response = await fetch('http://localhost:3001/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          receiverId: selectedContact.id,
-          content: messageContent,
-          type: 'text'
-        })
+      // Send message using apiClient
+      const response = await apiClient.post('/messages', {
+        receiverId: selectedContact.id,
+        content: messageContent,
+        type: 'text'
       })
 
-      if (!response.ok) {
-        console.error('Failed to send message:', response.status)
-        // Remove optimistic message on error
-        setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id))
-        return
-      }
-
-      const result = await response.json()
-      
-      if (result.success && result.data) {
+      if (response.success && response.data) {
         console.log('✅ Message sent successfully!')
         
         // Replace optimistic message with real message
@@ -367,17 +352,17 @@ export default function MessengerOverlay({
           m.id === optimisticMsg.id 
             ? {
                 ...m,
-                id: result.data.id,
+                id: response.data.id,
                 delivered: true,
-                timestamp: result.data.createdAt || messageTimestamp,
-                createdAt: result.data.createdAt || messageTimestamp
+                timestamp: response.data.createdAt || messageTimestamp,
+                createdAt: response.data.createdAt || messageTimestamp
               }
             : m
         ))
 
         // Note: Pusher notification is already sent by the backend API
       } else {
-        console.error('Unexpected response format:', result)
+        console.error('Failed to send message:', response)
         // Remove optimistic message on error
         setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id))
       }
@@ -684,15 +669,12 @@ export default function MessengerOverlay({
               : contact
           ))
           
-          // Mark messages as read in background (don't wait for response)
+          // Mark messages as read in background using apiClient
           Promise.all(unreadMessages.map(msg => 
-            fetch(`http://localhost:3001/api/messages/${msg.id}/read`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
-            }).catch(err => console.warn('Failed to mark message as read:', err))
+            apiClient.put(`/messages/${msg.id}/read`).catch(err => {
+              console.warn('Failed to mark message as read:', err)
+              return null
+            })
           )).catch(err => console.warn('Some messages failed to mark as read:', err))
           
         } catch (error) {

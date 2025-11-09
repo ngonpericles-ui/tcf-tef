@@ -48,8 +48,18 @@ export default function NotificationsPage() {
       // So response is already { success, data, message }
       if (response.success && response.data) {
         // Check if data has notifications array
-        const notificationsData = (response.data as any).notifications || (response.data as any).data?.notifications || []
-        setNotifications(notificationsData)
+        const notificationsData = (response.data as any).notifications || 
+                                  (response.data as any).data?.notifications || 
+                                  []
+        // Normalize notification structure
+        setNotifications(notificationsData.map((n: any) => ({
+          id: n.id,
+          title: n.title || '',
+          message: n.message || '',
+          type: (n.type || 'info').toLowerCase(),
+          createdAt: n.createdAt || n.notification?.createdAt || new Date().toISOString(),
+          read: n.read || n.userNotification?.status === 'READ' || n.isRead || false
+        })))
       } else {
         console.warn('Notifications response missing data:', response)
         setNotifications([])
@@ -65,10 +75,12 @@ export default function NotificationsPage() {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await apiClient.patch(`/notifications/${notificationId}/read`)
+      await apiClient.put(`/notifications/${notificationId}/read`)
       setNotifications(prev => 
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       )
+      // Refresh notifications to get updated unread count
+      fetchNotifications()
       toast.success(t("Marqué comme lu", "Marked as read"))
     } catch (error) {
       console.error('Error marking notification as read:', error)
