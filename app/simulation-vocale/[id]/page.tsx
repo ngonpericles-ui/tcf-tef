@@ -102,6 +102,12 @@ function SimulationRoomContent() {
         const data = await response.json();
         setSimulation(data.data);
 
+        // If simulation is already ACTIVE, set call as active immediately
+        if (data.data.status === 'ACTIVE') {
+          setIsCallActive(true);
+          console.log('✅ Simulation is already ACTIVE, call is active');
+        }
+
         // Check if simulation has ended more than 2 minutes ago
         if (data.data.status === 'COMPLETED') {
           // For voice simulations, use updatedAt as the end time
@@ -130,6 +136,11 @@ function SimulationRoomContent() {
         const timeUntilStart = scheduledDate.getTime() - now.getTime();
         const minutesUntilStart = timeUntilStart / (1000 * 60);
 
+        // If simulation is already ACTIVE, skip accessibility checks and guide
+        if (data.data.status === 'ACTIVE') {
+          setHasSeenGuide(true);
+          console.log('✅ Simulation is ACTIVE, skipping guide and accessibility checks');
+        } else {
         // Vérifier si la simulation est accessible (5 minutes avant ou moins)
         if (minutesUntilStart > 5) {
           const waitTime = Math.ceil(minutesUntilStart - 5);
@@ -157,6 +168,7 @@ function SimulationRoomContent() {
             return;
           }
           setHasSeenGuide(true);
+          }
         }
       } catch (error: any) {
         console.error('Error loading simulation:', error);
@@ -229,6 +241,14 @@ function SimulationRoomContent() {
 
   const handleStartCall = async () => {
     try {
+      // Check if simulation is already ACTIVE (might have been started before redirect)
+      if (simulation?.status === 'ACTIVE') {
+        console.log('✅ Simulation is already ACTIVE, setting call as active');
+        setIsCallActive(true);
+        toast.success(t_('Simulation déjà active', 'Simulation already active'));
+        return;
+      }
+
       const startUrl = token
         ? `/api/voice-simulation/start/${simulationId}?token=${token}`
         : `/api/voice-simulation/start/${simulationId}`;
@@ -243,6 +263,10 @@ function SimulationRoomContent() {
 
       if (response.ok) {
         setIsCallActive(true);
+        // Update simulation status locally
+        if (simulation) {
+          setSimulation({ ...simulation, status: 'ACTIVE' });
+        }
         toast.success(t_('Simulation démarrée', 'Simulation started'));
       } else {
         const errorData = await response.json();
@@ -447,9 +471,12 @@ function SimulationRoomContent() {
   const simulationEnd = new Date(scheduledDate.getTime() + simulation.duration * 1000);
   
   // Accessible si:
+  // - Simulation is already ACTIVE (started)
   // - 5 minutes ou moins avant le début (minutesUntilStart entre 0 et 5)
   // - Pendant la simulation (après le début mais avant la fin)
-  const canStart = (minutesUntilStart <= 5 && minutesUntilStart >= 0) || (now >= scheduledDate && now <= simulationEnd);
+  const canStart = simulation.status === 'ACTIVE' || 
+                   (minutesUntilStart <= 5 && minutesUntilStart >= 0) || 
+                   (now >= scheduledDate && now <= simulationEnd);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">

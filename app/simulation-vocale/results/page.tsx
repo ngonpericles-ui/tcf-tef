@@ -39,9 +39,7 @@ import { useLanguage } from '@/components/language-provider';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getComprehensiveProfilePictureUrl } from '@/lib/utils/profilePicture';
-import Link from 'next/link';
+import { SimulationHeader } from '@/components/SimulationHeader';
 
 interface AIFeedback {
   id: string;
@@ -94,20 +92,6 @@ function ResultsPageContent() {
   const simulationId = searchParams?.get('id');
 
   const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
-  
-  // Get profile picture URL
-  const profileImageUrl = userProfile?.avatar
-    ? getComprehensiveProfilePictureUrl(userProfile.email || '', userProfile.avatar)
-    : userProfile?.email
-      ? getComprehensiveProfilePictureUrl(userProfile.email, '')
-      : '';
-  
-  // Get user initials from name or email
-  const userInitials = userProfile?.name
-    ? userProfile.name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2) || userProfile.email?.charAt(0).toUpperCase() || 'U'
-    : userProfile?.email
-      ? userProfile.email.charAt(0).toUpperCase()
-      : 'U';
 
   const [currentSimulation, setCurrentSimulation] = useState<VoiceSimulation | null>(null);
   const [simulations, setSimulations] = useState<VoiceSimulation[]>([]);
@@ -303,69 +287,7 @@ function ResultsPageContent() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
-      {/* Rounded Dark Container with Liquid Glass Effect - Header */}
-      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 w-[95%] max-w-6xl">
-        <div className="bg-slate-900/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left: Logo and Title */}
-            <div className="flex items-center gap-3">
-              <div className="size-6">
-                <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                  <g clipPath="url(#clip0_6_330)">
-                    <path clipRule="evenodd" d="M24 0.757355L47.2426 24L24 47.2426L0.757355 24L24 0.757355ZM21 35.7574V12.2426L9.24264 24L21 35.7574Z" fill="currentColor" fillRule="evenodd" />
-                  </g>
-                  <defs>
-                    <clipPath id="clip0_6_330">
-                      <rect fill="white" height="48" width="48" />
-                    </clipPath>
-                  </defs>
-                </svg>
-              </div>
-              <span className="text-lg md:text-xl text-white font-bold">
-                {t_("Pratique d'Entretien IA", "AI Interview Practice")}
-              </span>
-            </div>
-            
-            {/* Center: Navigation Links */}
-            <nav className="hidden md:flex items-center gap-6 md:gap-8 text-base md:text-lg text-white/70 font-medium">
-              <Link href="/simulation-vocale" className="hover:text-white transition-colors whitespace-nowrap">
-                {t_("Tableau de bord", "Dashboard")}
-              </Link>
-              <Link href="/simulation-vocale/booking" className="hover:text-white transition-colors whitespace-nowrap">
-                {t_("Pratique", "Practice")}
-              </Link>
-              <Link href="/simulation-vocale/results" className="text-white transition-colors whitespace-nowrap">
-                {t_("Résultats", "Results")}
-              </Link>
-              <Link href="/settings" className="hover:text-white transition-colors whitespace-nowrap">
-                {t_("Profil", "Profile")}
-              </Link>
-            </nav>
-            
-            {/* Right: Upgrade Button, Bell, and Profile Picture */}
-            <div className="flex items-center gap-4">
-              <Button className="rounded-lg h-10 px-4 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-sm">
-                {t_("Mettre à niveau", "Upgrade")}
-              </Button>
-              <button
-                aria-label="Notifications"
-                className="relative p-2 text-white/70 hover:text-white transition-colors rounded-full h-10 w-10 flex items-center justify-center"
-              >
-                <Bell className="w-5 h-5" />
-              </button>
-              <Avatar className="w-10 h-10 border-2 border-[#2ECC71]/50">
-                <AvatarImage 
-                  src={profileImageUrl}
-                  alt={userProfile?.name || 'User'}
-                />
-                <AvatarFallback className="bg-[#2ECC71] text-white font-semibold">
-                  {userInitials}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SimulationHeader currentPage="results" />
 
       <main className="px-4 sm:px-10 lg:px-20 py-5 pt-32">
         <div className="container mx-auto max-w-6xl">

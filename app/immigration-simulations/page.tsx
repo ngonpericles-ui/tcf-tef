@@ -7,50 +7,70 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  Plane,
-  Globe,
-  FileText,
-  Calendar,
-  Users,
-  Clock,
-  CheckCircle,
+  ArrowLeft,
+  BarChart3,
+  Settings,
+  CalendarIcon,
+  Trophy,
+  Mic,
+  Volume2,
+  Play,
+  Pause,
   AlertTriangle,
+  Info,
   Crown,
-  ChevronRight,
-  ArrowRight,
-  TrendingUp,
-  Award,
+  CheckCircle,
+  X,
+  Edit,
+  Trash2,
+  Plus,
+  MapPin,
+  User,
+  Clock,
   Target,
+  TrendingUp,
+  Download,
+  Share2,
+  Star,
+  Award,
+  Headphones,
+  ArrowRight,
+  Zap,
   BookOpen,
   Brain,
-  Shield,
-  MapPin,
-  Building2,
-  Briefcase,
-  Info,
-  BarChart3,
-  Trophy,
+  Users,
+  Timer,
+  RefreshCw,
+  ChevronRight,
   History,
-  Settings,
-  Zap
+  MessageSquare,
+  Loader2,
+  Plane,
+  FileText
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
+import { useTheme } from '@/components/theme-provider';
+import Link from 'next/link';
+import Image from 'next/image';
+import { SimulationHeader } from '@/components/SimulationHeader';
 
 interface ImmigrationSimulation {
   id: string;
   country: string;
-  category: string;
-  status: 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  immigrationType?: string;
+  category?: string;
+  status: 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+  finalScore?: number;
   score?: number;
-  feedback?: string;
   duration: number;
   createdAt: string;
-  culturalContext?: string;
-  requirements?: string[];
-  documents?: string[];
+  scheduledDate?: string;
+  completedAt?: string;
+  questionsData?: any;
 }
 
 function ImmigrationPageContent() {
@@ -58,6 +78,7 @@ function ImmigrationPageContent() {
   const { t, lang } = useLanguage();
   const router = useRouter();
 
+  // Helper function for translations
   const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
 
   const [simulations, setSimulations] = useState<ImmigrationSimulation[]>([]);
@@ -66,97 +87,105 @@ function ImmigrationPageContent() {
   const [subscriptionTier, setSubscriptionTier] = useState<string>('FREE');
   const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
+  const [isStartingSimulation, setIsStartingSimulation] = useState(false);
 
   useEffect(() => {
-    if (userProfile) {
+    // Only check access when userProfile is loaded and haven't checked yet
+    if (userProfile && !hasCheckedAccess) {
       checkSubscriptionAccess();
-      setHasCheckedAccess(true);
     }
-  }, [userProfile]);
+  }, [userProfile, hasCheckedAccess]);
 
   useEffect(() => {
-    if (hasCheckedAccess && accessGranted) {
+    // Fetch data if access is granted (either through free attempts or subscription)
+    if (accessGranted) {
       fetchSimulations();
       fetchMonthlyCount();
-    } else {
-      setLoading(false);
     }
-  }, [hasCheckedAccess, accessGranted]);
+  }, [accessGranted]);
 
   const checkSubscriptionAccess = async () => {
     try {
-      const freeAttemptsResponse = await fetch('http://localhost:3001/api/simulations/free-attempts/count', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
-        }
-      });
+      setLoading(true);
+      setHasCheckedAccess(true);
+
+      // STEP 1: Check free attempts FIRST (all users get 5 free simulations)
+      const freeAttemptsResponse = await apiClient.get('/simulations/free-attempts/count');
       
-      if (freeAttemptsResponse.ok) {
-        const freeAttemptsData = await freeAttemptsResponse.json();
-        
-        if (freeAttemptsData.success && freeAttemptsData.data.remainingFreeAttempts > 0) {
-          console.log('✅ Access granted: User has free attempts remaining');
+      if (freeAttemptsResponse.success && freeAttemptsResponse.data) {
+        const freeAttemptsData = freeAttemptsResponse.data as any;
+        if (freeAttemptsData.remainingFreeAttempts > 0) {
+          // User has free attempts - ALLOW ACCESS
+          console.log('✅ Access granted: User has free attempts remaining', freeAttemptsData.remainingFreeAttempts);
           setSubscriptionTier('FREE_WITH_ATTEMPTS');
           setAccessGranted(true);
+          setLoading(false);
           return;
         }
       }
       
-      const subscriptionResponse = await fetch('http://localhost:3001/api/subscriptions/active', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token')}`
-        }
-      });
+      // STEP 2: If no free attempts, check REAL subscription from API (not userProfile)
+      const subscriptionResponse = await apiClient.get('/subscriptions/active');
       
-      if (subscriptionResponse.ok) {
-        const subscriptionData = await subscriptionResponse.json();
-        
-        if (subscriptionData.success && subscriptionData.data?.subscription) {
-          const tier = subscriptionData.data.subscription.tier;
+      if (subscriptionResponse.success && subscriptionResponse.data) {
+        const subscriptionData = subscriptionResponse.data as any;
+        const tier = subscriptionData.subscription?.tier;
           setSubscriptionTier(tier);
           
+        // Immigration simulations require PRO subscription
           if (tier === 'PRO') {
-            console.log('✅ Access granted: User has PRO subscription');
+          console.log('✅ Access granted: User has valid subscription', tier);
             setAccessGranted(true);
+          setLoading(false);
             return;
-          }
         }
       }
       
-      console.log('❌ Access denied: No free attempts and no PRO subscription');
+      // STEP 3: No free attempts and no valid subscription - redirect
+      console.log('❌ Access denied: No free attempts and no valid subscription');
+      setSubscriptionTier('FREE');
       setAccessGranted(false);
+      setLoading(false);
+      toast.error('Les simulations d\'immigration nécessitent un abonnement Pro');
+      router.push('/abonnement');
     } catch (error) {
       console.error('Error checking subscription:', error);
-      setAccessGranted(false);
+      setLoading(false);
+      setHasCheckedAccess(true);
+      // On error, show error but don't redirect (fail gracefully)
+      toast.error('Erreur lors de la vérification de l\'accès');
     }
   };
 
   const fetchSimulations = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('token') || localStorage.getItem('access_token');
       
       if (!token || token === 'null' || token === 'undefined') {
-        console.error('❌ No valid token found');
+        console.error('❌ No valid token found in localStorage');
         toast.error(t_('Veuillez vous connecter', 'Please log in'));
         router.push('/login');
         return;
       }
 
-      const response = await fetch('/api/immigration-simulation/history/user', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get('/immigration-simulation/history');
 
-      if (response.ok) {
-        const data = await response.json();
-        setSimulations(data.data || []);
+      if (response.success && response.data) {
+        const simulationsData = Array.isArray(response.data) ? response.data : [];
+        console.log('✅ Simulations fetched:', {
+          count: simulationsData.length || 0,
+          scheduled: simulationsData.filter((s: ImmigrationSimulation) => s.status === 'SCHEDULED').length,
+          completed: simulationsData.filter((s: ImmigrationSimulation) => s.status === 'COMPLETED').length
+        });
+        setSimulations(simulationsData);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        toast.error(errorData?.message || errorData?.error || t_('Erreur lors du chargement des simulations', 'Error loading simulations'));
+        console.error('❌ Error loading simulations:', response.error);
+        const errorMessage = response.error?.message || t_('Erreur lors du chargement des simulations', 'Error loading simulations');
+        toast.error(errorMessage);
       }
-    } catch (error) {
-      console.error('Error fetching simulations:', error);
+    } catch (error: any) {
+      console.error('❌ Error fetching simulations:', error);
       toast.error(t_('Erreur de connexion', 'Connection error'));
     } finally {
       setLoading(false);
@@ -165,33 +194,68 @@ function ImmigrationPageContent() {
 
   const fetchMonthlyCount = async () => {
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-      
-      if (!token) return;
+      const response = await apiClient.get('/immigration-simulation/monthly-count');
 
-      const response = await fetch('/api/immigration-simulation/monthly-count/user', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMonthlyCount(data.count || 0);
+      if (response.success && response.data) {
+        const monthlyData = response.data as any;
+        setMonthlyCount(monthlyData.monthlyCount || 0);
       }
     } catch (error) {
       console.error('Error fetching monthly count:', error);
     }
   };
 
+  const handleStartImmigrationSimulation = async () => {
+    try {
+      setIsStartingSimulation(true);
+      toast.loading(t_('Création de la simulation...', 'Creating simulation...'));
+
+      // Step 1: Create simulation with AUTO booking type and immediate date (now + 5 seconds for instant start)
+      const now = new Date();
+      const scheduledDate = new Date(now.getTime() + 5 * 1000); // 5 seconds from now for instant start
+
+      const bookingResponse = await apiClient.post('/immigration-simulation/book', {
+        bookingType: 'AUTO',
+        preferredDates: [scheduledDate.toISOString()],
+        country: 'canada',
+        immigrationType: 'skilled_worker',
+        level: 'B1'
+      });
+
+      if (!bookingResponse.success || !bookingResponse.data) {
+        throw new Error(bookingResponse.error?.message || t_('Échec de la création de la simulation', 'Failed to create simulation'));
+      }
+
+      const simulationId = (bookingResponse.data as any)?.simulation?.id || (bookingResponse.data as any)?.id;
+      if (!simulationId) {
+        throw new Error(t_('ID de simulation non trouvé', 'Simulation ID not found'));
+      }
+
+      toast.dismiss();
+      toast.success(t_('Simulation créée avec succès', 'Simulation created successfully'));
+
+      // Step 2: Redirect to simulation room - let the room page handle starting
+      // The simulation room will check if it's accessible and allow the user to start it
+      // This supports both immediate start (user clicks start button) and scheduled access (via email link)
+      router.push(`/immigration-simulations/${simulationId}`);
+    } catch (error: any) {
+      console.error('Error starting immigration simulation:', error);
+      toast.dismiss();
+      toast.error(error.message || t_('Erreur lors du démarrage de la simulation', 'Error starting simulation'));
+    } finally {
+      setIsStartingSimulation(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors = {
-      'SCHEDULED': 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-      'ACTIVE': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-      'COMPLETED': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-      'CANCELLED': 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+      'SCHEDULED': 'bg-blue-100 text-blue-800',
+      'ACTIVE': 'bg-yellow-100 text-yellow-800',
+      'COMPLETED': 'bg-green-100 text-green-800',
+      'CANCELLED': 'bg-red-100 text-red-800',
+      'EXPIRED': 'bg-orange-100 text-orange-800'
     };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
+    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
 
   const getStatusIcon = (status: string) => {
@@ -199,206 +263,183 @@ function ImmigrationPageContent() {
       case 'SCHEDULED': return <Clock className="h-4 w-4" />;
       case 'ACTIVE': return <Target className="h-4 w-4" />;
       case 'COMPLETED': return <CheckCircle className="h-4 w-4" />;
-      case 'CANCELLED': return <AlertTriangle className="h-4 w-4" />;
+      case 'CANCELLED': return <X className="h-4 w-4" />;
+      case 'EXPIRED': return <AlertTriangle className="h-4 w-4" />;
       default: return <Clock className="h-4 w-4" />;
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-600 border-t-transparent"></div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{t_('Chargement...', 'Loading...')}</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-      {/* Enhanced Hero Section - Matching Voice Simulation Style */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-b border-gray-200 dark:border-gray-800">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(59,130,246,0.1)_1px,transparent_0)] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]"></div>
-        
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-200/30 dark:bg-blue-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-200/30 dark:bg-indigo-900/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+    <div className="min-h-screen bg-white dark:bg-black">
+      <SimulationHeader currentPage="dashboard" type="immigration" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+      {/* Hero Section - Enhanced with Image and Better Design */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-black pt-32 pb-16">
+        {/* Floating Background Elements */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-[#2ECC71]/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-[#2ECC71]/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
+
+        <div className="container relative mx-auto max-w-screen-2xl px-4 md:px-8 pt-16 md:pt-24 pb-16 md:pb-24">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Side: Text Content */}
+            {/* Left Side: Image with Liquid Glass Effect */}
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center lg:text-left"
+              transition={{ duration: 0.8 }}
+              className="flex justify-center lg:justify-start"
             >
-              {/* Badge */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800"
-              >
-                <Plane className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                  {t_("Simulation d'Immigration", "Immigration Simulation")}
-                </span>
-              </motion.div>
+              <div className="relative w-full max-w-lg">
+                {/* Liquid Glass Container */}
+                <div className="relative bg-white/10 dark:bg-white/5 backdrop-blur-3xl rounded-3xl p-6 md:p-8 border-2 border-white/20 dark:border-white/10 shadow-2xl">
+                  {/* Inner Glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/10 via-transparent to-[#2ECC71]/5 rounded-3xl" />
+                  
+                  {/* Image Container */}
+                  <div className="relative rounded-2xl overflow-hidden shadow-xl">
+                    <div className="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCeyuKF1zqODsGHCBRcyvh4KSGFRvWPcbchFz2K8JdTMKMbxvCHcthjU2adsiCZJvG6wKkTUwi_UaCdULOWblOhGbBjHgoleURguS4t6Bk1dhgaoJkS_GE609yRtOQE1ZUI6VrH5xB-UIhDpofp26jKFRqtWwdrSbB2hEXfhU_nnOsCziRg_djpauczVlToJzo_AK6eYm2DTJJ0t6MhgkKJP2h6hwfE_p1SzwqS-q2isuXAVFMJwIoYWF98dLiulknev3DTMSl4QuN")' }}></div>
+                    {/* Overlay Gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#2ECC71]/5 to-transparent pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
 
-              {/* Main Title */}
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 dark:from-blue-400 dark:via-indigo-400 dark:to-blue-400 bg-clip-text text-transparent leading-tight">
-                {t_("Simulations d'Immigration", "Immigration Simulations")}
+            {/* Right Side: Text Content and Calendar */}
+              <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="space-y-8"
+            >
+              {/* Main Title - Enhanced Typography */}
+              <div className="text-center lg:text-left space-y-4">
+                <h1 
+                  className="text-4xl md:text-5xl xl:text-6xl font-black leading-[1.1] tracking-tight"
+                  style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.03em' }}
+                >
+                  <span className="text-[#2ECC71]">
+                    {t_("Préparez votre", "Prepare Your")}
+                </span>
+                  <br />
+                  <span className="text-black dark:text-white">
+                    {t_("Entretien d'Immigration", "Immigration Interview")}
+                  </span>
               </h1>
 
-              {/* Description */}
-              <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed">
+                {/* Enhanced Description */}
+                <p 
+                  className="text-lg md:text-xl text-gray-700 dark:text-gray-300 font-medium leading-relaxed max-w-2xl"
+                  style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.7' }}
+                >
                 {t_(
-                  "Préparez-vous pour votre nouvelle vie avec nos simulations d'immigration réalistes. Maîtrisez les questions spécifiques à chaque pays, comprenez les exigences culturelles, et naviguez dans les processus d'immigration avec confiance.",
-                  "Prepare for your new life with our realistic immigration simulations. Master country-specific questions, understand cultural requirements, and navigate immigration processes with confidence."
+                    "Préparez-vous à votre entretien d'immigration avec des simulations réalistes et des retours personnalisés par IA. Maîtrisez les questions, comprenez la culture et naviguez dans les documents en toute confiance.",
+                    "Prepare for your immigration interview with realistic simulations and personalized AI feedback. Master the questions, understand the culture, and navigate documents with confidence."
                 )}
               </p>
-
-              {/* Key Features */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                {[
-                  { icon: Globe, text: t_("Questions par pays", "Country Questions"), desc: t_("Adaptées à chaque pays", "Adapted to each country") },
-                  { icon: Brain, text: t_("Adaptation culturelle", "Cultural Adaptation"), desc: t_("Compréhension approfondie", "Deep understanding") },
-                  { icon: Shield, text: t_("Processus sécurisé", "Secure Process"), desc: t_("Guide complet", "Complete guide") }
-                ].map((feature, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + idx * 0.1 }}
-                    className="flex flex-col items-center lg:items-start gap-2 p-4 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-gray-200 dark:border-gray-700"
-                  >
-                    <feature.icon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{feature.text}</div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">{feature.desc}</div>
-                  </motion.div>
-                ))}
               </div>
 
-              {/* CTA Button */}
+              {/* Centered CTA Button */}
               {accessGranted && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 }}
-                  className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
+                  transition={{ delay: 0.4 }}
+                  className="flex justify-center lg:justify-start"
                 >
                   <Button
-                    onClick={() => router.push('/immigration-simulations/questions')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
+                    onClick={handleStartImmigrationSimulation}
+                    disabled={isStartingSimulation}
+                    className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold px-8 py-4 text-lg relative overflow-hidden group transition-all duration-300 hover:scale-105 shadow-lg shadow-[#2ECC71]/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
-                    <BookOpen className="w-5 h-5 mr-2" />
-                    {t_("Commencer la simulation", "Start Simulation")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push('/immigration-simulations/cultural')}
-                    className="border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                    size="lg"
-                  >
-                    <Globe className="w-5 h-5 mr-2" />
-                    {t_("Explorer les pays", "Explore Countries")}
+                    {isStartingSimulation ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        <span className="relative z-10">{t_("Démarrage...", "Starting...")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5 mr-2" />
+                        <span className="relative z-10">{t_("Démarrer une Simulation", "Start Simulation")}</span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                      </>
+                    )}
                   </Button>
                 </motion.div>
               )}
-            </motion.div>
 
-            {/* Right Side: Visual Element */}
+              {/* Bigger Calendar Card - Liquid Glass */}
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="flex flex-col items-center justify-center"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="w-full"
             >
-              {/* Visual Illustration - Airplane/Globe */}
-              <div className="relative w-full max-w-md">
-                {/* SVG Illustration */}
-                <svg viewBox="0 0 400 350" className="w-full h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Background circles */}
-                  <circle cx="200" cy="175" r="130" fill="url(#gradient1)" opacity="0.1"/>
-                  <circle cx="200" cy="175" r="90" fill="url(#gradient2)" opacity="0.15"/>
+                <div className="bg-white/10 dark:bg-white/5 backdrop-blur-3xl rounded-3xl p-8 md:p-10 border-2 border-white/20 dark:border-white/10 shadow-2xl">
+                  {/* Inner Glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/10 via-transparent to-[#2ECC71]/5 rounded-3xl pointer-events-none" />
                   
-                  {/* Globe/World Map */}
-                  <circle cx="200" cy="150" r="80" fill="none" stroke="#3B82F6" strokeWidth="2" opacity="0.3"/>
-                  <circle cx="200" cy="150" r="70" fill="none" stroke="#60A5FA" strokeWidth="1.5" opacity="0.2"/>
-                  
-                  {/* Continents/Regions */}
-                  <path d="M 160 130 Q 180 120 200 130 Q 220 120 240 130 Q 230 140 220 150 Q 210 155 200 150 Q 190 155 180 150 Q 170 140 160 130" fill="#60A5FA" opacity="0.3"/>
-                  <path d="M 140 170 Q 160 160 180 170 Q 200 175 220 170 Q 240 160 260 170 Q 250 190 230 200 Q 210 195 200 190 Q 190 195 170 200 Q 150 190 140 170" fill="#3B82F6" opacity="0.3"/>
-                  <path d="M 180 210 Q 200 205 220 210 Q 230 220 220 230 Q 210 235 200 230 Q 190 235 180 230 Q 170 220 180 210" fill="#2563EB" opacity="0.3"/>
-                  
-                  {/* Airplane */}
-                  <g transform="translate(200, 200) rotate(45)">
-                    {/* Plane body */}
-                    <ellipse cx="0" cy="0" rx="50" ry="15" fill="#3B82F6" opacity="0.9"/>
-                    {/* Plane wings */}
-                    <ellipse cx="-20" cy="8" rx="30" ry="12" fill="#2563EB" opacity="0.8"/>
-                    <ellipse cx="-20" cy="-8" rx="30" ry="12" fill="#2563EB" opacity="0.8"/>
-                    {/* Plane tail */}
-                    <path d="M -40 -3 L -50 -10 L -40 -18 Z" fill="#1E40AF" opacity="0.9"/>
-                    {/* Windows */}
-                    <circle cx="-15" cy="0" r="2" fill="#E0F2FE"/>
-                    <circle cx="-5" cy="0" r="2" fill="#E0F2FE"/>
-                    <circle cx="5" cy="0" r="2" fill="#E0F2FE"/>
-                  </g>
-                  
-                  {/* Flight path/route */}
-                  <path d="M 150 120 Q 180 140 210 160 Q 230 175 250 190" stroke="#10B981" strokeWidth="2" strokeDasharray="5,5" opacity="0.4" fill="none"/>
-                  
-                  {/* Country markers */}
-                  <circle cx="150" cy="120" r="4" fill="#10B981"/>
-                  <circle cx="250" cy="190" r="4" fill="#10B981"/>
-                  <circle cx="180" cy="140" r="3" fill="#F59E0B"/>
-                  <circle cx="220" cy="170" r="3" fill="#F59E0B"/>
-                  
-                  <defs>
-                    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#3B82F6"/>
-                      <stop offset="100%" stopColor="#2563EB"/>
-                    </linearGradient>
-                    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#60A5FA"/>
-                      <stop offset="100%" stopColor="#3B82F6"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-
-              {/* How It Works - Simplified */}
-              <div className="mt-8 w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-xl border-2 border-blue-100 dark:border-blue-900">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 text-center">
+                  <h3 className="text-2xl md:text-3xl font-bold text-black dark:text-white mb-6 text-center relative z-10" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
                   {t_("Comment commencer", "How to Start")}
                 </h3>
-                <div className="space-y-3">
+                  <div className="space-y-4 relative z-10">
                   {[
-                    { step: "1", icon: BookOpen, text: t_("Choisissez votre pays", "Choose your country") },
-                    { step: "2", icon: Brain, text: t_("Répondez aux questions", "Answer questions") },
-                    { step: "3", icon: Trophy, text: t_("Recevez vos résultats", "Get your results") }
+                      { step: "1", icon: CalendarIcon, text: t_("Réservez votre session", "Book your session"), desc: t_("Choisissez votre pays et type d'immigration", "Choose your country and immigration type") },
+                      { step: "2", icon: Plane, text: t_("Pratiquez l'entretien", "Practice the interview"), desc: t_("Entraînez-vous avec notre IA spécialisée", "Train with our specialized AI") },
+                      { step: "3", icon: Trophy, text: t_("Recevez vos résultats", "Get your results"), desc: t_("Analysez vos performances détaillées", "Analyze your detailed performance") }
                   ].map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">
+                      <div key={idx} className="flex items-start gap-4 p-4 rounded-2xl bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#2ECC71] to-[#27c066] text-white flex items-center justify-center text-lg font-bold shadow-lg shadow-[#2ECC71]/30 flex-shrink-0">
                         {item.step}
                       </div>
-                      <item.icon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.text}</span>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <item.icon className="w-5 h-5 text-[#2ECC71]" />
+                            <span className="text-base md:text-lg font-bold text-black dark:text-white">{item.text}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">{item.desc}</p>
+                        </div>
                     </div>
                   ))}
                 </div>
               </div>
+              </motion.div>
             </motion.div>
           </div>
         </div>
-      </div>
+      </section>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Subscription Access Alert */}
+        {!accessGranted && hasCheckedAccess && (subscriptionTier === 'FREE' || subscriptionTier === 'ESSENTIAL') && (
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="flex items-start">
+              <Crown className="w-5 h-5 text-red-500 mt-0.5 mr-3" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">Abonnement requis</h3>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                  Les simulations d'immigration sont réservées aux abonnés Pro. 
+                  <Button
+                    size="sm" 
+                    className="ml-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                    onClick={() => router.push('/abonnement')}
+                  >
+                    Passer à Pro
+                  </Button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Free Attempts Info */}
         {accessGranted && subscriptionTier === 'FREE_WITH_ATTEMPTS' && (
@@ -406,9 +447,9 @@ function ImmigrationPageContent() {
             <div className="flex items-start">
               <Info className="w-5 h-5 text-blue-500 mt-0.5 mr-3" />
               <div className="flex-1">
-                <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">{t_('Accès avec simulations gratuites', 'Access with free simulations')}</h3>
+                <h3 className="text-sm font-medium text-blue-800 dark:text-blue-400">Accès avec simulations gratuites</h3>
                 <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                  {t_('Vous utilisez actuellement vos simulations gratuites. Passez à Premium ou Pro pour un accès illimité.', 'You are currently using your free simulations. Upgrade to Premium or Pro for unlimited access.')}
+                  Vous utilisez actuellement vos simulations gratuites. Passez à Pro pour un accès illimité.
                 </p>
               </div>
             </div>
@@ -421,33 +462,45 @@ function ImmigrationPageContent() {
             <div className="flex items-start">
               <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 mr-3" />
               <div className="flex-1">
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">{t_('Limite mensuelle atteinte', 'Monthly limit reached')}</h3>
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-400">Limite mensuelle atteinte</h3>
                 <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-                  {t_('Vous avez utilisé toutes vos 2 simulations ce mois-ci. Passez à la version PRO pour un accès illimité.', 'You have used all your 2 simulations this month. Upgrade to PRO for unlimited access.')}
+                  Vous avez utilisé toutes vos 2 simulations ce mois-ci. Passez à la version PRO pour un accès illimité.
                 </p>
                 <Button
                   size="sm" 
                   className="mt-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
-                  onClick={() => router.push('/abonnement')}
                 >
-                  {t_('Passer à PRO', 'Upgrade to PRO')}
+                  Passer à PRO
                 </Button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Section Header */}
+        {monthlyCount === 1 && (
+          <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <div className="flex items-start">
+              <Info className="w-5 h-5 text-amber-500 mt-0.5 mr-3" />
+              <div>
+                <h3 className="text-sm font-medium text-amber-800 dark:text-amber-400">1 simulation restante</h3>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">Planifiez votre prochaine session avec sagesse.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section Header - Green & Black */}
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {t_("Vos Statistiques", "Your Statistics")}
+          <h2 className="text-2xl md:text-3xl font-bold mb-2">
+            <span className="text-[#2ECC71]">{t_("Vos", "Your")}</span>{' '}
+            <span className="text-black dark:text-white">{t_("Statistiques", "Statistics")}</span>
           </h2>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-muted-foreground">
             {t_("Un aperçu de votre activité et de vos performances", "An overview of your activity and performance")}
           </p>
         </div>
 
-        {/* Enhanced Stats Cards - Single Blue Accent */}
+        {/* Enhanced Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {/* Monthly Usage Card */}
           <motion.div
@@ -455,29 +508,28 @@ function ImmigrationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Utilisation mensuelle", "Monthly Usage")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+                    <p className="text-2xl font-bold text-[#2ECC71]">
                       {monthlyCount}/2
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {t_("simulations utilisées", "simulations used")}
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Plane className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="w-6 h-6 text-white" />
                   </div>
                 </div>
                 <div className="mt-4">
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
                     <motion.div 
-                      className="bg-gradient-to-r from-blue-500 to-cyan-500 h-2.5 rounded-full"
+                      className="bg-[#2ECC71] h-2.5 rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${Math.min((monthlyCount / 2) * 100, 100)}%` }}
                       transition={{ duration: 0.8, delay: 0.2 }}
@@ -501,23 +553,22 @@ function ImmigrationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Terminées", "Completed")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+                    <p className="text-2xl font-bold text-[#2ECC71]">
                       {simulations.filter(s => s.status === 'COMPLETED').length}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {t_("simulations terminées", "simulations completed")}
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <CheckCircle className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <CheckCircle className="w-6 h-6 text-white" />
                   </div>
                 </div>
               </CardContent>
@@ -530,23 +581,22 @@ function ImmigrationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.2 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                      {t_("Pays explorés", "Countries Explored")}
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      {t_("Pays Explorés", "Countries Explored")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
-                      {new Set(simulations.map(s => s.country)).size}
+                    <p className="text-2xl font-bold text-[#2ECC71]">
+                    {new Set(simulations.filter(s => s.status === 'COMPLETED').map(s => s.country)).size}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {t_("pays différents", "different countries")}
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Globe className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <MapPin className="w-6 h-6 text-white" />
                   </div>
                 </div>
               </CardContent>
@@ -559,29 +609,28 @@ function ImmigrationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.3 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Score moyen", "Average Score")}
                     </p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
-                      {simulations.filter(s => s.score).length > 0 
-                        ? `${Math.round(simulations.filter(s => s.score).reduce((acc, s) => acc + (s.score || 0), 0) / simulations.filter(s => s.score).length)}%`
+                    <p className="text-2xl font-bold text-[#2ECC71]">
+                    {simulations.filter(s => s.status === 'COMPLETED' && (s.finalScore || s.score)).length > 0 
+                        ? `${Math.round(simulations.filter(s => s.status === 'COMPLETED' && (s.finalScore || s.score)).reduce((acc, s) => acc + (s.finalScore || s.score || 0), 0) / simulations.filter(s => s.status === 'COMPLETED' && (s.finalScore || s.score)).length)}%`
                         : '--'
                       }
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {simulations.filter(s => s.score).length > 0 
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {simulations.filter(s => s.status === 'COMPLETED' && (s.finalScore || s.score)).length > 0 
                         ? t_("basé sur vos résultats", "based on your results")
                         : t_("aucun score disponible", "no scores available")
                       }
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Award className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Trophy className="w-6 h-6 text-white" />
                   </div>
                 </div>
               </CardContent>
@@ -591,16 +640,16 @@ function ImmigrationPageContent() {
 
         {/* Section Header */}
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
             {t_("Actions Rapides", "Quick Actions")}
           </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            {t_("Gérez vos simulations et explorez les fonctionnalités", "Manage your simulations and explore features")}
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            {t_("Gérez vos simulations et consultez vos résultats", "Manage your simulations and view your results")}
           </p>
         </div>
 
-        {/* Enhanced Navigation Cards - Single Blue Accent */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {/* Enhanced Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Questions Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -609,26 +658,26 @@ function ImmigrationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/immigration-simulations/questions')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <BookOpen className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <BookOpen className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  {t_("Questions d'immigration", "Immigration Questions")}
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                  {t_("Configurer Simulation", "Configure Simulation")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
-                  {t_("Pratiquez avec des questions spécifiques à chaque pays et adaptées à votre situation", "Practice with country-specific questions adapted to your situation")}
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
+                  {t_("Configurez votre simulation d'immigration en choisissant le pays, le type d'immigration et vos préférences", 
+                      "Configure your immigration simulation by choosing the country, immigration type, and your preferences")}
                 </p>
-                <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-2 transition-all">
-                  {t_("Commencer", "Start")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
+                  {t_("Configurer", "Configure")}
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </CardContent>
             </Card>
@@ -642,32 +691,32 @@ function ImmigrationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/immigration-simulations/cultural')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Users className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Users className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  {t_("Contexte culturel", "Cultural Context")}
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                  {t_("Contexte Culturel", "Cultural Context")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
-                  {t_("Apprenez les nuances culturelles et les attentes sociales de votre pays de destination", "Learn cultural nuances and social expectations of your destination country")}
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
+                  {t_("Comprenez les nuances culturelles et les attentes spécifiques à chaque pays", 
+                      "Understand cultural nuances and country-specific expectations")}
                 </p>
-                <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Explorer", "Explore")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Documents Card */}
+          {/* Documents Guide Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -675,26 +724,26 @@ function ImmigrationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/immigration-simulations/documents')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <FileText className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <FileText className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  {t_("Agents d'immigration", "Immigration Agents")}
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                  {t_("Nos Agents", "Our Agents")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
-                  {t_("Vérifiez et organisez tous les documents nécessaires pour votre dossier d'immigration", "Check and organize all necessary documents for your immigration file")}
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
+                  {t_("Connectez-vous avec nos agents d'immigration certifiés pour obtenir un accompagnement personnalisé et une expertise reconnue", 
+                      "Connect with our certified immigration agents for personalized support and recognized expertise")}
                 </p>
-                <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-2 transition-all">
-                  {t_("Vérifier", "Check")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
+                  {t_("Voir les agents", "View Agents")}
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </CardContent>
             </Card>
@@ -708,191 +757,262 @@ function ImmigrationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80 h-full" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/immigration-simulations/results')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <BarChart3 className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Trophy className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  {t_("Résultats et Performance", "Results and Performance")}
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                  {t_("Résultats et performance", "Results & Performance")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 flex-grow">
-                  {t_("Consultez vos résultats détaillés, analysez vos performances et suivez vos progrès", "Review your detailed results, analyze your performance and track your progress")}
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
+                  {t_("Analysez vos résultats de simulation, suivez les tendances d'amélioration et consultez des métriques de performance détaillées", 
+                      "Analyze your simulation results, track improvement trends, and view detailed performance metrics")}
                 </p>
-                <div className="flex items-center text-sm text-blue-600 dark:text-blue-400 font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Voir les résultats", "View Results")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
                 </div>
               </CardContent>
             </Card>
           </motion.div>
         </div>
 
-        {/* Recent Activity - Matching Voice Simulation Style */}
-        <Card className="border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50">
-          <CardHeader className="border-b border-gray-200 dark:border-gray-800">
-            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-gray-100">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center border border-blue-100 dark:border-blue-900">
-                <History className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+
+        {/* Recent Activity - Liquid Glass */}
+        <div className="mb-6">
+          <h2 className="text-lg font-bold mb-2">
+            <span className="text-[#2ECC71]">{t_("Activité", "Activity")}</span>{' '}
+            <span className="text-black dark:text-white">{t_("récente", "Recent")}</span>
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            {t_("Vos dernières simulations", "Your latest simulations")}
+          </p>
               </div>
-              <span>{t_("Activité récente", "Recent Activity")}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
+        
+        <div className="bg-white/5 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-xl p-6">
+          <div className="space-y-3">
             {simulations.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center border border-blue-100 dark:border-blue-900">
-                  <Plane className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Plane className="w-10 h-10 text-purple-600 dark:text-purple-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
                   {t_("Aucune simulation pour le moment", "No simulations yet")}
                 </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                  {t_("Commencez votre première simulation d'immigration pour explorer votre nouveau pays", "Start your first immigration simulation to explore your new country")}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+                  {t_("Commencez votre parcours en démarrant votre première simulation d'immigration", 
+                      "Start your journey by starting your first immigration simulation")}
                 </p>
-                {accessGranted && (
                   <Button
-                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
-                    onClick={() => router.push('/immigration-simulations/questions')}
+                  className="bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold shadow-lg"
+                  onClick={handleStartImmigrationSimulation}
+                  size="lg"
                   >
-                    <BookOpen className="w-4 h-4 mr-2" />
-                    {t_("Commencer une simulation", "Start a Simulation")}
+                  <Plus className="w-5 h-5 mr-2" />
+                  {t_("Démarrer une simulation", "Start a Simulation")}
                   </Button>
-                )}
               </div>
             ) : (
               <div className="space-y-3">
                 {simulations
                   .filter((sim) => {
-                    const dateStr = sim.createdAt;
-                    const createdDate = new Date(dateStr);
-                    return dateStr && !isNaN(createdDate.getTime());
+                    // Only show simulations with valid dates and real data
+                    const scheduledDate = sim.scheduledDate ? new Date(sim.scheduledDate) : null;
+                    const createdDate = sim.createdAt ? new Date(sim.createdAt) : null;
+                    return (scheduledDate && !isNaN(scheduledDate.getTime())) || 
+                           (createdDate && !isNaN(createdDate.getTime()));
                   })
                   .slice(0, 5)
-                  .map((simulation, idx) => {
-                    const dateStr = simulation.createdAt;
-                    const createdDate = new Date(dateStr);
-                    const formattedDate = createdDate.toLocaleDateString('fr-FR', {
+                  .map((simulation) => {
+                    // Use scheduledDate if valid, otherwise fallback to createdAt
+                    const dateStr = simulation.scheduledDate || simulation.createdAt;
+                    const date = dateStr ? new Date(dateStr) : new Date();
+                    const isValidDate = !isNaN(date.getTime());
+                    
+                    // Format date properly
+                    const formattedDate = isValidDate 
+                      ? date.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', {
                       day: 'numeric',
-                      month: 'long',
+                          month: 'short',
                       year: 'numeric'
-                    });
-                    const formattedTime = createdDate.toLocaleTimeString('fr-FR', {
+                        })
+                      : '';
+                    
+                    const formattedTime = isValidDate && simulation.scheduledDate
+                      ? date.toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-US', {
                       hour: '2-digit',
                       minute: '2-digit'
-                    });
+                        })
+                      : '';
+
+                    const statusLabels = {
+                      'SCHEDULED': { fr: 'Programmée', en: 'Scheduled' },
+                      'ACTIVE': { fr: 'Active', en: 'Active' },
+                      'COMPLETED': { fr: 'Terminée', en: 'Completed' },
+                      'CANCELLED': { fr: 'Annulée', en: 'Cancelled' },
+                      'EXPIRED': { fr: 'Expirée', en: 'Expired' }
+                    };
+
+                    // Check if simulation should be EXPIRED (scheduledDate has passed and status is SCHEDULED)
+                    const scheduledDateObj = simulation.scheduledDate ? new Date(simulation.scheduledDate) : null;
+                    const now = new Date();
+                    const isExpired = scheduledDateObj && 
+                                     simulation.status === 'SCHEDULED' && 
+                                     scheduledDateObj < now;
+                    const displayStatus = isExpired ? 'EXPIRED' : simulation.status;
+                    
+                    const statusLabel = statusLabels[displayStatus as keyof typeof statusLabels]?.[lang as 'fr' | 'en'] || displayStatus;
+                    
+                    // Get country name
+                    const countryName = simulation.country ? 
+                      (simulation.country.charAt(0).toUpperCase() + simulation.country.slice(1).toLowerCase()) : 
+                      t_('Non spécifié', 'Not specified');
+                    
+                    // Get immigration type
+                    const immigrationType = simulation.immigrationType || simulation.category || t_('Général', 'General');
 
                     return (
-                      <motion.div
+                      <div
                         key={simulation.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        className="group relative overflow-hidden rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 bg-white dark:bg-gray-800/50 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                        onClick={() => router.push(`/immigration-simulations/${simulation.id}`)}
+                        className="flex items-center gap-6 p-4 rounded-lg bg-white dark:bg-gray-800 shadow-md border border-gray-200 dark:border-gray-700"
                       >
-                        <div className="p-5 flex items-center justify-between">
-                          {/* Icon */}
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 ${
-                            simulation.status === 'COMPLETED' 
-                              ? 'bg-gradient-to-br from-blue-500 to-cyan-500' 
-                              : simulation.status === 'SCHEDULED'
-                              ? 'bg-gradient-to-br from-blue-400 to-blue-500'
-                              : simulation.status === 'ACTIVE'
-                              ? 'bg-gradient-to-br from-amber-400 to-amber-500'
-                              : 'bg-gradient-to-br from-gray-400 to-gray-500'
-                          }`}>
-                            {simulation.status === 'COMPLETED' ? (
-                              <CheckCircle className="w-6 h-6 text-white" />
-                            ) : simulation.status === 'SCHEDULED' ? (
-                              <Clock className="w-6 h-6 text-white" />
-                            ) : simulation.status === 'ACTIVE' ? (
-                              <Target className="w-6 h-6 text-white" />
-                            ) : (
-                              <AlertTriangle className="w-6 h-6 text-white" />
-                            )}
-                          </div>
-
-                          {/* Details */}
-                          <div className="flex-1 min-w-0 ml-4">
-                            <div className="flex items-center gap-2 mb-1">
-                              <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                        {/* Date and Time */}
+                        <div className="min-w-[140px]">
+                          {isValidDate ? (
+                            <>
+                              <p className="font-bold text-black dark:text-white text-sm">
                                 {formattedDate}
-                              </div>
+                              </p>
                               {formattedTime && (
-                                <>
-                                  <span className="text-gray-400">•</span>
-                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                     {formattedTime}
-                                  </div>
+                                </p>
+                              )}
                                 </>
+                          ) : (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{t_("Date non disponible", "Date not available")}</p>
                               )}
                             </div>
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                                <Globe className="w-4 h-4" />
-                                <span>{simulation.country} - {simulation.category}</span>
+                        {/* Country */}
+                        <div className="min-w-[180px]">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t_("Pays", "Country")}</p>
+                          <p className="font-bold text-black dark:text-white text-sm">
+                            {countryName}
+                          </p>
                               </div>
-                              {simulation.duration && (
-                                <>
-                                  <span className="text-gray-400">•</span>
-                                  <div className="flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-400">
-                                    <Clock className="w-4 h-4" />
-                                    <span>{Math.floor(simulation.duration / 60)} {t_('min', 'min')}</span>
+                        {/* Type */}
+                        <div className="min-w-[150px]">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t_("Type", "Type")}</p>
+                          <p className="font-bold text-black dark:text-white text-sm">
+                            {immigrationType}
+                          </p>
+                        </div>
+                        {/* Status */}
+                        <div className="min-w-[120px]">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t_("Statut", "Status")}</p>
+                          <div className="flex items-center gap-2">
+                            {displayStatus === 'SCHEDULED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-[#2ECC71]"></div>
+                                <p className="text-[#2ECC71] font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'COMPLETED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-[#2ECC71]"></div>
+                                <p className="text-[#2ECC71] font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'CANCELLED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-red-500"></div>
+                                <p className="text-red-500 font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'EXPIRED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-orange-500"></div>
+                                <p className="text-orange-500 font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'ACTIVE' && (
+                              <>
+                                <div className="relative flex h-2 w-2">
+                                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-500 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
                                   </div>
+                                <p className="text-yellow-500 font-bold text-sm">{statusLabel}</p>
                                 </>
                               )}
                             </div>
                           </div>
-
-                          {/* Status and Score */}
-                          <div className="flex items-center gap-3 ml-4">
-                            <Badge
-                              variant="outline"
-                              className={`${getStatusColor(simulation.status)} flex items-center gap-1.5`}
-                            >
-                              {getStatusIcon(simulation.status)}
-                              <span>
-                                {simulation.status === 'SCHEDULED' ? t_('Programmée', 'Scheduled') : 
-                                 simulation.status === 'ACTIVE' ? t_('Active', 'Active') :
-                                 simulation.status === 'COMPLETED' ? t_('Terminée', 'Completed') : t_('Annulée', 'Cancelled')}
-                              </span>
-                            </Badge>
-                            {simulation.score && (
-                              <div className="px-3 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900">
-                                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                                  {simulation.score}%
-                                </span>
+                        {/* Score */}
+                        <div className="min-w-[80px] text-right">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t_("Score", "Score")}</p>
+                          <p className={`text-lg font-bold ${(simulation.finalScore || simulation.score) ? 'text-[#2ECC71]' : 'text-gray-500'}`}>
+                            {(simulation.finalScore || simulation.score) ? `${simulation.finalScore || simulation.score}%` : '--'}
+                          </p>
                               </div>
-                            )}
-                            <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-600 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+                        {/* Actions */}
+                        <div className="flex items-center gap-3 ml-auto">
+                          {displayStatus === 'SCHEDULED' && (
+                            <>
+                              <button
+                                onClick={() => router.push(`/immigration-simulations/${simulation.id}`)}
+                                className="text-sm font-medium text-black dark:text-white hover:text-[#2ECC71] transition-colors"
+                              >
+                                {t_("Démarrer", "Start")}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(t_("Êtes-vous sûr de vouloir annuler cette simulation ?", "Are you sure you want to cancel this simulation?"))) {
+                                    return;
+                                  }
+                                  try {
+                                    const response = await apiClient.delete(`/immigration-simulation/cancel/${simulation.id}`);
+                                    if (response.success) {
+                                      fetchSimulations();
+                                    }
+                                  } catch (error) {
+                                    console.error('Error cancelling simulation:', error);
+                                  }
+                                }}
+                                className="text-sm font-medium text-black dark:text-white hover:text-red-500 transition-colors"
+                              >
+                                {t_("Annuler", "Cancel")}
+                              </button>
+                            </>
+                          )}
+                          {displayStatus === 'COMPLETED' && (simulation.finalScore || simulation.score) && (
+                            <button
+                              onClick={() => router.push(`/immigration-simulations/results?id=${simulation.id}`)}
+                              className="text-sm font-medium text-[#2ECC71] hover:text-[#27c066] transition-colors"
+                            >
+                              {t_("Voir les Résultats", "View Results")}
+                            </button>
+                          )}
+                          {displayStatus === 'EXPIRED' && (
+                            <button
+                              onClick={() => router.push(`/immigration-simulations/${simulation.id}`)}
+                              className="text-sm font-medium text-black dark:text-white hover:text-[#2ECC71] transition-colors"
+                            >
+                              {t_("Reporter", "Reschedule")}
+                            </button>
+                          )}
                           </div>
                         </div>
-                      </motion.div>
                     );
                   })}
-                {simulations.length > 5 && (
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-                    <Button
-                      variant="ghost"
-                      className="w-full text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                      onClick={() => router.push('/immigration-simulations/history')}
-                    >
-                      {t_("Voir toute l'activité", "View All Activity")}
-                      <ChevronRight className="w-4 h-4 ml-2" />
-                    </Button>
                   </div>
                 )}
               </div>
-            )}
-          </CardContent>
-        </Card>
+        </div>
       </main>
     </div>
   );

@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { useLang } from "@/components/language-provider"
 import { apiClient } from "@/lib/api-client"
-import { ChevronLeft, ChevronRight, Send, X, Clock, AlertTriangle, CheckCircle, Volume2, Flag, ChevronDown, ChevronUp, MoreVertical, Type, Wifi, Battery } from "lucide-react"
+import { ChevronLeft, ChevronRight, Send, X, Clock, AlertTriangle, CheckCircle, Volume2, Flag, ChevronDown, ChevronUp, MoreVertical, Type, Wifi, Battery, BookOpen } from "lucide-react"
 import UniversalContentViewer from "@/components/universal-content-viewer"
 import AudioRecorder from "@/components/audio-recorder"
 import ExamModeIndicator from "@/components/exam-mode-indicator"
@@ -24,6 +24,11 @@ interface Question {
   allowPause?: boolean
   allowRewind?: boolean
   timeLimit?: number
+  passage?: string | null // Reading passage or context (separate from question text) - can be long (500-2000+ words)
+  fileUrl?: string | null // PDF URL for question-level documents
+  minWords?: number | null // Minimum word count for Expression Écrite
+  maxWords?: number | null // Maximum word count for Expression Écrite
+  writingType?: string | null // Writing type: "article", "essay", "letter"
   // Backend field names
   questionText?: string
   questionTextEn?: string
@@ -36,6 +41,7 @@ interface TestData {
   duration: number
   questions: Question[]
   fileUrl?: string
+  category?: string // Test category (ORAL, READING, etc.)
 }
 
 export default function TakeTestPage() {
@@ -57,6 +63,45 @@ export default function TakeTestPage() {
   const [markedForReview, setMarkedForReview] = useState<Set<string>>(new Set())
   const [showTimer, setShowTimer] = useState(true)
   const [showQuestionList, setShowQuestionList] = useState(false)
+  const [audioPlayed, setAudioPlayed] = useState<Set<string>>(new Set()) // Track which audio has been played
+  const [videoPlayed, setVideoPlayed] = useState<Set<string>>(new Set()) // Track which video has been played
+  const [passagePage, setPassagePage] = useState<number>(1) // Pagination for long passages
+  const PASSAGE_WORDS_PER_PAGE = 1000 // Words per page for pagination
+
+  // Helper function to split passage into pages
+  const getPassagePages = (passage: string | null | undefined): string[] => {
+    if (!passage) return []
+    const words = passage.split(/\s+/)
+    const pages: string[] = []
+    for (let i = 0; i < words.length; i += PASSAGE_WORDS_PER_PAGE) {
+      pages.push(words.slice(i, i + PASSAGE_WORDS_PER_PAGE).join(' '))
+    }
+    return pages
+  }
+
+  // Helper function to get current passage page
+  const getCurrentPassagePage = (): string => {
+    if (!currentQuestion.passage) return ''
+    const pages = getPassagePages(currentQuestion.passage)
+    return pages[passagePage - 1] || currentQuestion.passage
+  }
+
+  // Helper function to get total pages for passage
+  const getTotalPassagePages = (): number => {
+    if (!currentQuestion.passage) return 1
+    const pages = getPassagePages(currentQuestion.passage)
+    return Math.max(1, pages.length)
+  }
+
+  // Helper function to count words
+  const countWords = (text: string): number => {
+    return text.split(/\s+/).filter(w => w.length > 0).length
+  }
+
+  // Reset passage page when question changes
+  useEffect(() => {
+    setPassagePage(1)
+  }, [currentQuestionIndex])
 
   useEffect(() => {
     if (!testId) return;
@@ -161,6 +206,27 @@ export default function TakeTestPage() {
   const handleSubmitTest = async () => {
     try {
       setSubmitting(true)
+      
+      // Validate Expression Écrite word counts before submission
+      if (test && test.category === "WRITING") {
+        for (const question of test.questions) {
+          if (question.minWords && question.maxWords) {
+            const answer = answers[question.id] || ""
+            const wordCount = countWords(answer)
+            if (wordCount < question.minWords) {
+              alert(`Question ${test.questions.indexOf(question) + 1}: Minimum ${question.minWords} mots requis. Vous avez écrit ${wordCount} mots.`)
+              setSubmitting(false)
+              return
+            }
+            if (wordCount > question.maxWords) {
+              alert(`Question ${test.questions.indexOf(question) + 1}: Maximum ${question.maxWords} mots autorisés. Vous avez écrit ${wordCount} mots.`)
+              setSubmitting(false)
+              return
+            }
+          }
+        }
+      }
+      
       // First start the test attempt
       const startResponse = await apiClient.post(`/tests/${testId}/start`)
       if ((startResponse as any).success) {
@@ -366,22 +432,46 @@ export default function TakeTestPage() {
             {/* Left Pane - Reading Passage/Text */}
             <div className="flex-1 border-r border-gray-200 overflow-y-auto bg-white">
               <div className="p-6">
-                {test.fileUrl && (
+                {/* PDF Viewer for Compréhension Écrite (test-level PDF) */}
+                {test.fileUrl && test.category === "READING" && (
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold text-gray-900">
-                        {t("Passage", "Passage")}
+                        📄 Document à lire (Compréhension Écrite)
                       </h3>
                       <button className="text-gray-600 hover:text-gray-900">
                         <Type className="h-4 w-4" />
                       </button>
                     </div>
-                    <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <iframe
-                      src={test.fileUrl}
+                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                      <iframe
+                        src={`${test.fileUrl}#toolbar=1`}
                         className="w-full h-[600px]"
-                      title="Test document"
-                    />
+                        title="Reading comprehension document"
+                        style={{ border: 'none' }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 Lisez attentivement le document ci-dessus, puis répondez aux questions à droite.
+                    </p>
+                  </div>
+                )}
+                
+                {/* PDF Viewer for Expression Écrite (question-level PDF) */}
+                {currentQuestion?.fileUrl && test.category === "WRITING" && (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        📄 Document de référence
+                      </h3>
+                    </div>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                      <iframe
+                        src={`${currentQuestion.fileUrl}#toolbar=1`}
+                        className="w-full h-[400px]"
+                        title="Writing reference document"
+                        style={{ border: 'none' }}
+                      />
                     </div>
                   </div>
                 )}
@@ -403,23 +493,56 @@ export default function TakeTestPage() {
                         <div className="mb-6 space-y-4">
                       {currentQuestion.audioUrl && (
                             <div className="bg-gray-50 rounded-lg p-4">
-                            <UniversalContentViewer
-                              url={currentQuestion.audioUrl}
-                              title="Question Audio"
+                            <div className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                              🎧 Audio - Écoutez attentivement (une seule fois)
+                            </div>
+                            <audio
+                              src={currentQuestion.audioUrl}
+                              controls
                               className="w-full"
-                              allowDownload={false}
-                              autoPlay={false}
+                              onPlay={() => {
+                                if (!audioPlayed.has(currentQuestion.id)) {
+                                  setAudioPlayed((prev: Set<string>) => new Set(prev).add(currentQuestion.id));
+                                }
+                              }}
+                              onEnded={() => {
+                                if (!audioPlayed.has(currentQuestion.id)) {
+                                  setAudioPlayed((prev: Set<string>) => new Set(prev).add(currentQuestion.id));
+                                }
+                              }}
                             />
+                            {audioPlayed.has(currentQuestion.id) && (
+                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
+                                ⚠️ Audio déjà écouté - pas de réécoute possible
+                              </p>
+                            )}
                         </div>
                       )}
                       {currentQuestion.videoUrl && (
                             <div className="bg-gray-50 rounded-lg p-4">
-                            <UniversalContentViewer
-                              url={currentQuestion.videoUrl}
-                              title="Question Video"
-                              className="w-full"
-                              allowDownload={false}
+                            <div className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                              🎬 Vidéo - Regardez attentivement (une seule fois)
+                            </div>
+                            <video
+                              src={currentQuestion.videoUrl}
+                              controls
+                              className="w-full rounded-lg"
+                              onPlay={() => {
+                                if (!videoPlayed.has(currentQuestion.id)) {
+                                  setVideoPlayed((prev: Set<string>) => new Set(prev).add(currentQuestion.id));
+                                }
+                              }}
+                              onEnded={() => {
+                                if (!videoPlayed.has(currentQuestion.id)) {
+                                  setVideoPlayed((prev: Set<string>) => new Set(prev).add(currentQuestion.id));
+                                }
+                              }}
                             />
+                            {videoPlayed.has(currentQuestion.id) && (
+                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 italic">
+                                ⚠️ Vidéo déjà regardée - pas de relecture possible
+                              </p>
+                            )}
                         </div>
                       )}
                       {currentQuestion.imageUrl && (
@@ -432,10 +555,53 @@ export default function TakeTestPage() {
                         </div>
                       )}
                       
-                      {/* Question Text as Passage */}
-                      <p className="text-base leading-relaxed whitespace-pre-wrap">
-                        {currentQuestion.text || currentQuestion.questionText || ''}
-                      </p>
+                      {/* Reading Passage - Separate from Question (for Reading Comprehension) */}
+                      {currentQuestion.passage && test.category === "READING" ? (
+                        <div className="mb-6 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                          <div className="mb-3 flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <BookOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                              <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                                📖 Passage à lire (Compréhension Écrite)
+                              </h4>
+                            </div>
+                            {/* Pagination for long passages */}
+                            {getTotalPassagePages() > 1 && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setPassagePage(prev => Math.max(1, prev - 1))}
+                                  disabled={passagePage === 1}
+                                  className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  <ChevronLeft className="h-4 w-4" />
+                                </button>
+                                <span className="text-sm text-blue-900 dark:text-blue-100 px-2">
+                                  Page {passagePage} sur {getTotalPassagePages()}
+                                </span>
+                                <button
+                                  onClick={() => setPassagePage(prev => Math.min(getTotalPassagePages(), prev + 1))}
+                                  disabled={passagePage === getTotalPassagePages()}
+                                  className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  <ChevronRight className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-4 bg-white dark:bg-gray-800 rounded border border-blue-100 dark:border-blue-900 max-h-[600px] overflow-y-auto">
+                            <p className="text-base leading-relaxed whitespace-pre-wrap text-gray-800 dark:text-gray-200">
+                              {getCurrentPassagePage()}
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
+                      
+                      {/* Question Text - Only if different from passage */}
+                      {!currentQuestion.passage && (currentQuestion.text || currentQuestion.questionText) ? (
+                        <p className="text-base leading-relaxed whitespace-pre-wrap">
+                          {currentQuestion.text || currentQuestion.questionText}
+                        </p>
+                      ) : null}
                     </div>
                     </div>
                   )}
@@ -476,8 +642,40 @@ export default function TakeTestPage() {
                 {/* Question Prompt */}
                 <div className="mb-6">
                   <h2 className="text-base font-medium text-gray-900 mb-4">
-                    {currentQuestion.type === "multiple-choice" 
+                    {test.category === "WRITING" && currentQuestion.writingType ? (
+                      <div className="space-y-2">
+                        <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                          <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">
+                            📝 Expression Écrite - {currentQuestion.writingType === "article" ? "Article" : currentQuestion.writingType === "essay" ? "Essai" : "Lettre"}
+                          </p>
+                          <p className="text-sm text-gray-800 dark:text-gray-200">
+                            {currentQuestion.questionText || currentQuestion.text || "Écrivez votre texte en vous basant sur le passage fourni."}
+                          </p>
+                          {currentQuestion.minWords && currentQuestion.maxWords && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                              Longueur requise: {currentQuestion.minWords}-{currentQuestion.maxWords} mots
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ) : currentQuestion.type === "multiple-choice" 
                       ? t("Which choice completes the text with the most logical and precise word or phrase?", "Which choice completes the text with the most logical and precise word or phrase?")
+                      : (currentQuestion.type === "oral" || currentQuestion.type === "expression_orale" || test.category === "ORAL")
+                      ? (
+                        <div className="space-y-3">
+                          <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                            <p className="text-sm font-semibold text-purple-900 dark:text-purple-100 mb-2">
+                              📝 Sujet d'Expression Orale:
+                            </p>
+                            <p className="text-base text-gray-800 dark:text-gray-200">
+                              {currentQuestion.text || currentQuestion.questionText || "Sujet d'expression orale"}
+                            </p>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            Enregistrez votre réponse audio sur ce sujet. Votre réponse sera évaluée par un expert selon les critères TCF/TEF.
+                          </p>
+                        </div>
+                      )
                       : currentQuestion.text || currentQuestion.questionText
                     }
                   </h2>
@@ -557,20 +755,161 @@ export default function TakeTestPage() {
                     </div>
                   )}
 
-                  {/* Short Answer / Written Expression */}
-                  {(currentQuestion.type === "short-answer" || currentQuestion.type === "essay") && (
+                  {/* Expression Orale (Speaking) - Audio Recording */}
+                  {(currentQuestion.type === "oral" || currentQuestion.type === "expression_orale" || test.category === "ORAL") && (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border-2 border-purple-200 dark:border-purple-800">
+                        <div className="mb-3 flex items-center space-x-2">
+                          <Volume2 className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                          <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                            🎤 Expression Orale - Enregistrez votre réponse
+                          </h4>
+                        </div>
+                        <p className="text-xs text-purple-700 dark:text-purple-300 mb-4">
+                          {test.duration ? `Durée maximale: ${test.duration} minutes` : "Enregistrez votre réponse audio sur le sujet donné"}
+                        </p>
+                        <AudioRecorder
+                          onRecordingComplete={async (blob) => {
+                            try {
+                              // Upload audio to get URL
+                              const formData = new FormData();
+                              formData.append('file', blob, 'recording.webm');
+                              formData.append('category', 'TEST');
+                              formData.append('title', `Expression_Orale_${currentQuestion.id}`);
+                              
+                              const uploadResponse = await apiClient.post('/upload', formData, {
+                                headers: { 'Content-Type': 'multipart/form-data' }
+                              });
+                              
+                              if (uploadResponse.success && (uploadResponse.data as any)?.url) {
+                                const audioUrl = (uploadResponse.data as any).url;
+                                
+                                // Transcribe audio using AI
+                                const transcriptionResponse = await apiClient.post('/ai/transcription', {
+                                  videoUrl: audioUrl,
+                                  lessonTitle: currentQuestion.questionText || 'Expression Orale',
+                                  courseTitle: test.title
+                                });
+                                
+                                const transcription = (transcriptionResponse as any)?.data?.transcription || (transcriptionResponse as any)?.transcription || '';
+                                
+                                // Store transcription as answer
+                                handleAnswerChange(currentQuestion.id, transcription);
+                                
+                                // Also store audio URL for evaluation
+                                const currentAnswer = answers[currentQuestion.id] || '';
+                                if (currentAnswer) {
+                                  handleAnswerChange(currentQuestion.id, `${currentAnswer}|AUDIO_URL:${audioUrl}`);
+                                } else {
+                                  handleAnswerChange(currentQuestion.id, `${transcription}|AUDIO_URL:${audioUrl}`);
+                                }
+                              }
+                            } catch (error) {
+                              console.error('Error uploading/transcribing audio:', error);
+                            }
+                          }}
+                          maxDuration={test.duration ? test.duration * 60 : 300} // Convert minutes to seconds
+                        />
+                        {answers[currentQuestion.id] && !answers[currentQuestion.id].includes('AUDIO_URL:') && (
+                          <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border border-purple-200 dark:border-purple-800">
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Transcription:</p>
+                            <p className="text-sm text-gray-800 dark:text-gray-200">
+                              {answers[currentQuestion.id].split('|')[0]}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Short Answer / Written Expression / Expression Écrite */}
+                  {(currentQuestion.type === "short-answer" || currentQuestion.type === "essay" || test.category === "WRITING") && (
                     <div className="space-y-3">
+                      {/* Expression Écrite: Show passage if available */}
+                      {test.category === "WRITING" && currentQuestion.passage && (
+                        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border-2 border-green-200 dark:border-green-800">
+                          <div className="mb-2 flex items-center space-x-2">
+                            <BookOpen className="w-4 h-4 text-green-600 dark:text-green-400" />
+                            <h4 className="text-sm font-semibold text-green-900 dark:text-green-100">
+                              📝 Contexte pour votre écriture
+                            </h4>
+                          </div>
+                          <div className="p-3 bg-white dark:bg-gray-800 rounded border border-green-100 dark:border-green-900 max-h-[300px] overflow-y-auto">
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap text-gray-800 dark:text-gray-200">
+                              {currentQuestion.passage}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Writing Type Indicator for Expression Écrite */}
+                      {test.category === "WRITING" && currentQuestion.writingType && (
+                        <div className="mb-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-sm text-green-900 dark:text-green-100">
+                          Type d'écriture: {currentQuestion.writingType === "article" ? "Article" : currentQuestion.writingType === "essay" ? "Essai" : "Lettre"}
+                        </div>
+                      )}
+                      
                       <Textarea
-                        placeholder={t("Écrivez votre réponse ici...", "Write your answer here...")}
+                        placeholder={
+                          test.category === "WRITING" 
+                            ? t("Écrivez votre texte ici (article, essai ou lettre)...", "Write your text here (article, essay or letter)...")
+                            : t("Écrivez votre réponse ici...", "Write your answer here...")
+                        }
                         value={answers[currentQuestion.id] || ""}
                         onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                        className="min-h-48 border-2 border-gray-200 focus:border-blue-500 resize-none rounded-lg p-4"
+                        className={`border-2 border-gray-200 focus:border-blue-500 resize-none rounded-lg p-4 ${
+                          test.category === "WRITING" ? "min-h-96" : "min-h-48"
+                        }`}
                       />
-                      <div className="flex justify-between items-center text-xs text-gray-600">
+                      <div className="flex justify-between items-center text-xs">
                         <div className="flex gap-4">
-                          <span>{t("Mots:", "Words:")} {(answers[currentQuestion.id] || "").split(/\s+/).filter(w => w.length > 0).length}</span>
-                          <span>{t("Caractères:", "Characters:")} {(answers[currentQuestion.id] || "").length}</span>
+                          <span className={(() => {
+                            const wordCount = countWords(answers[currentQuestion.id] || "")
+                            const minWords = currentQuestion.minWords || 0
+                            const maxWords = currentQuestion.maxWords || Infinity
+                            if (test.category === "WRITING") {
+                              if (wordCount < minWords) {
+                                return "text-orange-600 font-semibold"
+                              } else if (wordCount > maxWords) {
+                                return "text-red-600 font-semibold"
+                              } else {
+                                return "text-green-600 font-semibold"
+                              }
+                            }
+                            return "text-gray-600"
+                          })()}>
+                            {t("Mots:", "Words:")} {countWords(answers[currentQuestion.id] || "")}
+                            {test.category === "WRITING" && currentQuestion.minWords && currentQuestion.maxWords && (
+                              <span className="ml-1">
+                                ({currentQuestion.minWords}-{currentQuestion.maxWords} requis)
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-gray-600">{t("Caractères:", "Characters:")} {(answers[currentQuestion.id] || "").length}</span>
                         </div>
+                        {/* Word count validation message */}
+                        {test.category === "WRITING" && currentQuestion.minWords && currentQuestion.maxWords && (() => {
+                          const wordCount = countWords(answers[currentQuestion.id] || "")
+                          if (wordCount < currentQuestion.minWords!) {
+                            return (
+                              <span className="text-orange-600 text-xs font-medium">
+                                ⚠️ Minimum {currentQuestion.minWords} mots requis
+                              </span>
+                            )
+                          } else if (wordCount > currentQuestion.maxWords!) {
+                            return (
+                              <span className="text-red-600 text-xs font-medium">
+                                ⚠️ Maximum {currentQuestion.maxWords} mots autorisés
+                              </span>
+                            )
+                          } else {
+                            return (
+                              <span className="text-green-600 text-xs font-medium">
+                                ✅ Nombre de mots valide
+                              </span>
+                            )
+                          }
+                        })()}
                       </div>
                     </div>
                   )}

@@ -43,7 +43,8 @@ import {
   RefreshCw,
   ChevronRight,
   History,
-  MessageSquare
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -52,16 +53,14 @@ import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 import { useTheme } from '@/components/theme-provider';
 import Link from 'next/link';
-import { Bell } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getComprehensiveProfilePictureUrl } from '@/lib/utils/profilePicture';
-import GlobeAnimation from '@/components/GlobeAnimation';
+import Image from 'next/image';
+import { SimulationHeader } from '@/components/SimulationHeader';
 
 interface VoiceSimulation {
   id: string;
   scheduledDate: string;
-  voicePreference: 'MALE' | 'FEMALE';
-  status: 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  voicePreference: 'MALE' | 'FEMALE' | string;
+  status: 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
   overallScore?: number;
   fluencyScore?: number;
   grammarScore?: number;
@@ -71,6 +70,7 @@ interface VoiceSimulation {
   feedback?: string;
   duration: number;
   createdAt: string;
+  questionsData?: any;
 }
 
 function SimulationPageContent() {
@@ -82,25 +82,13 @@ function SimulationPageContent() {
   const t_ = (fr: string, en: string) => lang === "fr" ? fr : en;
   
   // Get profile picture URL
-  const profileImageUrl = userProfile?.avatar
-    ? getComprehensiveProfilePictureUrl(userProfile.email || '', userProfile.avatar)
-    : userProfile?.email
-      ? getComprehensiveProfilePictureUrl(userProfile.email, '')
-      : '';
-  
-  // Get user initials from name or email
-  const userInitials = userProfile?.name
-    ? userProfile.name.split(' ').map((n: string) => n.charAt(0)).join('').toUpperCase().slice(0, 2) || userProfile.email?.charAt(0).toUpperCase() || 'U'
-    : userProfile?.email
-      ? userProfile.email.charAt(0).toUpperCase()
-      : 'U';
-
   const [simulations, setSimulations] = useState<VoiceSimulation[]>([]);
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [subscriptionTier, setSubscriptionTier] = useState<string>('FREE');
   const [hasCheckedAccess, setHasCheckedAccess] = useState(false);
   const [accessGranted, setAccessGranted] = useState(false);
+  const [isStartingSimulation, setIsStartingSimulation] = useState(false);
 
   useEffect(() => {
     // Only check access when userProfile is loaded and haven't checked yet
@@ -218,12 +206,82 @@ function SimulationPageContent() {
     }
   };
 
+  const handleStartVapiSimulation = async () => {
+    try {
+      setIsStartingSimulation(true);
+      toast.loading(t_('Création de la simulation...', 'Creating simulation...'));
+
+      // Step 1: Get user's voice preference
+      let voicePreference: string | undefined;
+      try {
+        const savedPreference = localStorage.getItem('voicePreference');
+        if (savedPreference) {
+          const saved = JSON.parse(savedPreference);
+          if (saved.voiceId) {
+            voicePreference = saved.voiceId;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load voice preference from localStorage:', e);
+      }
+
+      // If no preference in localStorage, try to get from backend
+      if (!voicePreference) {
+        try {
+          const response = await apiClient.get('/users/preferences/voice');
+          if (response.success && response.data) {
+            const voiceData = response.data as any;
+            if (voiceData.voiceId) {
+              voicePreference = voiceData.voiceId;
+            }
+          }
+        } catch (e) {
+          console.warn('Could not load voice preference from backend:', e);
+        }
+      }
+
+      // Step 2: Create simulation with AUTO booking type and immediate date (now + 5 seconds for instant start)
+      const now = new Date();
+      const scheduledDate = new Date(now.getTime() + 5 * 1000); // 5 seconds from now for instant start
+
+      const bookingResponse = await apiClient.post('/voice-simulation/book', {
+        bookingType: 'AUTO',
+        preferredDates: [scheduledDate.toISOString()],
+        voicePreference: voicePreference
+      });
+
+      if (!bookingResponse.success || !bookingResponse.data) {
+        throw new Error(bookingResponse.error?.message || t_('Échec de la création de la simulation', 'Failed to create simulation'));
+      }
+
+      const simulationId = bookingResponse.data.simulation?.id || bookingResponse.data.id;
+      if (!simulationId) {
+        throw new Error(t_('ID de simulation non trouvé', 'Simulation ID not found'));
+      }
+
+      toast.dismiss();
+      toast.success(t_('Simulation créée avec succès', 'Simulation created successfully'));
+
+      // Step 3: Redirect to simulation room - let the room page handle starting
+      // The simulation room will check if it's accessible and allow the user to start it
+      // This supports both immediate start (user clicks start button) and scheduled access (via email link)
+      router.push(`/simulation-vocale/${simulationId}`);
+    } catch (error: any) {
+      console.error('Error starting VAPI simulation:', error);
+      toast.dismiss();
+      toast.error(error.message || t_('Erreur lors du démarrage de la simulation', 'Error starting simulation'));
+    } finally {
+      setIsStartingSimulation(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors = {
       'SCHEDULED': 'bg-blue-100 text-blue-800',
       'ACTIVE': 'bg-yellow-100 text-yellow-800',
       'COMPLETED': 'bg-green-100 text-green-800',
-      'CANCELLED': 'bg-red-100 text-red-800'
+      'CANCELLED': 'bg-red-100 text-red-800',
+      'EXPIRED': 'bg-orange-100 text-orange-800'
     };
     return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
@@ -234,6 +292,7 @@ function SimulationPageContent() {
       case 'ACTIVE': return <Target className="h-4 w-4" />;
       case 'COMPLETED': return <CheckCircle className="h-4 w-4" />;
       case 'CANCELLED': return <X className="h-4 w-4" />;
+      case 'EXPIRED': return <AlertTriangle className="h-4 w-4" />;
       default: return <Clock className="h-4 w-4" />;
     }
   };
@@ -248,157 +307,146 @@ function SimulationPageContent() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
-      {/* Rounded Dark Container with Liquid Glass Effect - Header */}
-      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 w-[95%] max-w-6xl">
-        <div className="bg-slate-900/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl px-6 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left: Sound Wave Icon and Title */}
-            <div className="flex items-center gap-3">
-              {/* Sound Wave Icon - Green */}
-              <div className="flex items-end gap-1 h-6">
-                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '12px', animation: 'pulse 1s ease-in-out infinite' }} />
-                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '18px', animation: 'pulse 1s ease-in-out infinite 0.2s' }} />
-                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '24px', animation: 'pulse 1s ease-in-out infinite 0.4s' }} />
-                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '18px', animation: 'pulse 1s ease-in-out infinite 0.6s' }} />
-                <div className="w-1 bg-[#2ECC71] rounded-full" style={{ height: '12px', animation: 'pulse 1s ease-in-out infinite 0.8s' }} />
-              </div>
-              <span className="text-lg md:text-xl text-white font-normal">
-                {t_("Pratique d'Entretien IA", "AI Interview Practice")}
-              </span>
-            </div>
-            
-            {/* Center: Navigation Links */}
-            <nav className="hidden md:flex items-center gap-6 md:gap-8 text-base md:text-lg text-white font-normal">
-              <Link href="/simulation-vocale/booking" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-                {t_("Nouvelle Simulation", "New Simulation")}
-              </Link>
-              <Link href="/simulation-vocale/usage" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-                {t_("Historique", "History")}
-              </Link>
-              <Link href="/simulation-vocale/results" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-                {t_("Feedback", "Feedback")}
-              </Link>
-              <Link href="/settings" className="hover:text-[#2ECC71] transition-colors whitespace-nowrap">
-                {t_("Paramètres", "Settings")}
-              </Link>
-            </nav>
-            
-            {/* Right: Bell and Profile Picture */}
-            <div className="flex items-center gap-4">
-              <button
-                aria-label="Notifications"
-                className="relative p-2 text-white hover:text-[#2ECC71] transition-colors"
-              >
-                <Bell className="w-5 h-5" />
-              </button>
-              <Avatar className="w-10 h-10 border-2 border-[#2ECC71]/50">
-                <AvatarImage 
-                  src={profileImageUrl}
-                  alt={userProfile?.name || 'User'}
-                />
-                <AvatarFallback className="bg-[#2ECC71] text-white font-semibold">
-                  {userInitials}
-                </AvatarFallback>
-              </Avatar>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SimulationHeader currentPage="dashboard" />
 
-      {/* Hero Section - White Background */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-black pt-32">
+      {/* Hero Section - Enhanced with Image and Better Design */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-black pt-32 pb-16">
         {/* Floating Background Elements */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-[#2ECC71]/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-[#2ECC71]/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
 
         <div className="container relative mx-auto max-w-screen-2xl px-4 md:px-8 pt-16 md:pt-24 pb-16 md:pb-24">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Side: Text Content */}
+            {/* Left Side: Image with Liquid Glass Effect */}
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center lg:text-left space-y-6"
+              transition={{ duration: 0.8 }}
+              className="flex justify-center lg:justify-start"
             >
-              {/* Main Title - Green with Globe Animation */}
-              <div className="flex items-center gap-4 justify-center lg:justify-start">
+              <div className="relative w-full max-w-lg">
+                {/* Liquid Glass Container */}
+                <div className="relative bg-white/10 dark:bg-white/5 backdrop-blur-3xl rounded-3xl p-6 md:p-8 border-2 border-white/20 dark:border-white/10 shadow-2xl">
+                  {/* Inner Glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/10 via-transparent to-[#2ECC71]/5 rounded-3xl" />
+                  
+                  {/* Image Container */}
+                  <div className="relative rounded-2xl overflow-hidden shadow-xl">
+                    <Image
+                      src="/images/simution.png"
+                      alt={t_("Simulation vocale", "Voice Simulation")}
+                      width={600}
+                      height={800}
+                      className="w-full h-auto object-contain"
+                      priority
+                    />
+                    {/* Overlay Gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#2ECC71]/5 to-transparent pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Right Side: Text Content and Calendar */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="space-y-8"
+            >
+              {/* Main Title - Enhanced Typography */}
+              <div className="text-center lg:text-left space-y-4">
                 <h1 
-                  className="text-5xl md:text-6xl xl:text-7xl font-bold leading-[1.1] tracking-tight"
-                  style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.02em' }}
+                  className="text-4xl md:text-5xl xl:text-6xl font-black leading-[1.1] tracking-tight"
+                  style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', letterSpacing: '-0.03em' }}
                 >
                   <span className="text-[#2ECC71]">
                     {t_("Pratiquez votre", "Practice Your")}
                   </span>
                   <br />
-                  <span className="text-[#2ECC71]">
+                  <span className="text-black dark:text-white">
                     {t_("Entretien en Français", "French Interview")}
                   </span>
                 </h1>
-                <div className="hidden lg:block w-20 h-20">
-                  <GlobeAnimation className="w-full h-full" />
-                </div>
+
+                {/* Enhanced Description */}
+                <p 
+                  className="text-lg md:text-xl text-gray-700 dark:text-gray-300 font-medium leading-relaxed max-w-2xl"
+                  style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', lineHeight: '1.7' }}
+                >
+                  {t_(
+                    "Améliorez votre fluidité et développez votre confiance pour votre prochain entretien avec notre IA avancée. Recevez des corrections en temps réel et progressez rapidement.",
+                    "Improve your fluency and build confidence for your next interview with our advanced AI. Receive real-time corrections and progress quickly."
+                  )}
+                </p>
               </div>
 
-              {/* Description - White/Black based on theme */}
-              <p 
-                className="text-xl md:text-2xl text-foreground font-medium leading-relaxed"
-                style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
-              >
-                {t_(
-                  "Améliorez votre fluidité et développez votre confiance pour votre prochain entretien avec notre IA avancée.",
-                  "Improve your fluency and build confidence for your next interview with our advanced AI."
-                )}
-              </p>
-
-              {/* CTA Button - Green */}
+              {/* Centered CTA Button */}
               {accessGranted && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ delay: 0.4 }}
                   className="flex justify-center lg:justify-start"
                 >
                   <Button
-                    onClick={() => router.push('/simulation-vocale/booking')}
-                    className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-semibold px-8 py-4 text-lg relative overflow-hidden group transition-all duration-300 hover:scale-105"
+                    onClick={handleStartVapiSimulation}
+                    disabled={isStartingSimulation}
+                    className="rounded-full bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold px-8 py-4 text-lg relative overflow-hidden group transition-all duration-300 hover:scale-105 shadow-lg shadow-[#2ECC71]/30 disabled:opacity-50 disabled:cursor-not-allowed"
                     size="lg"
                   >
+                    {isStartingSimulation ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                        <span className="relative z-10">{t_("Démarrage...", "Starting...")}</span>
+                      </>
+                    ) : (
+                      <>
                     <Play className="w-5 h-5 mr-2" />
                     <span className="relative z-10">{t_("Démarrer une Simulation", "Start Simulation")}</span>
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                      </>
+                    )}
                   </Button>
                 </motion.div>
               )}
-            </motion.div>
 
-            {/* Right Side: Calendar with Green Icons */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="flex flex-col items-center justify-center"
-            >
-              {/* Calendar Card */}
-              <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-xl border-2 border-gray-100 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-black dark:text-white mb-4 text-center" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-                  {t_("Comment commencer", "How to Start")}
-                </h3>
-                <div className="space-y-3">
-                  {[
-                    { step: "1", icon: CalendarIcon, text: t_("Réservez votre session", "Book your session") },
-                    { step: "2", icon: Mic, text: t_("Pratiquez à l'oral", "Practice speaking") },
-                    { step: "3", icon: Trophy, text: t_("Recevez vos résultats", "Get your results") }
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                      <div className="w-8 h-8 rounded-full bg-[#2ECC71] text-white flex items-center justify-center text-sm font-bold">
-                        {item.step}
+              {/* Bigger Calendar Card - Liquid Glass */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="w-full"
+              >
+                <div className="bg-white/10 dark:bg-white/5 backdrop-blur-3xl rounded-3xl p-8 md:p-10 border-2 border-white/20 dark:border-white/10 shadow-2xl">
+                  {/* Inner Glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/10 via-transparent to-[#2ECC71]/5 rounded-3xl pointer-events-none" />
+                  
+                  <h3 className="text-2xl md:text-3xl font-bold text-black dark:text-white mb-6 text-center relative z-10" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+                    {t_("Comment commencer", "How to Start")}
+                  </h3>
+                  <div className="space-y-4 relative z-10">
+                    {[
+                      { step: "1", icon: CalendarIcon, text: t_("Réservez votre session", "Book your session"), desc: t_("Choisissez votre date et heure", "Choose your date and time") },
+                      { step: "2", icon: Mic, text: t_("Pratiquez à l'oral", "Practice speaking"), desc: t_("Entraînez-vous avec notre IA", "Train with our AI") },
+                      { step: "3", icon: Trophy, text: t_("Recevez vos résultats", "Get your results"), desc: t_("Analysez vos performances", "Analyze your performance") }
+                    ].map((item, idx) => (
+                      <div key={idx} className="flex items-start gap-4 p-4 rounded-2xl bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 dark:border-white/10 hover:bg-white/20 dark:hover:bg-white/10 transition-all duration-300">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#2ECC71] to-[#27c066] text-white flex items-center justify-center text-lg font-bold shadow-lg shadow-[#2ECC71]/30 flex-shrink-0">
+                          {item.step}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <item.icon className="w-5 h-5 text-[#2ECC71]" />
+                            <span className="text-base md:text-lg font-bold text-black dark:text-white">{item.text}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 ml-8">{item.desc}</p>
+                        </div>
                       </div>
-                      <item.icon className="w-5 h-5 text-[#2ECC71]" />
-                      <span className="text-sm font-medium text-foreground">{item.text}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             </motion.div>
           </div>
         </div>
@@ -495,23 +543,22 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Utilisation mensuelle", "Monthly Usage")}
                     </p>
-                    <p className="text-3xl font-bold text-[#2ECC71]">
+                    <p className="text-2xl font-bold text-[#2ECC71]">
                       {monthlyCount}/2
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {t_("simulations utilisées", "simulations used")}
                     </p>
                 </div>
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <BarChart3 className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="w-6 h-6 text-white" />
                 </div>
               </div>
               <div className="mt-4">
@@ -541,23 +588,22 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Terminées", "Completed")}
                     </p>
-                    <p className="text-3xl font-bold text-[#2ECC71]">
+                    <p className="text-2xl font-bold text-[#2ECC71]">
                       {simulations.filter(s => s.status === 'COMPLETED').length}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {t_("simulations terminées", "simulations completed")}
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <CheckCircle className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <CheckCircle className="w-6 h-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -570,23 +616,22 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.2 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Programmées", "Scheduled")}
                     </p>
-                    <p className="text-3xl font-bold text-[#2ECC71]">
+                    <p className="text-2xl font-bold text-[#2ECC71]">
                     {simulations.filter(s => s.status === 'SCHEDULED').length}
                   </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {t_("en attente", "pending")}
                     </p>
                 </div>
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Clock className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Clock className="w-6 h-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -599,15 +644,14 @@ function SimulationPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.3 }}
           >
-            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <Card className="relative overflow-hidden group hover:shadow-xl transition-all duration-300 bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50">
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
                       {t_("Score moyen", "Average Score")}
                     </p>
-                    <p className="text-3xl font-bold text-[#2ECC71]">
+                    <p className="text-2xl font-bold text-[#2ECC71]">
                     {simulations.filter(s => s.overallScore).length > 0 
                         ? `${Math.round(simulations.filter(s => s.overallScore).reduce((acc, s) => acc + (s.overallScore || 0), 0) / simulations.filter(s => s.overallScore).length)}%`
                       : '--'
@@ -620,8 +664,8 @@ function SimulationPageContent() {
                       }
                   </p>
                 </div>
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Trophy className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Trophy className="w-6 h-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -631,10 +675,10 @@ function SimulationPageContent() {
 
         {/* Section Header */}
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
             {t_("Actions Rapides", "Quick Actions")}
           </h2>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             {t_("Gérez vos simulations et consultez vos résultats", "Manage your simulations and view your results")}
           </p>
         </div>
@@ -649,27 +693,26 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/usage')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <BarChart3 className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <BarChart3 className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Aperçu de l'utilisation", "Usage Overview")}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
                   {t_("Surveillez votre utilisation mensuelle des simulations, suivez vos progrès et consultez des analyses détaillées", 
                       "Monitor your monthly simulation usage, track your progress, and view detailed analytics")}
                 </p>
-                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Voir les détails", "View Details")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
             </CardContent>
           </Card>
@@ -683,27 +726,26 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/voice')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Settings className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Settings className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Paramètres vocaux", "Voice Settings")}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
                   {t_("Choisissez votre voix préférée, accent et prévisualisez différentes options pour vos simulations", 
                       "Choose your preferred voice, accent, and preview different options for your simulations")}
                 </p>
-                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Configurer", "Configure")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
             </CardContent>
           </Card>
@@ -717,27 +759,26 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/booking')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <CalendarIcon className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <CalendarIcon className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Réserver une simulation", "Book a Simulation")}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
                   {t_("Planifiez votre prochaine session de simulation vocale avec des options de réservation flexibles et des créneaux horaires", 
                       "Schedule your next voice simulation session with flexible booking options and time slots")}
                 </p>
-                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Réserver maintenant", "Book Now")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
             </CardContent>
           </Card>
@@ -751,27 +792,26 @@ function SimulationPageContent() {
             whileHover={{ y: -4 }}
           >
             <Card 
-              className="relative overflow-hidden cursor-pointer group bg-card/80 dark:bg-card/80 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 rounded-2xl hover:border-[#2ECC71]/50 dark:hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
+              className="relative overflow-hidden cursor-pointer group bg-white/5 dark:bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl hover:border-[#2ECC71]/50 h-full transition-all duration-300 hover:shadow-xl" 
               onClick={() => router.push('/simulation-vocale/results')}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/5 to-[#27c066]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               <CardContent className="p-6 relative h-full flex flex-col">
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-14 h-14 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                    <Trophy className="w-7 h-7 text-white" />
+                  <div className="w-12 h-12 bg-[#2ECC71] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <Trophy className="w-6 h-6 text-white" />
                   </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
+                  <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-[#2ECC71] group-hover:translate-x-1 transition-all duration-300" />
                 </div>
-                <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
+                <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-[#2ECC71] transition-colors">
                   {t_("Résultats et performance", "Results & Performance")}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4 flex-grow">
+                <p className="text-xs text-muted-foreground mb-4 flex-grow">
                   {t_("Analysez vos résultats de simulation, suivez les tendances d'amélioration et consultez des métriques de performance détaillées", 
                       "Analyze your simulation results, track improvement trends, and view detailed performance metrics")}
                 </p>
-                <div className="flex items-center text-sm text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
+                <div className="flex items-center text-xs text-[#2ECC71] font-semibold group-hover:gap-2 transition-all">
                   {t_("Voir les résultats", "View Results")}
-                  <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="w-3 h-3 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
             </CardContent>
           </Card>
@@ -779,18 +819,18 @@ function SimulationPageContent() {
         </div>
 
 
-        {/* Recent Activity - Blue Transparent Liquid Glass */}
+        {/* Recent Activity - Liquid Glass */}
         <div className="mb-6">
-          <h2 className="text-2xl md:text-3xl font-bold mb-2">
+          <h2 className="text-lg font-bold mb-2">
             <span className="text-[#2ECC71]">{t_("Activité", "Activity")}</span>{' '}
             <span className="text-black dark:text-white">{t_("récente", "Recent")}</span>
           </h2>
-          <p className="text-muted-foreground mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             {t_("Vos dernières simulations", "Your latest simulations")}
           </p>
         </div>
         
-        <div className="bg-blue-500/10 dark:bg-blue-500/5 backdrop-blur-xl rounded-2xl border border-blue-200/30 dark:border-blue-700/30 shadow-xl p-6">
+        <div className="bg-white/5 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-xl p-6">
           <div className="space-y-3">
             {simulations.length === 0 ? (
               <div className="text-center py-12">
@@ -850,93 +890,145 @@ function SimulationPageContent() {
                       'SCHEDULED': { fr: 'Programmée', en: 'Scheduled' },
                       'ACTIVE': { fr: 'Active', en: 'Active' },
                       'COMPLETED': { fr: 'Terminée', en: 'Completed' },
-                      'CANCELLED': { fr: 'Annulée', en: 'Cancelled' }
+                      'CANCELLED': { fr: 'Annulée', en: 'Cancelled' },
+                      'EXPIRED': { fr: 'Expirée', en: 'Expired' }
                     };
 
-                    const statusLabel = statusLabels[simulation.status as keyof typeof statusLabels]?.[lang as 'fr' | 'en'] || simulation.status;
+                    // Check if simulation should be EXPIRED (scheduledDate has passed and status is SCHEDULED)
+                    const scheduledDateObj = simulation.scheduledDate ? new Date(simulation.scheduledDate) : null;
+                    const now = new Date();
+                    const isExpired = scheduledDateObj && 
+                                     simulation.status === 'SCHEDULED' && 
+                                     scheduledDateObj < now;
+                    const displayStatus = isExpired ? 'EXPIRED' : simulation.status;
+                    
+                    const statusLabel = statusLabels[displayStatus as keyof typeof statusLabels]?.[lang as 'fr' | 'en'] || displayStatus;
+                    
+                    // Get voice name from questionsData if available
+                    const voiceName = simulation.questionsData?.voiceName || 
+                      (simulation.voicePreference === 'MALE' ? t_('Voix masculine', 'Male voice') : t_('Voix féminine', 'Female voice'));
 
                     return (
-                      <motion.div
+                      <div
                         key={simulation.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="group relative overflow-hidden rounded-xl bg-blue-500/20 dark:bg-blue-500/10 backdrop-blur-sm border border-blue-200/40 dark:border-blue-700/40 hover:border-blue-300/60 dark:hover:border-blue-600/60 hover:shadow-lg transition-all duration-300"
+                        className="flex items-center gap-6 p-4 rounded-lg bg-white dark:bg-gray-800 shadow-md border border-gray-200 dark:border-gray-700"
                       >
-                        <div className="p-5 flex items-center justify-between">
-                          <div className="flex items-center space-x-4 flex-1">
-                            {/* Icon */}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300 ${
-                              simulation.status === 'COMPLETED' 
-                                ? 'bg-[#2ECC71]' 
-                                : simulation.status === 'SCHEDULED'
-                                ? 'bg-blue-500'
-                                : simulation.status === 'ACTIVE'
-                                ? 'bg-yellow-500'
-                                : 'bg-gray-500'
-                            }`}>
-                              {simulation.status === 'COMPLETED' ? (
-                                <CheckCircle className="w-6 h-6 text-white" />
-                              ) : (
-                                <Mic className="w-6 h-6 text-white" />
-                              )}
-                      </div>
-
-                            {/* Details */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <div className="text-base font-semibold text-foreground">
+                        {/* Date and Time */}
+                        <div className="min-w-[140px]">
+                          {isValidDate ? (
+                            <>
+                              <p className="font-bold text-black dark:text-white text-sm">
                                   {formattedDate}
-                        </div>
+                              </p>
                                 {formattedTime && (
-                                  <>
-                                    <span className="text-muted-foreground">•</span>
-                        <div className="text-sm text-muted-foreground">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                       {formattedTime}
-                                    </div>
+                                </p>
+                              )}
                                   </>
+                          ) : (
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{t_("Date non disponible", "Date not available")}</p>
                                 )}
                               </div>
-                              <div className="flex items-center gap-3 flex-wrap">
-                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                  <Volume2 className="w-4 h-4 text-[#2ECC71]" />
-                                  <span>
-                                    {simulation.voicePreference === 'MALE' 
-                                      ? t_('Voix masculine', 'Male voice')
-                                      : t_('Voix féminine', 'Female voice')}
-                                  </span>
+                        {/* Voice */}
+                        <div className="min-w-[180px]">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t_("Voix", "Voice")}</p>
+                          <p className="font-bold text-black dark:text-white text-sm">
+                            {voiceName}
+                          </p>
                                 </div>
-                                {simulation.duration && (
-                                  <>
-                                    <span className="text-muted-foreground">•</span>
-                                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                      <Clock className="w-4 h-4 text-[#2ECC71]" />
-                                      <span>{Math.floor(simulation.duration / 60)} {t_('min', 'min')}</span>
+                        {/* Status */}
+                        <div className="min-w-[120px]">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t_("Statut", "Status")}</p>
+                          <div className="flex items-center gap-2">
+                            {displayStatus === 'SCHEDULED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-[#2ECC71]"></div>
+                                <p className="text-[#2ECC71] font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'COMPLETED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-[#2ECC71]"></div>
+                                <p className="text-[#2ECC71] font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'CANCELLED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-red-500"></div>
+                                <p className="text-red-500 font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'EXPIRED' && (
+                              <>
+                                <div className="size-2 rounded-full bg-orange-500"></div>
+                                <p className="text-orange-500 font-bold text-sm">{statusLabel}</p>
+                              </>
+                            )}
+                            {displayStatus === 'ACTIVE' && (
+                              <>
+                                <div className="relative flex h-2 w-2">
+                                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-500 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
                                     </div>
+                                <p className="text-yellow-500 font-bold text-sm">{statusLabel}</p>
                                   </>
                                 )}
                         </div>
                       </div>
-                    </div>
-
-                          {/* Status and Score */}
-                          <div className="flex items-center gap-3 ml-4">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm ${
-                              getStatusColor(simulation.status)
-                            }`}>
-                        {getStatusIcon(simulation.status)}
-                              {statusLabel}
-                      </span>
-                      {simulation.overallScore && (
-                              <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2ECC71]/10 border border-[#2ECC71]/30">
-                                <Trophy className="w-4 h-4 text-[#2ECC71]" />
-                                <span className="text-sm font-bold text-[#2ECC71]">
-                            {simulation.overallScore}%
-                          </span>
-                              </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-3 ml-auto">
+                          {displayStatus === 'SCHEDULED' && (
+                            <>
+                              <button
+                                onClick={() => router.push(`/simulation-vocale/booking?reschedule=${simulation.id}`)}
+                                className="text-sm font-medium text-black dark:text-white hover:text-[#2ECC71] transition-colors"
+                              >
+                                {t_("Reporter", "Reschedule")}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(t_("Êtes-vous sûr de vouloir annuler cette simulation ?", "Are you sure you want to cancel this simulation?"))) {
+                                    return;
+                                  }
+                                  try {
+                                    const response = await fetch(`/api/voice-simulation/cancel/${simulation.id}`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                      }
+                                    });
+                                    if (response.ok) {
+                                      window.location.reload();
+                                    }
+                                  } catch (error) {
+                                    console.error('Error cancelling simulation:', error);
+                                  }
+                                }}
+                                className="text-sm font-medium text-black dark:text-white hover:text-red-500 transition-colors"
+                              >
+                                {t_("Annuler", "Cancel")}
+                              </button>
+                            </>
+                          )}
+                          {displayStatus === 'COMPLETED' && simulation.overallScore && (
+                            <button
+                              onClick={() => router.push(`/simulation-vocale/results?id=${simulation.id}`)}
+                              className="text-sm font-medium text-[#2ECC71] hover:text-[#27c066] transition-colors"
+                            >
+                              {t_("Voir les Résultats", "View Results")}
+                            </button>
+                          )}
+                          {displayStatus === 'EXPIRED' && (
+                            <button
+                              onClick={() => router.push(`/simulation-vocale/booking?reschedule=${simulation.id}`)}
+                              className="text-sm font-medium text-black dark:text-white hover:text-[#2ECC71] transition-colors"
+                            >
+                              {t_("Reporter", "Reschedule")}
+                            </button>
                       )}
                     </div>
                   </div>
-                      </motion.div>
                     );
                   })}
             </div>

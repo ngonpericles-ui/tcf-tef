@@ -1,45 +1,42 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SharedDataProvider, useSharedData } from '@/components/shared-data-provider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  ArrowLeft,
   Plane,
   Globe,
-  FileText,
-  Calendar as CalendarIcon,
-  Users,
+  CalendarIcon,
   Clock,
   CheckCircle,
   AlertTriangle,
   Info,
-  Crown,
   ChevronRight,
+  ChevronLeft,
   Play,
   Pause,
   Mic,
   Volume2,
-  Headphones,
-  Settings,
+  Search,
+  X,
+  Edit,
+  Trash2,
   BookOpen,
   GraduationCap,
   Briefcase,
   Home,
   MapPin,
-  Building2,
-  Shield,
-  Brain,
-  Sparkles,
   Zap
 } from 'lucide-react';
+import { SimulationHeader } from '@/components/SimulationHeader';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { useRouter } from 'next/navigation';
@@ -62,6 +59,23 @@ interface VoiceOption {
   description?: string;
   voiceId?: string;
   sampleUrl?: string;
+  avatar?: string;
+  flag?: string;
+}
+
+interface ImmigrationSimulation {
+  id: string;
+  scheduledDate: string | null;
+  country: string;
+  immigrationType: string;
+  voicePreference: string;
+  questionsData?: any;
+  status: 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+  overallScore?: number;
+  finalScore?: number | null;
+  feedback?: string;
+  duration: number;
+  createdAt: string;
 }
 
 function QuestionsPageContent() {
@@ -74,24 +88,32 @@ function QuestionsPageContent() {
   // Configuration state
   const [selectedCountry, setSelectedCountry] = useState<string>(''); // CANADA, FRANCE, BELGIUM
   const [selectedTopic, setSelectedTopic] = useState<string>('immigration'); // immigration, school, work, relocation
-  const [selectedVoice, setSelectedVoice] = useState<string>('');
-  const [voicePreference, setVoicePreference] = useState<string>('TOUS'); // TOUS, MALE, FEMALE
-  const [accentPreference, setAccentPreference] = useState<string>('TOUS'); // TOUS, FRANCE, QUEBEC, BELGIUM
+  const [voicePreference, setVoicePreference] = useState<string>(''); // Store voice ID like 'france_male_1'
   
   // Booking state
   const [bookingType, setBookingType] = useState<'AUTO' | 'MANUAL'>('AUTO');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [availableSlots, setAvailableSlots] = useState<BookingSlot[]>([]);
+  const [bookings, setBookings] = useState<ImmigrationSimulation[]>([]);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<ImmigrationSimulation | null>(null);
   
   // Data state
-  const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
-  const [filteredVoices, setFilteredVoices] = useState<VoiceOption[]>([]);
+  const [availableVoices, setAvailableVoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingVoices, setLoadingVoices] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('all-statuses');
+  const [filterVoice, setFilterVoice] = useState<string>('all-voices');
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+  
+  // Calendar navigation
+  const [calendarMonth, setCalendarMonth] = useState(selectedDate || new Date());
 
   const countries = [
     { code: 'CANADA', name: t_('Canada', 'Canada'), flag: '🇨🇦' },
@@ -106,23 +128,129 @@ function QuestionsPageContent() {
     { code: 'relocation', name: t_('Déménagement / Famille', 'Relocation / Family'), icon: Home, desc: t_('Immigration pour regroupement familial', 'Immigration for family reunification') }
   ];
 
+  // All 8 voices with profile images and flags (matching voice simulation booking page)
+  const allVoices = [
+    {
+      id: 'france_male_1',
+      name: 'Pierre',
+      gender: 'MALE',
+      accent: 'FRANCE',
+      flag: '🇫🇷',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix masculine française professionnelle'
+    },
+    {
+      id: 'france_male_2',
+      name: 'Antoine',
+      gender: 'MALE',
+      accent: 'FRANCE',
+      flag: '🇫🇷',
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix masculine française claire'
+    },
+    {
+      id: 'france_female_1',
+      name: 'Marie',
+      gender: 'FEMALE',
+      accent: 'FRANCE',
+      flag: '🇫🇷',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix féminine française élégante'
+    },
+    {
+      id: 'quebec_male_1',
+      name: 'Jean-Baptiste',
+      gender: 'MALE',
+      accent: 'QUEBEC',
+      flag: '🇨🇦',
+      avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix masculine québécoise authentique'
+    },
+    {
+      id: 'quebec_male_2',
+      name: 'François',
+      gender: 'MALE',
+      accent: 'QUEBEC',
+      flag: '🇨🇦',
+      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix masculine québécoise expressive'
+    },
+    {
+      id: 'quebec_female_1',
+      name: 'Céline',
+      gender: 'FEMALE',
+      accent: 'QUEBEC',
+      flag: '🇨🇦',
+      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix féminine québécoise chaleureuse'
+    },
+    {
+      id: 'belgium_male_1',
+      name: 'Thomas',
+      gender: 'MALE',
+      accent: 'BELGIUM',
+      flag: '🇧🇪',
+      avatar: 'https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix masculine belge professionnelle'
+    },
+    {
+      id: 'belgium_female_1',
+      name: 'Sophie',
+      gender: 'FEMALE',
+      accent: 'BELGIUM',
+      flag: '🇧🇪',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=faces',
+      description: 'Voix féminine belge élégante'
+    }
+  ];
+  
+  // Merge backend voices with allVoices data
+  const voicesWithDetails = availableVoices.length > 0 
+    ? availableVoices.map((voice: any) => {
+        const voiceDetail = allVoices.find((v: any) => v.id === voice.id);
+        if (voiceDetail) {
+          const merged = { ...voiceDetail, ...voice };
+          merged.voiceId = voice.voiceId || merged.voiceId;
+          return merged;
+        }
+        return voice;
+      })
+    : allVoices.map((voice: any) => {
+        const voiceIdMap: Record<string, string> = {
+          'france_male_1': 'pNInz6obpgDQGcFmaJgB',
+          'france_male_2': 'VR6AewLTigWG4xSOukaG',
+          'france_female_1': 'EXAVITQu4vr4xnSDxMaL',
+          'quebec_male_1': 'cjVigY5qzO86Huf0OWal',
+          'quebec_male_2': 'JBFqnCBsd6RMkjVDRZzb',
+          'quebec_female_1': 'FGY2WhTYpPnrIDTdsKH5',
+          'belgium_male_1': 'CwhRBWXzGAHq8TQ4Fs17',
+          'belgium_female_1': 'XB0fDUnXU5powFXDhCwa'
+        };
+        return { ...voice, voiceId: voiceIdMap[voice.id] || '' };
+      });
+
   useEffect(() => {
-    fetchAvailableVoices();
-    loadVoicePreference();
-    generateAvailableSlots();
+    fetchBookings();
   }, []);
 
   useEffect(() => {
-    if (availableVoices.length > 0) {
-      applyFilter(availableVoices, accentPreference, voicePreference);
-    }
-  }, [accentPreference, availableVoices, voicePreference, selectedCountry]);
+      generateAvailableSlots();
+  }, [selectedDate]);
 
   useEffect(() => {
-    if (selectedDate) {
-      generateAvailableSlots();
-    }
-  }, [selectedDate]);
+    fetchAvailableVoices();
+    loadVoicePreference();
+    
+    // Cleanup audio refs on unmount
+    return () => {
+      audioRefs.current.forEach((audio) => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+      audioRefs.current.clear();
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   // Refresh slots every minute if today is selected
   useEffect(() => {
@@ -143,6 +271,13 @@ function QuestionsPageContent() {
     }
   }, [selectedDate]);
 
+  // Sync calendar month with selected date
+  useEffect(() => {
+    if (selectedDate) {
+      setCalendarMonth(selectedDate);
+    }
+  }, [selectedDate]);
+
   const loadVoicePreference = async () => {
     try {
       const savedPreference = localStorage.getItem('voicePreference');
@@ -150,9 +285,7 @@ function QuestionsPageContent() {
         try {
           const saved = JSON.parse(savedPreference);
           if (saved.voiceId) {
-            setSelectedVoice(saved.voiceId);
-            setVoicePreference(saved.gender || 'TOUS');
-            setAccentPreference(saved.accent || 'TOUS');
+            setVoicePreference(saved.voiceId);
             return;
           }
         } catch (e) {
@@ -161,18 +294,12 @@ function QuestionsPageContent() {
       }
       
       try {
-        const response = await fetch('/api/users/preferences/voice', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('access_token')}`
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data?.voiceId) {
-            setSelectedVoice(data.data.voiceId);
-            setVoicePreference(data.data.gender || 'TOUS');
-            setAccentPreference(data.data.accent || 'TOUS');
+        const response = await apiClient.get('/users/preferences/voice');
+        if (response.success && response.data) {
+          const voiceData = response.data as any;
+          if (voiceData.voiceId) {
+            setVoicePreference(voiceData.voiceId);
+            localStorage.setItem('voicePreference', JSON.stringify(voiceData));
           }
         }
       } catch (backendError) {
@@ -186,18 +313,10 @@ function QuestionsPageContent() {
   const fetchAvailableVoices = async () => {
     try {
       setLoadingVoices(true);
-      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-      if (!token) return;
-
-      const response = await fetch('/api/voice-simulation/voices', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableVoices(data.data || []);
+      const response = await apiClient.get('/voice-simulation/voices');
+      if (response.success && response.data) {
+        const voicesData = Array.isArray(response.data) ? response.data : [];
+        setAvailableVoices(voicesData);
       }
     } catch (error) {
       console.error('Error fetching voices:', error);
@@ -207,71 +326,54 @@ function QuestionsPageContent() {
     }
   };
 
-  const applyFilter = (voices: VoiceOption[], accentFilterValue: string, genderFilter?: string) => {
-    let filtered = [...voices];
-    
-    // Filter by country accent if country is selected
-    if (selectedCountry) {
-      const countryAccentMap: { [key: string]: string } = {
-        'CANADA': 'QUEBEC',
-        'FRANCE': 'FRANCE',
-        'BELGIUM': 'BELGIUM'
-      };
-      
-      const countryAccent = countryAccentMap[selectedCountry];
-      if (countryAccent) {
-        filtered = filtered.filter((voice) => voice.accent === countryAccent);
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get('/immigration-simulation/history');
+      if (response.success && response.data) {
+        const bookingsData = Array.isArray(response.data) ? response.data : [];
+        setBookings(bookingsData);
       }
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      toast.error(t_('Erreur lors du chargement des réservations', 'Error loading bookings'));
+    } finally {
+      setLoading(false);
     }
-    
-    // Apply accent filter
-    if (accentFilterValue !== 'TOUS') {
-      filtered = filtered.filter((voice) => voice.accent === accentFilterValue);
-    }
-    
-    // Apply gender filter
-    if (genderFilter && genderFilter !== 'TOUS' && (genderFilter === 'MALE' || genderFilter === 'FEMALE')) {
-      filtered = filtered.filter((voice) => voice.gender === genderFilter);
-    }
-    
-    setFilteredVoices(filtered);
   };
 
   const generateAvailableSlots = () => {
     if (!selectedDate) return;
     
     const slots: BookingSlot[] = [];
-    const startHour = 9;
-    const endHour = 17;
-    const startMinute = 30;
-    const slotDuration = 30; // minutes
+    const date = selectedDate.toISOString().split('T')[0];
     
     const today = new Date();
     const selectedDateOnly = new Date(selectedDate);
     selectedDateOnly.setHours(0, 0, 0, 0);
     today.setHours(0, 0, 0, 0);
     const isToday = selectedDateOnly.getTime() === today.getTime();
-    const now = new Date();
     
-    for (let hour = startHour; hour <= endHour; hour++) {
-      for (let minute = (hour === startHour ? startMinute : 0); minute < 60; minute += slotDuration) {
-        if (hour === endHour && minute >= startMinute) break;
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+    
+    // Generate time slots - 9 AM to 7:00 PM
+    for (let hour = 9; hour <= 19; hour++) {
+      const maxMinute = hour === 19 ? 0 : 60;
+      for (let minute = 0; minute < maxMinute; minute += 30) {
+        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        const slotTimeInMinutes = hour * 60 + minute;
         
-        const slotTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        const slotDateTime = new Date(selectedDate);
-        slotDateTime.setHours(hour, minute, 0, 0);
-        
-        let available = true;
-        if (isToday && slotDateTime <= now) {
-          available = false;
-        }
+        const isAvailable = !isToday || slotTimeInMinutes > currentTimeInMinutes;
         
         slots.push({
-          id: `${slotTime}`,
-          date: selectedDate.toISOString().split('T')[0],
-          time: slotTime,
-          available,
-          duration: slotDuration
+          id: `${date}-${timeString}`,
+          date,
+          time: timeString,
+          available: isAvailable,
+          duration: 5
         });
       }
     }
@@ -279,43 +381,45 @@ function QuestionsPageContent() {
     setAvailableSlots(slots);
   };
 
-  const handleVoicePreview = async (voiceId: string) => {
+  // Voice preview handler (matching booking page)
+  const handlePreviewVoice = async (voiceId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    // Stop any currently playing audio
+    audioRefs.current.forEach((audio, id) => {
+      if (id !== voiceId) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    });
+
+    // If already playing this voice, stop it
     if (playingVoice === voiceId) {
-      // Stop playback
-      window.speechSynthesis.cancel();
+      const audio = audioRefs.current.get(voiceId);
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
       setPlayingVoice(null);
+      }
+      window.speechSynthesis.cancel();
       return;
     }
 
-    try {
-      setPlayingVoice(voiceId);
       setLoadingPreview(prev => new Set(prev).add(voiceId));
+    setPlayingVoice(voiceId);
 
-      const previewText = t_(
-        'Bonjour, je suis votre agent d\'immigration. Prêt à commencer votre entretien ?',
-        'Hello, I am your immigration officer. Ready to start your interview?'
-      );
+    try {
+      const response = await apiClient.post('/voice-simulation/preview', { voiceId });
+      
+      if (response.success && response.data) {
+        const data = response.data as any;
+        const { audioBase64, previewText, useBrowserTTS, error } = data;
 
-      const response = await fetch('/api/voice-simulation/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({ 
-          voiceId, 
-          text: previewText 
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const audioBase64 = data.data?.audioBase64 || data.data?.audio;
-        const useBrowserTTS = data.data?.useBrowserTTS;
-
-        if (audioBase64) {
-          // Use ElevenLabs audio
-          const audio = new Audio(audioBase64);
+        if (audioBase64 && !useBrowserTTS) {
+          const audioSrc = audioBase64.startsWith('data:') ? audioBase64 : `data:audio/mpeg;base64,${audioBase64}`;
+          const audio = new Audio(audioSrc);
+          audioRefs.current.set(voiceId, audio);
+          
           audio.onended = () => {
             setPlayingVoice(null);
             setLoadingPreview(prev => {
@@ -326,6 +430,19 @@ function QuestionsPageContent() {
           };
 
           audio.onerror = () => {
+            // Fallback to browser TTS
+            const previewText = t_('Bonjour, je suis votre agent d\'immigration. Prêt à commencer votre entretien ?', 'Hello, I am your immigration officer. Ready to start your interview?');
+            const utterance = new SpeechSynthesisUtterance(previewText);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 1.0;
+            
+            const voices = window.speechSynthesis.getVoices();
+            const frenchVoice = voices.find(v => v.lang.startsWith('fr')) || voices.find(v => v.lang.includes('FR'));
+            if (frenchVoice) {
+              utterance.voice = frenchVoice;
+            }
+            
+            utterance.onend = () => {
             setPlayingVoice(null);
             setLoadingPreview(prev => {
               const newSet = new Set(prev);
@@ -334,9 +451,19 @@ function QuestionsPageContent() {
             });
           };
 
+            window.speechSynthesis.speak(utterance);
+            setLoadingPreview(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(voiceId);
+              return newSet;
+            });
+          };
+
+          try {
           await audio.play();
-        } else if (useBrowserTTS || !audioBase64) {
+          } catch (playError) {
           // Fallback to browser TTS
+            const previewText = t_('Bonjour, je suis votre agent d\'immigration. Prêt à commencer votre entretien ?', 'Hello, I am your immigration officer. Ready to start your interview?');
           const utterance = new SpeechSynthesisUtterance(previewText);
           utterance.lang = 'fr-FR';
           utterance.rate = 1.0;
@@ -356,7 +483,29 @@ function QuestionsPageContent() {
             });
           };
 
-          utterance.onerror = () => {
+            window.speechSynthesis.speak(utterance);
+            setLoadingPreview(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(voiceId);
+              return newSet;
+            });
+          }
+        } else {
+          // Fallback to browser TTS
+          const previewText = t_('Bonjour, je suis votre agent d\'immigration. Prêt à commencer votre entretien ?', 'Hello, I am your immigration officer. Ready to start your interview?');
+          const utterance = new SpeechSynthesisUtterance(previewText);
+          utterance.lang = 'fr-FR';
+          utterance.rate = 1.0;
+          const voice = (voicesWithDetails || availableVoices).find((v: any) => v.id === voiceId);
+          utterance.pitch = voice?.gender === 'MALE' ? 0.8 : 1.2;
+          
+          const voices = window.speechSynthesis.getVoices();
+          const frenchVoice = voices.find(v => v.lang.startsWith('fr')) || voices.find(v => v.lang.includes('FR'));
+          if (frenchVoice) {
+            utterance.voice = frenchVoice;
+          }
+          
+          utterance.onend = () => {
             setPlayingVoice(null);
             setLoadingPreview(prev => {
               const newSet = new Set(prev);
@@ -366,12 +515,42 @@ function QuestionsPageContent() {
           };
 
           window.speechSynthesis.speak(utterance);
+          setLoadingPreview(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(voiceId);
+            return newSet;
+          });
         }
       }
-    } catch (error) {
-      console.error('Error generating voice preview:', error);
-      toast.error(t_('Erreur lors de la génération de l\'aperçu', 'Error generating preview'));
+    } catch (error: any) {
+      const is401Error = error?.response?.status === 401 || error?.message?.includes('401');
+      
+      if (!is401Error) {
+        console.error('Error previewing voice:', error);
+      }
+      
+      // Silently fall back to browser TTS
+      const previewText = t_('Bonjour, je suis votre agent d\'immigration. Prêt à commencer votre entretien ?', 'Hello, I am your immigration officer. Ready to start your interview?');
+      const utterance = new SpeechSynthesisUtterance(previewText);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 1.0;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const frenchVoice = voices.find(v => v.lang.startsWith('fr')) || voices.find(v => v.lang.includes('FR'));
+      if (frenchVoice) {
+        utterance.voice = frenchVoice;
+      }
+      
+      utterance.onend = () => {
       setPlayingVoice(null);
+      setLoadingPreview(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(voiceId);
+        return newSet;
+      });
+      };
+      
+      window.speechSynthesis.speak(utterance);
       setLoadingPreview(prev => {
         const newSet = new Set(prev);
         newSet.delete(voiceId);
@@ -380,23 +559,12 @@ function QuestionsPageContent() {
     }
   };
 
-  const handleVoiceSelection = (voiceId: string) => {
-    if (selectedVoice === voiceId) {
-      setSelectedVoice('');
-      toast.success(t_('Voix désélectionnée', 'Voice deselected'));
-    } else {
-      setSelectedVoice(voiceId);
-      const voice = availableVoices.find(v => v.id === voiceId);
-      if (voice) {
-        setVoicePreference(voice.gender);
-        setAccentPreference(voice.accent);
-      }
-      toast.success(t_('Voix sélectionnée avec succès', 'Voice selected successfully'));
+  const handleBookSimulation = async () => {
+    if (bookingType === 'MANUAL' && (!selectedDate || !selectedTime)) {
+      toast.error(t_('Veuillez sélectionner une date et une heure', 'Please select a date and time'));
+      return;
     }
-  };
 
-  const handleCreateSimulation = async () => {
-    // Validation
     if (!selectedCountry) {
       toast.error(t_('Veuillez sélectionner un pays', 'Please select a country'));
       return;
@@ -407,521 +575,1017 @@ function QuestionsPageContent() {
       return;
     }
 
-    if (bookingType === 'MANUAL' && (!selectedDate || !selectedTime)) {
-      toast.error(t_('Veuillez sélectionner une date et une heure', 'Please select a date and time'));
-      return;
-    }
-
-    if (!selectedVoice) {
+    if (!voicePreference) {
       toast.error(t_('Veuillez sélectionner une voix', 'Please select a voice'));
       return;
     }
 
+    setShowBookingModal(true);
+  };
+
+  const handleConfirmBooking = async () => {
     try {
-      setCreating(true);
-
-      // Prepare booking data
-      const scheduledDateTime = bookingType === 'MANUAL' && selectedDate && selectedTime
-        ? new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedTime}:00`)
-        : null;
-
-      const simulationData = {
+      const bookingData: any = {
+        bookingType: bookingType === 'AUTO' ? 'AUTO' : 'MANUAL',
+        voicePreference: voicePreference || undefined,
         country: selectedCountry.toLowerCase(),
         immigrationType: selectedTopic,
-        level: 'B1', // Default level
+        level: 'B1',
         personalInfo: {},
-        voicePreference: selectedVoice,
-        bookingType,
-        scheduledDate: scheduledDateTime?.toISOString(),
         questionsData: {
-          voiceId: selectedVoice,
+          voiceId: voicePreference,
           country: selectedCountry,
           topic: selectedTopic
         }
       };
 
-      // Create immigration simulation (similar to voice simulation booking)
-      const response = await fetch('/api/immigration-simulation/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify(simulationData)
+      if (bookingType === 'MANUAL' && selectedDate && selectedTime) {
+        const year = selectedDate.getFullYear();
+        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(selectedDate.getDate()).padStart(2, '0');
+        const dateString = `${year}-${month}-${day}T${selectedTime}:00`;
+        const scheduledDateTime = new Date(dateString);
+        
+        if (scheduledDateTime < new Date()) {
+          toast.error(t_('La date et l\'heure sélectionnées sont dans le passé', 'Selected date and time are in the past'));
+          return;
+        }
+        
+        bookingData.preferredDates = [scheduledDateTime.toISOString()];
+      } else if (bookingType === 'AUTO') {
+        bookingData.preferredDates = [];
+      }
+
+      const response = await apiClient.post('/immigration-simulation/book', bookingData);
+
+      if (response.success) {
+        toast.success(
+          t_(
+            'Simulation réservée avec succès! Vous allez recevoir un email de confirmation avec tous les détails.',
+            'Simulation booked successfully! You will receive a confirmation email with all the details.'
+          ),
+          { duration: 5000 }
+        );
+        setShowBookingModal(false);
+        setSelectedDate(new Date());
+        setSelectedTime('');
+        
+        setTimeout(async () => {
+          await fetchBookings();
+        }, 1000);
+      } else {
+        const errorMsg = (response as any).error?.message || (response as any).message || t_('Échec de la réservation', 'Failed to book simulation');
+        toast.error(errorMsg);
+      }
+    } catch (error: any) {
+      console.error('Error booking simulation:', error);
+      toast.error(t_('Erreur lors de la réservation', 'Failed to book simulation'));
+    }
+  };
+
+  const handleCancelBooking = async (booking: ImmigrationSimulation) => {
+    setSelectedBooking(booking);
+    setShowCancelModal(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!selectedBooking) return;
+
+    try {
+      const response = await apiClient.delete(`/immigration-simulation/cancel/${selectedBooking.id}`);
+      
+      if (response.success) {
+        toast.success(
+          t_('Simulation annulée avec succès', 'Simulation cancelled successfully'),
+          { duration: 3000 }
+        );
+        setShowCancelModal(false);
+        setSelectedBooking(null);
+        fetchBookings();
+      } else {
+        const errorMessage = (response as any).error?.message || (response as any).message || t_('Échec de l\'annulation', 'Failed to cancel');
+        throw new Error(errorMessage);
+      }
+    } catch (error: any) {
+      console.error('❌ Error canceling simulation:', error);
+      toast.error(
+        error.message || t_('Erreur lors de l\'annulation', 'Error canceling simulation')
+      );
+      setShowCancelModal(false);
+      setSelectedBooking(null);
+    }
+  };
+
+  const handleRescheduleBooking = async (booking: ImmigrationSimulation) => {
+    setSelectedBooking(booking);
+    setShowRescheduleModal(true);
+  };
+
+  const handleConfirmReschedule = async () => {
+    if (!selectedBooking || !selectedDate || !selectedTime) {
+      toast.error(t_('Veuillez sélectionner une date et une heure', 'Please select a date and time'));
+      return;
+    }
+
+    try {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}T${selectedTime}:00`;
+      const newDate = new Date(dateString);
+      
+      if (newDate < new Date()) {
+        toast.error(t_('La date et l\'heure sélectionnées sont dans le passé', 'Selected date and time are in the past'));
+        return;
+      }
+
+      const response = await apiClient.put(`/immigration-simulation/reschedule/${selectedBooking.id}`, {
+        newDate: newDate.toISOString(),
+        voicePreference: voicePreference || undefined
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(t_('Simulation d\'immigration créée avec succès', 'Immigration simulation created successfully'));
-        
-        // Redirect to simulation guide or room
-        if (data.data?.id) {
-          router.push(`/immigration-simulations/${data.data.id}/guide`);
-        } else {
-          router.push('/immigration-simulations');
-        }
+      if (response.success) {
+        toast.success(
+          t_('Simulation reprogrammée avec succès', 'Simulation rescheduled successfully'),
+          { duration: 3000 }
+        );
+        setShowRescheduleModal(false);
+        setSelectedBooking(null);
+        setSelectedDate(new Date());
+        setSelectedTime('');
+        await fetchBookings();
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        toast.error(errorData?.message || t_('Erreur lors de la création', 'Error creating simulation'));
+        const errorMessage = (response as any).error?.message || (response as any).message || t_('Échec de la reprogrammation', 'Failed to reschedule');
+        throw new Error(errorMessage);
       }
-    } catch (error) {
-      console.error('Error creating simulation:', error);
-      toast.error(t_('Erreur de connexion', 'Connection error'));
-    } finally {
-      setCreating(false);
+    } catch (error: any) {
+      console.error('❌ Error rescheduling simulation:', error);
+      toast.error(
+        error.message || t_('Erreur lors de la reprogrammation', 'Error rescheduling simulation')
+      );
+      setShowRescheduleModal(false);
+      setSelectedBooking(null);
     }
   };
 
-  const getAccentLabel = (accent: string) => {
-    switch (accent) {
-      case 'FRANCE': return { flag: '🇫🇷', text: t_('France', 'France') };
-      case 'QUEBEC': return { flag: '🇨🇦', text: t_('Québec', 'Quebec') };
-      case 'BELGIUM': return { flag: '🇧🇪', text: t_('Belgique', 'Belgium') };
-      default: return { flag: '🌍', text: accent };
+  // Filter voices by selected country
+  const filteredVoicesByCountry = selectedCountry 
+    ? (voicesWithDetails || availableVoices).filter((voice: any) => {
+        const countryAccentMap: { [key: string]: string } = {
+          'CANADA': 'QUEBEC',
+          'FRANCE': 'FRANCE',
+          'BELGIUM': 'BELGIUM'
+        };
+        const countryAccent = countryAccentMap[selectedCountry];
+        return countryAccent ? voice.accent === countryAccent : true;
+      })
+    : (voicesWithDetails || availableVoices);
+
+  // Calendar helpers
+  const currentMonth = calendarMonth.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { month: 'long', year: 'numeric' });
+  const capitalizedMonth = currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1);
+  
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    const newDate = new Date(calendarMonth);
+    if (direction === 'prev') {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setCalendarMonth(newDate);
+  };
+  
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+    return days;
+  };
+  
+  const calendarDays = getDaysInMonth(calendarMonth);
+  const today = new Date();
+  const isToday = (day: number) => {
+    return day === today.getDate() && 
+           calendarMonth.getMonth() === today.getMonth() && 
+           calendarMonth.getFullYear() === today.getFullYear();
+  };
+  const isSelected = (day: number) => {
+    if (!selectedDate) return false;
+    return day === selectedDate.getDate() && 
+           calendarMonth.getMonth() === selectedDate.getMonth() && 
+           calendarMonth.getFullYear() === selectedDate.getFullYear();
+  };
+  const isPast = (day: number) => {
+    const checkDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate < today;
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors = {
+      'SCHEDULED': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+      'ACTIVE': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+      'COMPLETED': 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+      'CANCELLED': 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      'EXPIRED': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+    };
+    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'SCHEDULED': return <Clock className="h-4 w-4" />;
+      case 'ACTIVE': return <Mic className="h-4 w-4" />;
+      case 'COMPLETED': return <CheckCircle className="h-4 w-4" />;
+      case 'CANCELLED': return <X className="h-4 w-4" />;
+      case 'EXPIRED': return <AlertTriangle className="h-4 w-4" />;
+      default: return <Clock className="h-4 w-4" />;
     }
   };
 
-  if (loading) {
+  if (loading && bookings.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-blue-600 border-t-transparent"></div>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{t_('Chargement...', 'Loading...')}</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#2ECC71]"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-      {/* Hero Section - Matching Voice Simulation Style */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-b border-gray-200 dark:border-gray-800">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(59,130,246,0.1)_1px,transparent_0)] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]"></div>
-        
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-200/30 dark:bg-blue-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-indigo-200/30 dark:bg-indigo-900/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+    <div className="min-h-screen bg-white dark:bg-black">
+      <SimulationHeader currentPage="questions" type="immigration" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center"
-          >
-            {/* Badge */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
-              className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800"
-            >
-              <Plane className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                {t_("Configuration de la Simulation", "Simulation Configuration")}
-              </span>
-            </motion.div>
-
-            {/* Main Title */}
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 dark:from-blue-400 dark:via-indigo-400 dark:to-blue-400 bg-clip-text text-transparent leading-tight">
-              {t_("Simulations d'Immigration", "Immigration Simulations")}
-            </h1>
-
-            {/* Description */}
-            <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed max-w-3xl mx-auto">
-              {t_(
-                "Configurez votre simulation d'immigration : choisissez votre pays de destination, votre sujet d'intérêt, et votre voix préférée pour un entretien réaliste avec un agent d'immigration.",
-                "Configure your immigration simulation: choose your destination country, your topic of interest, and your preferred voice for a realistic interview with an immigration officer."
-              )}
-            </p>
-
-            {/* SVG Illustration - Like Voice Simulation */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              className="flex justify-center mt-8"
-            >
-              <div className="relative w-full max-w-2xl">
-                <svg viewBox="0 0 600 400" className="w-full h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Background circles */}
-                  <circle cx="300" cy="200" r="180" fill="url(#gradient1)" opacity="0.1"/>
-                  <circle cx="300" cy="200" r="130" fill="url(#gradient2)" opacity="0.15"/>
-                  
-                  {/* Globe/World Map */}
-                  <circle cx="300" cy="180" r="100" fill="none" stroke="#3B82F6" strokeWidth="2" opacity="0.3"/>
-                  <circle cx="300" cy="180" r="85" fill="none" stroke="#60A5FA" strokeWidth="1.5" opacity="0.2"/>
-                  
-                  {/* Continents/Regions */}
-                  <path d="M 240 140 Q 270 130 300 140 Q 330 130 360 140 Q 350 150 340 160 Q 330 165 300 160 Q 270 165 250 160 Q 240 150 240 140" fill="#60A5FA" opacity="0.3"/>
-                  <path d="M 200 200 Q 240 190 280 200 Q 320 205 360 200 Q 380 220 360 240 Q 340 245 300 240 Q 260 245 220 240 Q 200 220 200 200" fill="#3B82F6" opacity="0.3"/>
-                  <path d="M 260 280 Q 300 275 340 280 Q 350 290 340 300 Q 330 305 300 300 Q 270 305 260 300 Q 250 290 260 280" fill="#2563EB" opacity="0.3"/>
-                  
-                  {/* Airplane */}
-                  <g transform="translate(300, 240) rotate(45)">
-                    <ellipse cx="0" cy="0" rx="60" ry="18" fill="#3B82F6" opacity="0.9"/>
-                    <ellipse cx="-25" cy="10" rx="35" ry="14" fill="#2563EB" opacity="0.8"/>
-                    <ellipse cx="-25" cy="-10" rx="35" ry="14" fill="#2563EB" opacity="0.8"/>
-                    <path d="M -50 -5 L -60 -12 L -50 -22 Z" fill="#1E40AF" opacity="0.9"/>
-                    <circle cx="-18" cy="0" r="2.5" fill="#E0F2FE"/>
-                    <circle cx="-6" cy="0" r="2.5" fill="#E0F2FE"/>
-                    <circle cx="6" cy="0" r="2.5" fill="#E0F2FE"/>
-                  </g>
-                  
-                  {/* Flight path */}
-                  <path d="M 180 140 Q 240 170 300 200 Q 350 225 400 260" stroke="#10B981" strokeWidth="3" strokeDasharray="8,5" opacity="0.5" fill="none"/>
-                  
-                  {/* Country markers */}
-                  <circle cx="180" cy="140" r="5" fill="#10B981"/>
-                  <circle cx="400" cy="260" r="5" fill="#10B981"/>
-                  <circle cx="250" cy="170" r="4" fill="#F59E0B"/>
-                  <circle cx="350" cy="230" r="4" fill="#F59E0B"/>
-                  
-                  {/* Immigration officer (left) */}
-                  <circle cx="150" cy="300" r="30" fill="#8B5CF6" opacity="0.3"/>
-                  <rect x="120" y="330" width="60" height="70" rx="30" fill="#8B5CF6" opacity="0.4"/>
-                  
-                  {/* Document/File icon */}
-                  <rect x="450" y="120" width="60" height="80" rx="8" fill="white" stroke="#3B82F6" strokeWidth="2"/>
-                  <rect x="460" y="140" width="40" height="3" rx="1.5" fill="#3B82F6" opacity="0.5"/>
-                  <rect x="460" y="150" width="35" height="3" rx="1.5" fill="#3B82F6" opacity="0.5"/>
-                  <rect x="460" y="160" width="40" height="3" rx="1.5" fill="#3B82F6" opacity="0.5"/>
-                  <circle cx="480" cy="180" r="8" fill="#10B981"/>
-                  <path d="M 476 180 L 479 183 L 484 178" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                  
-                  {/* Speech bubbles */}
-                  <path d="M 120 250 Q 90 240 70 260 L 85 270 Q 100 265 120 270 Z" fill="#8B5CF6" opacity="0.2"/>
-                  <circle cx="80" cy="235" r="10" fill="#8B5CF6" opacity="0.3"/>
-                  
-                  <path d="M 480 250 Q 510 240 530 260 L 515 270 Q 500 265 480 270 Z" fill="#06B6D4" opacity="0.2"/>
-                  <circle cx="520" cy="235" r="10" fill="#06B6D4" opacity="0.3"/>
-                  
-                  <defs>
-                    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#3B82F6"/>
-                      <stop offset="100%" stopColor="#2563EB"/>
-                    </linearGradient>
-                    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#60A5FA"/>
-                      <stop offset="100%" stopColor="#3B82F6"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
+      {/* Hero Section with Liquid Glass Background - Matching Booking Page */}
+      <section className="relative pt-32 pb-16 bg-white dark:bg-black overflow-hidden">
+        {/* Liquid Glass Background Image */}
+        <div className="absolute inset-0 -z-10">
+          <div 
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: 'url(https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1920&h=1080&fit=crop&q=80)',
+              filter: 'blur(80px) brightness(0.8)',
+              transform: 'scale(1.2)'
+            }}
+          />
+          {/* Enhanced Liquid Glass Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/80 via-white/60 to-white/80 dark:from-black/80 dark:via-black/60 dark:to-black/80 backdrop-blur-md" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent backdrop-blur-sm" />
+          {/* Animated Glass Orbs */}
+          <div className="absolute top-20 left-10 w-64 h-64 bg-[#2ECC71]/15 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-[#2ECC71]/8 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#2ECC71]/8 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent" style={{ backdropFilter: 'blur(1px)' }} />
               </div>
-            </motion.div>
-          </motion.div>
+        <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="flex flex-col gap-6 px-4 py-10 text-center items-center">
+            <div className="flex flex-col gap-4 max-w-3xl">
+              <h1 className="text-3xl md:text-4xl font-black leading-tight tracking-tight text-black dark:text-white">
+                {t_("Planification Intelligente pour un Entretien d'Immigration Réussi", "Smart Scheduling for Successful Immigration Interview")}
+              </h1>
+              <h2 className="text-base md:text-lg text-muted-foreground font-normal leading-normal">
+                {t_("Maîtrisez vos compétences d'entretien d'immigration avec une planification alimentée par l'IA et des sessions de pratique réalistes. Obtenez des commentaires instantanés pour parler en toute confiance.", "Master your immigration interview skills with AI-powered scheduling and realistic practice sessions. Get instant feedback to speak with confidence.")}
+              </h2>
         </div>
+            <Button 
+              className="rounded-full h-12 px-6 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-base"
+              onClick={() => {
+                const bookingSection = document.getElementById('booking-section');
+                bookingSection?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              {t_("Réserver votre Première Simulation", "Book Your First Simulation")}
+            </Button>
       </div>
+        </div>
+      </section>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Configuration Card */}
-        <Card className="mb-8 border-2 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-gray-900 dark:text-gray-100">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center border border-blue-100 dark:border-blue-900">
-                <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      <main className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-10 md:py-16" id="booking-section">
+        {/* Liquid Glass Background */}
+        <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#2ECC71]/10 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-[#2ECC71]/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "2s" }} />
               </div>
-              <span>{t_("Configuration de la simulation", "Simulation Configuration")}</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Country Selection */}
-            <div>
-              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
+        
+        {/* Book a Simulation Section */}
+        <section className="flex flex-col gap-8 mb-16">
+          <div className="px-4">
+            <h2 className="text-lg font-bold leading-tight text-black dark:text-white mb-1">
+              {t_("Réserver une Simulation", "Book a Simulation")}
+            </h2>
+            <p className="text-muted-foreground">
+              {t_("Choisissez votre pays, sujet, voix et méthode de réservation pour planifier votre prochaine session.", "Choose your country, topic, voice, and booking method to schedule your next session.")}
+            </p>
+          </div>
+
+          {/* Country and Topic Selection - New Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4">
+            {/* Country Selection Card */}
+            <div className="flex flex-col gap-4 p-6 rounded-lg bg-white/5 dark:bg-white/5 backdrop-blur-2xl border-2 border-white/20 dark:border-white/10 shadow-xl">
+              <h3 className="text-lg font-bold text-black dark:text-white">
                 {t_("Pays de destination", "Destination Country")} <span className="text-red-500">*</span>
-              </Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              </h3>
+              <div className="grid grid-cols-1 gap-3">
                 {countries.map((country) => (
-                  <motion.div
+                  <button
                     key={country.code}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Card
-                      className={`cursor-pointer transition-all duration-300 ${
+                    onClick={() => setSelectedCountry(country.code)}
+                    className={`flex items-center gap-4 p-4 rounded-xl transition-all border-2 ${
                         selectedCountry === country.code
-                          ? 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/30 shadow-lg'
-                          : 'border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
-                      }`}
-                      onClick={() => {
-                        setSelectedCountry(country.code);
-                        // Auto-filter voices by country accent
-                        const countryAccentMap: { [key: string]: string } = {
-                          'CANADA': 'QUEBEC',
-                          'FRANCE': 'FRANCE',
-                          'BELGIUM': 'BELGIUM'
-                        };
-                        const accent = countryAccentMap[country.code];
-                        if (accent) {
-                          setAccentPreference(accent);
-                          applyFilter(availableVoices, accent, voicePreference);
-                        }
-                      }}
-                    >
-                      <CardContent className="p-4 flex items-center gap-3">
+                        ? 'bg-white/20 dark:bg-white/10 border-[#2ECC71] shadow-lg shadow-[#2ECC71]/20'
+                        : 'bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border-white/20 dark:border-white/10 hover:border-[#2ECC71]/50'
+                    }`}
+                  >
                         <div className="text-3xl">{country.flag}</div>
-                        <div>
-                          <div className="font-semibold text-gray-900 dark:text-gray-100">{country.name}</div>
+                    <div className="flex-1 text-left">
+                      <p className="font-bold text-black dark:text-white">{country.name}</p>
+                    </div>
                           {selectedCountry === country.code && (
-                            <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-1" />
-                          )}
+                      <div className="size-6 flex items-center justify-center rounded-full bg-[#2ECC71] text-black shadow-md">
+                        <CheckCircle className="w-4 h-4" />
                         </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Topic Selection */}
-            <div>
-              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
+            {/* Topic Selection Card */}
+            <div className="flex flex-col gap-4 p-6 rounded-lg bg-white/5 dark:bg-white/5 backdrop-blur-2xl border-2 border-white/20 dark:border-white/10 shadow-xl">
+              <h3 className="text-lg font-bold text-black dark:text-white">
                 {t_("Sujet de l'immigration", "Immigration Topic")} <span className="text-red-500">*</span>
-              </Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              </h3>
+              <div className="grid grid-cols-1 gap-3">
                 {topics.map((topic) => {
                   const IconComponent = topic.icon;
                   return (
-                    <motion.div
+                    <button
                       key={topic.code}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <Card
-                        className={`cursor-pointer transition-all duration-300 h-full ${
+                      onClick={() => setSelectedTopic(topic.code)}
+                      className={`flex items-center gap-4 p-4 rounded-xl transition-all border-2 ${
                           selectedTopic === topic.code
-                            ? 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/30 shadow-lg'
-                            : 'border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
+                          ? 'bg-white/20 dark:bg-white/10 border-[#2ECC71] shadow-lg shadow-[#2ECC71]/20'
+                          : 'bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border-white/20 dark:border-white/10 hover:border-[#2ECC71]/50'
                         }`}
-                        onClick={() => setSelectedTopic(topic.code)}
                       >
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      <div className={`size-10 rounded-lg flex items-center justify-center ${
                               selectedTopic === topic.code
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400'
+                          ? 'bg-[#2ECC71] text-black'
+                          : 'bg-white/10 dark:bg-white/5 text-[#2ECC71]'
                             }`}>
                               <IconComponent className="w-5 h-5" />
                             </div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-gray-900 dark:text-gray-100">{topic.name}</div>
+                      <div className="flex-1 text-left">
+                        <p className="font-bold text-black dark:text-white">{topic.name}</p>
+                        <p className="text-xs text-muted-foreground">{topic.desc}</p>
+                      </div>
                               {selectedTopic === topic.code && (
-                                <CheckCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-1" />
+                        <div className="size-6 flex items-center justify-center rounded-full bg-[#2ECC71] text-black shadow-md">
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
                               )}
+                    </button>
+                  );
+                })}
                             </div>
                           </div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">{topic.desc}</p>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
+          </div>
+
+          {/* Booking Method Toggle */}
+          <div className="flex px-4 py-3 justify-center">
+            <div className="flex h-12 w-full max-w-md items-center justify-center rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm p-1.5 border border-white/20">
+              <label className={`flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 transition-all ${
+                bookingType === 'AUTO'
+                  ? 'bg-[#2ECC71] text-black shadow-lg'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}>
+                <span className="truncate text-sm font-medium">{t_("Réservation Automatique", "Automatic Booking")}</span>
+                <input 
+                  className="invisible w-0" 
+                  name="booking-method" 
+                  type="radio" 
+                  value="AUTO"
+                  checked={bookingType === 'AUTO'}
+                  onChange={() => setBookingType('AUTO')}
+                />
+              </label>
+              <label className={`flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-full px-2 transition-all ${
+                bookingType === 'MANUAL'
+                  ? 'bg-[#2ECC71] text-black shadow-lg'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}>
+                <span className="truncate text-sm font-medium">{t_("Réservation Manuelle", "Manual Booking")}</span>
+                <input 
+                  className="invisible w-0" 
+                  name="booking-method" 
+                  type="radio" 
+                  value="MANUAL"
+                  checked={bookingType === 'MANUAL'}
+                  onChange={() => setBookingType('MANUAL')}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Two Column Layout: Date/Time Selection and Voice Selection */}
+          {bookingType === 'MANUAL' && (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 p-4">
+              {/* Left Card: Select Date & Time */}
+              <div className="lg:col-span-3 flex flex-col gap-6 p-6 rounded-lg bg-white/5 dark:bg-white/5 backdrop-blur-2xl border-2 border-white/20 dark:border-white/10 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <p className="text-base font-bold text-black dark:text-white">
+                    {t_("Sélectionner la Date et l'Heure", "Select Date & Time")}
+                  </p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Globe className="w-4 h-4" />
+                    <span>UTC-5 (EST)</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Calendar */}
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center p-1 justify-between mb-2">
+                      <button 
+                        onClick={() => navigateMonth('prev')}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronLeft className="w-10 h-10 flex items-center justify-center" />
+                      </button>
+                      <p className="text-base font-bold leading-tight flex-1 text-center text-black dark:text-white">
+                        {capitalizedMonth}
+                      </p>
+                      <button 
+                        onClick={() => navigateMonth('next')}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronRight className="w-10 h-10 flex items-center justify-center" />
+                      </button>
+                    </div>
+
+                    {/* Days of Week */}
+                    <div className="grid grid-cols-7 text-center mb-2">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                        <p key={idx} className="text-xs font-bold leading-normal text-muted-foreground flex h-10 w-full items-center justify-center">
+                          {day}
+                        </p>
+                      ))}
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-0">
+                      {calendarDays.map((day, idx) => {
+                        if (day === null) {
+                          return <div key={idx} className="h-10 w-full" />;
+                        }
+                        const dayIsPast = isPast(day);
+                        const dayIsSelected = isSelected(day);
+                        const dayIsToday = isToday(day);
+                        
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              if (!dayIsPast) {
+                                const newDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+                                setSelectedDate(newDate);
+                                setSelectedTime('');
+                              }
+                            }}
+                            disabled={dayIsPast}
+                            className={`h-10 w-full text-sm font-medium leading-normal transition-all ${
+                              dayIsPast
+                                ? 'text-muted-foreground opacity-50 cursor-not-allowed'
+                                : dayIsSelected
+                                  ? 'text-black bg-[#2ECC71] rounded-full'
+                                  : 'text-muted-foreground hover:bg-white/10 dark:hover:bg-white/5 rounded-full'
+                            }`}
+                          >
+                            <div className="flex size-full items-center justify-center rounded-full">
+                              {day}
+                            </div>
+                          </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Voice Selection */}
-            <div>
-              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-                {t_("Sélection de la voix", "Voice Selection")} <span className="text-red-500">*</span>
-              </Label>
-              
-              {/* Voice Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-                    {t_("Préférence vocale", "Voice Preference")}
-                  </Label>
-                  <Select value={voicePreference} onValueChange={(value) => {
-                    setVoicePreference(value);
-                    applyFilter(availableVoices, accentPreference, value);
-                  }}>
-                    <SelectTrigger className="dark:bg-gray-800 dark:border-gray-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TOUS">{t_("Tous", "All")}</SelectItem>
-                      <SelectItem value="MALE">{t_("Masculin", "Male")}</SelectItem>
-                      <SelectItem value="FEMALE">{t_("Féminin", "Female")}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {/* Available Time Slots */}
+                  <div className="flex flex-col gap-3">
+                    <p className="text-base font-bold text-black dark:text-white">
+                      {t_("Créneaux Disponibles", "Available Slots")}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#2ECC71]/30 scrollbar-track-transparent">
+                      {availableSlots.map((slot) => {
+                        const isSelectedSlot = selectedTime === slot.time;
+                        const isDisabled = !slot.available;
+                        
+                        return (
+                          <button
+                            key={slot.id}
+                            onClick={() => !isDisabled && setSelectedTime(slot.time)}
+                            disabled={isDisabled}
+                            className={`rounded-full h-10 text-sm transition-all border-2 ${
+                              isSelectedSlot
+                                ? 'bg-[#2ECC71] border-[#2ECC71] text-black font-bold'
+                                : isDisabled
+                                  ? 'bg-white/5 dark:bg-white/5 cursor-not-allowed text-muted-foreground border-transparent'
+                                  : 'bg-white/10 dark:bg-white/5 hover:border-[#2ECC71] border-transparent text-black dark:text-white'
+                            }`}
+                          >
+                            {slot.time}
+                          </button>
+                        );
+                      })}
                 </div>
-                
-                <div>
-                  <Label className="text-xs text-gray-600 dark:text-gray-400 mb-2 block">
-                    {t_("Préférence d'accent", "Accent Preference")}
-                  </Label>
-                  <Select value={accentPreference} onValueChange={(value) => {
-                    setAccentPreference(value);
-                    applyFilter(availableVoices, value, voicePreference);
-                  }}>
-                    <SelectTrigger className="dark:bg-gray-800 dark:border-gray-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TOUS">{t_("Tous", "All")}</SelectItem>
-                      <SelectItem value="FRANCE">{t_("France", "France")} 🇫🇷</SelectItem>
-                      <SelectItem value="QUEBEC">{t_("Québec", "Quebec")} 🇨🇦</SelectItem>
-                      <SelectItem value="BELGIUM">{t_("Belgique", "Belgium")} 🇧🇪</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  </div>
                 </div>
               </div>
 
-              {/* Voice Cards */}
+              {/* Right Card: Select Your Interviewer */}
+              <div className="lg:col-span-2 flex flex-col gap-4 p-6 rounded-lg bg-white/5 dark:bg-white/5 backdrop-blur-2xl border-2 border-white/20 dark:border-white/10 shadow-xl">
+                <h3 className="text-lg font-bold text-black dark:text-white">
+                  {t_("Sélectionner votre Intervieweur", "Select Your Interviewer")}
+                </h3>
+                
+                <div className="flex flex-col gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#2ECC71]/30 scrollbar-track-transparent">
               {loadingVoices ? (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent mx-auto"></div>
+                      <div className="w-8 h-8 border-2 border-[#2ECC71] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">{t_("Chargement des voix...", "Loading voices...")}</p>
                 </div>
-              ) : filteredVoices.length === 0 ? (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    {t_("Aucune voix disponible avec ces filtres", "No voices available with these filters")}
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {filteredVoices.map((voice) => {
-                    const accentLabel = getAccentLabel(voice.accent);
-                    const isSelected = selectedVoice === voice.id;
-                    const isPlaying = playingVoice === voice.id;
+                  ) : (
+                    filteredVoicesByCountry.map((voice: any) => {
+                      const isSelected = voicePreference === voice.id;
+                      const voiceName = voice.name || voice.id;
+                      const voiceAccent = voice.accent || '';
+                      const voiceGender = voice.gender === 'MALE' ? t_('Masculin', 'Male') : t_('Féminin', 'Female');
+                      const flag = voice.flag || '';
+                      const avatar = voice.avatar || (voice.gender === 'MALE' 
+                        ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces'
+                        : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces');
                     
                     return (
-                      <motion.div
+                        <div
                         key={voice.id}
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Card
-                          className={`cursor-pointer transition-all duration-300 ${
+                          onClick={() => setVoicePreference(voice.id)}
+                          className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all border-2 ${
                             isSelected
-                              ? 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/30 shadow-lg'
-                              : 'border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
+                              ? 'bg-white/20 dark:bg-white/10 border-[#2ECC71] shadow-lg shadow-[#2ECC71]/20'
+                              : 'bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border-white/20 dark:border-white/10 hover:border-[#2ECC71]/50'
                           }`}
-                          onClick={() => handleVoiceSelection(voice.id)}
                         >
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                                  isSelected
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                                }`}>
-                                  <Mic className="w-5 h-5" />
+                          <div className="relative">
+                            <div 
+                              className="size-14 rounded-full bg-cover bg-center ring-2 ring-white/20"
+                              style={{
+                                backgroundImage: `url(${avatar})`,
+                                backgroundColor: '#2ECC71'
+                              }}
+                            />
+                            {flag && (
+                              <div className="absolute -bottom-1 -right-1 text-2xl bg-white rounded-full p-0.5 shadow-md">
+                                {flag}
                                 </div>
-                                <div>
-                                  <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">{voice.name}</div>
-                                  <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
-                                    <span>{accentLabel.flag}</span>
-                                    <span>{accentLabel.text}</span>
+                            )}
                                   </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-black dark:text-white truncate">{voiceName}</p>
+                            <p className="text-sm text-muted-foreground truncate">{voiceAccent} • {voiceGender}</p>
                                 </div>
-                              </div>
+                          <button
+                            onClick={(e) => handlePreviewVoice(voice.id, e)}
+                            disabled={loadingPreview.has(voice.id)}
+                            className="flex items-center justify-center size-10 rounded-full bg-[#2ECC71] text-black hover:bg-[#27c066] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={t_("Aperçu de la voix", "Preview voice")}
+                          >
+                            {loadingPreview.has(voice.id) ? (
+                              <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                            ) : playingVoice === voice.id ? (
+                              <Pause className="w-5 h-5" />
+                            ) : (
+                              <Volume2 className="w-5 h-5" />
+                            )}
+                          </button>
                               {isSelected && (
-                                <CheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            <div className="size-6 flex items-center justify-center rounded-full bg-[#2ECC71] text-black shadow-md">
+                              <CheckCircle className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                               )}
                             </div>
                             
                             <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleVoicePreview(voice.id);
+                  className="mt-auto w-full rounded-full h-12 px-6 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-base"
+                  onClick={handleBookSimulation}
+                  disabled={!selectedCountry || !selectedTopic || !voicePreference || !selectedDate || !selectedTime}
+                >
+                  {t_("Confirmer la Réservation", "Confirm Booking")}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Automatic Booking - Simplified */}
+          {bookingType === 'AUTO' && (
+            <div className="p-6 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20 shadow-xl">
+              <div className="flex flex-col gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[#2ECC71]/30 scrollbar-track-transparent">
+                <h3 className="text-lg font-bold text-black dark:text-white">
+                  {t_("Sélectionner votre Intervieweur", "Select Your Interviewer")}
+                </h3>
+                
+                {loadingVoices ? (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 border-2 border-[#2ECC71] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">{t_("Chargement des voix...", "Loading voices...")}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredVoicesByCountry.map((voice: any) => {
+                      const isSelected = voicePreference === voice.id;
+                      const voiceName = voice.name || voice.id;
+                      const voiceAccent = voice.accent || '';
+                      const voiceGender = voice.gender === 'MALE' ? t_('Masculin', 'Male') : t_('Féminin', 'Female');
+                      const flag = voice.flag || '';
+                      const avatar = voice.avatar || (voice.gender === 'MALE' 
+                        ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=faces'
+                        : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=faces');
+                      
+                      return (
+                        <div
+                          key={voice.id}
+                          onClick={() => setVoicePreference(voice.id)}
+                          className={`flex items-center gap-4 p-4 rounded-lg cursor-pointer transition-all border-2 ${
+                            isSelected
+                              ? 'bg-white/20 dark:bg-white/10 border-[#2ECC71]'
+                              : 'bg-white/10 dark:bg-white/5 hover:bg-white/20 dark:hover:bg-white/10 border-transparent'
+                          }`}
+                        >
+                          <div className="relative">
+                            <div 
+                              className="size-12 rounded-full bg-cover bg-center ring-2 ring-white/20"
+                              style={{
+                                backgroundImage: `url(${avatar})`,
+                                backgroundColor: '#2ECC71'
                               }}
+                            />
+                            {flag && (
+                              <div className="absolute -bottom-1 -right-1 text-xl bg-white rounded-full p-0.5 shadow-md">
+                                {flag}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-bold text-black dark:text-white">{voiceName}</p>
+                            <p className="text-sm text-muted-foreground">{voiceAccent} ({voiceGender})</p>
+                          </div>
+                          <button
+                            onClick={(e) => handlePreviewVoice(voice.id, e)}
                               disabled={loadingPreview.has(voice.id)}
-                            >
-                              {isPlaying ? (
-                                <>
-                                  <Pause className="w-4 h-4 mr-2" />
-                                  {t_("Arrêter", "Stop")}
-                                </>
-                              ) : loadingPreview.has(voice.id) ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-600 border-t-transparent mr-2"></div>
-                                  {t_("Chargement...", "Loading...")}
+                            className="flex items-center justify-center size-10 rounded-full bg-[#2ECC71] text-black hover:bg-[#27c066] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={t_("Aperçu de la voix", "Preview voice")}
+                          >
+                            {loadingPreview.has(voice.id) ? (
+                              <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                            ) : playingVoice === voice.id ? (
+                              <Pause className="w-5 h-5" />
+                            ) : (
+                              <Volume2 className="w-5 h-5" />
+                            )}
+                          </button>
+                          {isSelected && (
+                            <div className="size-6 flex items-center justify-center rounded-full bg-[#2ECC71] text-black">
+                              <CheckCircle className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Button 
+                  className="w-full rounded-full h-12 px-6 bg-[#2ECC71] hover:bg-[#27c066] text-black font-bold text-base"
+                  onClick={handleBookSimulation}
+                  disabled={!selectedCountry || !selectedTopic || !voicePreference}
+                >
+                  {t_("Confirmer la Réservation", "Confirm Booking")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Booking History Section */}
+        <section className="flex flex-col gap-6 px-4">
+          <h2 className="text-2xl font-bold leading-tight text-black dark:text-white">
+            {t_("Historique des Réservations", "Booking History")}
+          </h2>
+
+          {/* Search and Filters */}
+          <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="relative w-full md:flex-1">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10">
+                <Search className="w-5 h-5 text-[#2ECC71]" />
+              </div>
+              <input 
+                className="w-full h-12 pl-10 pr-4 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm text-black dark:text-white placeholder:text-muted-foreground border-2 border-white/20 dark:border-white/10 focus:border-[#2ECC71] focus:ring-2 focus:ring-[#2ECC71]/20 text-sm shadow-md"
+                placeholder={t_("Rechercher par date, pays, sujet, statut...", "Search by date, country, topic, status...")}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex w-full md:w-auto items-center gap-4">
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full md:w-auto h-12 px-4 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm border-2 border-white/20 dark:border-white/10 focus:border-[#2ECC71] text-sm shadow-md">
+                  <SelectValue>{t_("Tous les Statuts", "All Statuses")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-statuses">{t_("Tous les Statuts", "All Statuses")}</SelectItem>
+                  <SelectItem value="scheduled">{t_("Programmée", "Scheduled")}</SelectItem>
+                  <SelectItem value="completed">{t_("Terminée", "Completed")}</SelectItem>
+                  <SelectItem value="cancelled">{t_("Annulée", "Cancelled")}</SelectItem>
+                  <SelectItem value="expired">{t_("Expirée", "Expired")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterVoice} onValueChange={setFilterVoice}>
+                <SelectTrigger className="w-full md:w-auto h-12 px-4 rounded-full bg-white/10 dark:bg-white/5 backdrop-blur-sm border-2 border-white/20 dark:border-white/10 focus:border-[#2ECC71] text-sm shadow-md">
+                  <SelectValue>{t_("Toutes les Voix", "All Voices")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-voices">{t_("Toutes les Voix", "All Voices")}</SelectItem>
+                  <SelectItem value="male">{t_("Masculin", "Male")}</SelectItem>
+                  <SelectItem value="female">{t_("Féminin", "Female")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Booking History Cards */}
+          <div className="flex flex-col gap-4">
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="w-8 h-8 border-2 border-[#2ECC71] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">{t_("Chargement...", "Loading...")}</p>
+              </div>
+            ) : bookings.length === 0 ? (
+              <div className="text-center py-12 p-4 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border-2 border-white/20 dark:border-white/10 shadow-lg">
+                <Search className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground">{t_("Aucune réservation pour le moment", "No bookings yet")}</p>
+              </div>
+            ) : (
+              bookings
+                .filter((booking) => {
+                  // Search filter
+                  if (searchQuery) {
+                    const query = searchQuery.toLowerCase();
+                    const dateStr = booking.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString() : '';
+                    const country = booking.country || '';
+                    const topic = booking.immigrationType || '';
+                    const status = booking.status.toLowerCase();
+                    const searchText = `${dateStr} ${country} ${topic} ${status}`.toLowerCase();
+                    if (!searchText.includes(query)) return false;
+                  }
+                  
+                  // Status filter
+                  if (filterStatus !== 'all-statuses') {
+                    const statusMap: Record<string, string> = {
+                      'scheduled': 'SCHEDULED',
+                      'completed': 'COMPLETED',
+                      'cancelled': 'CANCELLED',
+                      'expired': 'EXPIRED'
+                    };
+                    if (booking.status !== statusMap[filterStatus]) return false;
+                  }
+                  
+                  // Voice filter
+                  if (filterVoice !== 'all-voices') {
+                    const selectedVoice = availableVoices.find(v => v.id === booking.voicePreference || booking.questionsData?.voiceId === v.id);
+                    if (!selectedVoice) return false;
+                    if (filterVoice === 'male' && selectedVoice.gender !== 'MALE') return false;
+                    if (filterVoice === 'female' && selectedVoice.gender !== 'FEMALE') return false;
+                  }
+                  
+                  return true;
+                })
+                .slice(0, 10)
+                .map((booking) => {
+                  const scheduledDate = booking.scheduledDate ? new Date(booking.scheduledDate) : null;
+                  const isValidDate = scheduledDate && !isNaN(scheduledDate.getTime());
+                  const selectedVoice = availableVoices.find(v => v.id === booking.voicePreference || booking.questionsData?.voiceId === v.id);
+                  
+                  return (
+                    <div
+                      key={booking.id}
+                      className="flex items-center gap-6 p-4 rounded-lg bg-white/10 dark:bg-white/5 backdrop-blur-xl border-2 border-white/20 dark:border-white/10 shadow-lg"
+                    >
+                      {/* Date and Time */}
+                      <div className="min-w-[140px]">
+                        {isValidDate && scheduledDate ? (
+                          <>
+                            <p className="font-bold text-black dark:text-white text-sm">
+                              {scheduledDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US', { 
+                                day: 'numeric', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              })}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {scheduledDate.toLocaleTimeString(lang === 'fr' ? 'fr-FR' : 'en-US', { 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </p>
                                 </>
                               ) : (
-                                <>
-                                  <Play className="w-4 h-4 mr-2" />
-                                  {t_("Écouter", "Listen")}
+                          <p className="text-xs text-muted-foreground">{t_("Date non disponible", "Date not available")}</p>
+                        )}
+                      </div>
+                      {/* Country */}
+                      <div className="min-w-[120px]">
+                        <p className="text-xs text-muted-foreground mb-0.5">{t_("Pays", "Country")}</p>
+                        <p className="font-bold text-black dark:text-white text-sm">
+                          {booking.country || t_("Non spécifié", "Not specified")}
+                        </p>
+                      </div>
+                      {/* Topic */}
+                      <div className="min-w-[120px]">
+                        <p className="text-xs text-muted-foreground mb-0.5">{t_("Sujet", "Topic")}</p>
+                        <p className="font-bold text-black dark:text-white text-sm">
+                          {booking.immigrationType || t_("Non spécifié", "Not specified")}
+                        </p>
+                      </div>
+                      {/* Voice */}
+                      <div className="min-w-[180px]">
+                        <p className="text-xs text-muted-foreground mb-0.5">{t_("Voix", "Voice")}</p>
+                        <p className="font-bold text-black dark:text-white text-sm">
+                          {selectedVoice?.name || t_("Non spécifiée", "Not specified")}
+                          {selectedVoice?.accent && (
+                            <span className="text-muted-foreground font-normal"> ({selectedVoice.accent})</span>
+                          )}
+                        </p>
+                      </div>
+                      {/* Status */}
+                      <div className="min-w-[120px]">
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
+                          {getStatusIcon(booking.status)}
+                          <span>{booking.status}</span>
+                        </div>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 ml-auto">
+                        {booking.status === 'SCHEDULED' && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => router.push(`/immigration-simulations/room/${booking.id}`)}
+                              className="h-8 px-3 text-xs border-[#2ECC71] text-[#2ECC71] hover:bg-[#2ECC71] hover:text-black"
+                            >
+                              {t_("Démarrer", "Start")}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRescheduleBooking(booking)}
+                              className="h-8 px-3 text-xs"
+                            >
+                              {t_("Reprogrammer", "Reschedule")}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCancelBooking(booking)}
+                              className="h-8 px-3 text-xs text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
+                            >
+                              {t_("Annuler", "Cancel")}
+                            </Button>
                                 </>
                               )}
+                        {booking.status === 'COMPLETED' && booking.finalScore !== null && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.push(`/immigration-simulations/results/${booking.id}`)}
+                            className="h-8 px-3 text-xs border-[#2ECC71] text-[#2ECC71] hover:bg-[#2ECC71] hover:text-black"
+                          >
+                            {t_("Voir Résultats", "View Results")}
                             </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    );
-                  })}
+                        )}
                 </div>
+                    </div>
+                  );
+                })
               )}
             </div>
+        </section>
+      </main>
 
-            {/* Booking Type Selection */}
-            <div>
-              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-                {t_("Type de réservation", "Booking Type")} <span className="text-red-500">*</span>
-              </Label>
-              <RadioGroup value={bookingType} onValueChange={(value: 'AUTO' | 'MANUAL') => setBookingType(value)}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Card
-                      className={`cursor-pointer transition-all duration-300 ${
-                        bookingType === 'AUTO'
-                          ? 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                          : 'border border-gray-200 dark:border-gray-700'
-                      }`}
-                      onClick={() => setBookingType('AUTO')}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="AUTO" id="auto" />
-                          <Label htmlFor="auto" className="cursor-pointer flex-1">
-                            <div className="font-semibold text-gray-900 dark:text-gray-100">{t_("Immédiat", "Immediate")}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">{t_("Commencer maintenant", "Start now")}</div>
-                          </Label>
-                          <Zap className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+      {/* Booking Confirmation Modal */}
+      <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{t_("Confirmer la Réservation", "Confirm Booking")}</DialogTitle>
+            <DialogDescription>
+              {t_("Voulez-vous confirmer cette réservation ?", "Do you want to confirm this booking?")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedCountry && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">{t_("Pays", "Country")}:</span>
+                <span className="text-sm font-medium">{countries.find(c => c.code === selectedCountry)?.name}</span>
                         </div>
-                      </CardContent>
-                    </Card>
+            )}
+            {selectedTopic && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">{t_("Sujet", "Topic")}:</span>
+                <span className="text-sm font-medium">{topics.find(t => t.code === selectedTopic)?.name}</span>
                   </div>
-                  
-                  <div>
-                    <Card
-                      className={`cursor-pointer transition-all duration-300 ${
-                        bookingType === 'MANUAL'
-                          ? 'border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                          : 'border border-gray-200 dark:border-gray-700'
-                      }`}
-                      onClick={() => setBookingType('MANUAL')}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="MANUAL" id="manual" />
-                          <Label htmlFor="manual" className="cursor-pointer flex-1">
-                            <div className="font-semibold text-gray-900 dark:text-gray-100">{t_("Planifier", "Schedule")}</div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">{t_("Choisir une date et heure", "Choose date and time")}</div>
-                          </Label>
-                          <CalendarIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            )}
+            {voicePreference && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">{t_("Voix", "Voice")}:</span>
+                <span className="text-sm font-medium">
+                  {filteredVoicesByCountry.find((v: any) => v.id === voicePreference)?.name || voicePreference}
+                </span>
                         </div>
-                      </CardContent>
-                    </Card>
+            )}
+            {bookingType === 'MANUAL' && selectedDate && selectedTime && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{t_("Date", "Date")}:</span>
+                  <span className="text-sm font-medium">
+                    {selectedDate.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US')}
+                  </span>
                   </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{t_("Heure", "Time")}:</span>
+                  <span className="text-sm font-medium">{selectedTime}</span>
                 </div>
-              </RadioGroup>
+              </>
+            )}
             </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBookingModal(false)}>
+              {t_("Annuler", "Cancel")}
+            </Button>
+            <Button onClick={handleConfirmBooking} className="bg-[#2ECC71] hover:bg-[#27c066] text-black">
+              {t_("Confirmer", "Confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            {/* Manual Booking: Date & Time Selection */}
-            {bookingType === 'MANUAL' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+      {/* Cancel Confirmation Modal */}
+      <Dialog open={showCancelModal} onOpenChange={setShowCancelModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{t_("Annuler la Réservation", "Cancel Booking")}</DialogTitle>
+            <DialogDescription>
+              {t_("Êtes-vous sûr de vouloir annuler cette réservation ? Cette action est irréversible.", "Are you sure you want to cancel this booking? This action is irreversible.")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCancelModal(false)}>
+              {t_("Non", "No")}
+            </Button>
+            <Button onClick={handleConfirmCancel} className="bg-red-600 hover:bg-red-700 text-white">
+              {t_("Oui, Annuler", "Yes, Cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Modal */}
+      <Dialog open={showRescheduleModal} onOpenChange={setShowRescheduleModal}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>{t_("Reprogrammer la Réservation", "Reschedule Booking")}</DialogTitle>
+            <DialogDescription>
+              {t_("Sélectionnez une nouvelle date et heure pour cette réservation.", "Select a new date and time for this booking.")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-                    {t_("Date", "Date")} <span className="text-red-500">*</span>
-                  </Label>
+                <Label>{t_("Date", "Date")}</Label>
                   <Calendar
                     mode="single"
                     selected={selectedDate}
@@ -930,23 +1594,20 @@ function QuestionsPageContent() {
                       setSelectedTime('');
                     }}
                     disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                    className="rounded-lg border border-gray-200 dark:border-gray-700"
+                  className="rounded-lg border"
                   />
                 </div>
-                
                 <div>
-                  <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">
-                    {t_("Heure", "Time")} <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="grid grid-cols-3 gap-2 max-h-[400px] overflow-y-auto p-2 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <Label>{t_("Heure", "Time")}</Label>
+                <div className="grid grid-cols-3 gap-2 max-h-[300px] overflow-y-auto p-2 border rounded-lg">
                     {availableSlots.map((slot) => (
                       <Button
                         key={slot.id}
                         variant={selectedTime === slot.time ? "default" : "outline"}
                         size="sm"
                         className={`
-                          ${selectedTime === slot.time ? 'bg-blue-600 text-white' : ''}
-                          ${!slot.available ? 'opacity-40 grayscale cursor-not-allowed' : 'hover:bg-blue-50 dark:hover:bg-blue-950/20'}
+                        ${selectedTime === slot.time ? 'bg-[#2ECC71] text-black' : ''}
+                        ${!slot.available ? 'opacity-40 grayscale cursor-not-allowed' : ''}
                         `}
                         onClick={() => slot.available && setSelectedTime(slot.time)}
                         disabled={!slot.available}
@@ -957,43 +1618,17 @@ function QuestionsPageContent() {
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* Create Button */}
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-              <Button
-                onClick={handleCreateSimulation}
-                disabled={creating || !selectedCountry || !selectedTopic || !selectedVoice || (bookingType === 'MANUAL' && (!selectedDate || !selectedTime))}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all py-6 text-lg font-semibold"
-                size="lg"
-              >
-                {creating ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
-                    {t_("Création en cours...", "Creating...")}
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5 mr-2" />
-                    {t_("Créer la simulation", "Create Simulation")}
-                  </>
-                )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRescheduleModal(false)}>
+              {t_("Annuler", "Cancel")}
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Info Card */}
-        <Alert className="mb-8">
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            <strong>{t_("Note importante :", "Important note:")}</strong> {t_(
-              "Les questions d'immigration seront adaptées à votre pays et sujet sélectionnés. L'entretien commencera par des questions personnelles simples, puis progressera vers des questions spécifiques à votre sujet d'immigration.",
-              "Immigration questions will be adapted to your selected country and topic. The interview will start with simple personal questions, then progress to topic-specific immigration questions."
-            )}
-          </AlertDescription>
-        </Alert>
-      </main>
+            <Button onClick={handleConfirmReschedule} className="bg-[#2ECC71] hover:bg-[#27c066] text-black">
+              {t_("Confirmer", "Confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

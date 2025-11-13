@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from "react"
 import PageShell from "@/components/page-shell"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, Users, Video, Lock, UserCheck, MessageCircle, Star, Crown, Shield, UserPlus, Loader2, AlertCircle, ChevronDown, Check } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Calendar, Clock, Users, Video, Lock, UserCheck, MessageCircle, Star, Crown, Shield, UserPlus, Loader2, AlertCircle, ChevronDown, Check, MoreVertical, BookmarkPlus, Bell, Search, PlayCircle, XCircle } from "lucide-react"
 import { useLang } from "@/components/language-provider"
 import { useAuth } from "@/hooks/useAuth"
 import { liveSessionService, type LiveSession } from "@/lib/services/liveSessionService"
@@ -15,7 +16,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { toast } from "sonner"
+import Link from "next/link"
+import { getComprehensiveProfilePictureUrl } from "@/lib/utils/profilePicture"
+import apiClient from "@/lib/api-client"
 
 const sessionTypeColors = {
   workshop: "#2ECC71",
@@ -38,7 +49,44 @@ export default function LivePage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedLevel, setSelectedLevel] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
+  const [showLevelDropdown, setShowLevelDropdown] = useState(false)
   const [reminderLoading, setReminderLoading] = useState<string | null>(null)
+  const [currentTime, setCurrentTime] = useState(new Date())
+
+  // Update current time every second for timers
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showCategoryDropdown || showLevelDropdown) {
+        const target = event.target as Node
+        const categoryButton = document.querySelector('[data-category-dropdown]')
+        const levelButton = document.querySelector('[data-level-dropdown]')
+        
+        if (categoryButton && !categoryButton.contains(target) && !(target as Element).closest('[data-category-dropdown-menu]')) {
+          setShowCategoryDropdown(false)
+        }
+        if (levelButton && !levelButton.contains(target) && !(target as Element).closest('[data-level-dropdown-menu]')) {
+          setShowLevelDropdown(false)
+        }
+      }
+    }
+
+    if (showCategoryDropdown || showLevelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showCategoryDropdown, showLevelDropdown])
 
   // Load sessions from API
   useEffect(() => {
@@ -61,9 +109,10 @@ export default function LivePage() {
         { page: 1, limit: 20, sortBy: 'date', sortOrder: 'asc' }
       )
 
+      let sessionsData: LiveSession[] = []
       if (allSessionsResponse.success && allSessionsResponse.data) {
         // Handle both response formats: data.sessions or data directly
-        const sessionsData = Array.isArray(allSessionsResponse.data) 
+        sessionsData = Array.isArray(allSessionsResponse.data) 
           ? allSessionsResponse.data 
           : allSessionsResponse.data.sessions || []
         setSessions(sessionsData)
@@ -76,6 +125,8 @@ export default function LivePage() {
           : upcomingResponse.data.sessions || []
         setUpcomingSessions(upcomingData)
       }
+
+      // Tutor profiles (email and profileImage) are now included directly in session.createdBy
 
     } catch (err: any) {
       console.error('Failed to load sessions:', err)
@@ -148,26 +199,19 @@ export default function LivePage() {
     setReminderLoading(sessionId)
     
     try {
-      // Call backend API to set reminder
-      const response = await fetch('/api/live-sessions/reminder', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        },
-        body: JSON.stringify({
-          sessionId,
-          reminderTime
-        })
+      // Call backend API to set reminder using apiClient
+      const response = await apiClient.post('/live-sessions/reminder', {
+        sessionId,
+        reminderTime
       })
 
-      if (response.ok) {
+      if (response.success) {
         toast.success(t(
           `Rappel programmé! Vous recevrez un email ${reminderTime === '5min' ? '5 minutes' : '10 minutes'} avant la session.`,
           `Reminder set! You will receive an email ${reminderTime === '5min' ? '5 minutes' : '10 minutes'} before the session.`
         ))
       } else {
-        throw new Error('Failed to set reminder')
+        throw new Error(response.error?.message || 'Failed to set reminder')
       }
     } catch (error: any) {
       console.error('Failed to set reminder:', error)
@@ -254,10 +298,203 @@ export default function LivePage() {
     </button>
   )
 
+  // Format date for display (Today, Tomorrow, or date)
+  const formatDisplayDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const today = new Date()
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    if (date.toDateString() === today.toDateString()) {
+      return t("Aujourd'hui", "Today")
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return t("Demain", "Tomorrow")
+    } else {
+      return date.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", {
+        month: "short",
+        day: "numeric",
+      })
+    }
+  }
+
+  // Format time with EST
+  const formatDisplayTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString(lang === "fr" ? "fr-FR" : "en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }) + " EST"
+  }
+
+  // Get comprehensive session status (status changes to LIVE 5 minutes before start)
+  const getSessionStatus = (session: LiveSession) => {
+    const now = currentTime
+    const sessionDate = new Date(session.date)
+    const sessionEnd = new Date(sessionDate.getTime() + session.duration * 60000)
+    const earlyStartTime = new Date(sessionDate.getTime() - 5 * 60000) // 5 minutes before
+    const slotsLeft = session.maxParticipants - session.participantCount
+    const minutesUntilStart = Math.floor((sessionDate.getTime() - now.getTime()) / 60000)
+    
+    // Check if expired
+    if (now > sessionEnd) {
+      return { 
+        type: 'expired',
+        text: t("Expiré", "Expired"), 
+        color: "bg-gray-400/50 dark:bg-gray-600/50",
+        icon: XCircle
+      }
+    }
+    
+    // Check if live (status changes 5 minutes before scheduled time)
+    if (session.status === 'LIVE' || (now >= earlyStartTime && now < sessionEnd)) {
+      return { 
+        type: 'live',
+        text: t("En direct", "Live"), 
+        color: "bg-red-500/50 dark:bg-red-600/50",
+        icon: PlayCircle,
+        pulse: true
+      }
+    }
+    
+    // Check if starting soon (within 15 minutes)
+    if (minutesUntilStart > 0 && minutesUntilStart <= 15) {
+      return { 
+        type: 'starting',
+        text: t(`Démarre dans ${minutesUntilStart} min`, `Starts in ${minutesUntilStart} min`), 
+        color: "bg-orange-400/50 dark:bg-orange-600/50",
+        icon: Clock
+      }
+    }
+    
+    // Check slots
+    if (slotsLeft === 0) {
+      return { 
+        type: 'full',
+        text: t("Complet", "Full"), 
+        color: "bg-red-400/50 dark:bg-zinc-600/50",
+        icon: XCircle
+      }
+    }
+    
+    if (slotsLeft <= 5) {
+      return { 
+        type: 'limited',
+        text: t(`${slotsLeft} places restantes`, `${slotsLeft} spots left`), 
+        color: "bg-yellow-400/50",
+        icon: Users
+      }
+    }
+    
+    // Scheduled
+    return { 
+      type: 'scheduled',
+      text: t("Programmé", "Scheduled"), 
+      color: "bg-blue-400/50 dark:bg-blue-600/50",
+      icon: Calendar
+    }
+  }
+
+  // Get timer display for session
+  const getSessionTimer = (session: LiveSession) => {
+    const now = currentTime
+    const sessionDate = new Date(session.date)
+    const sessionEnd = new Date(sessionDate.getTime() + session.duration * 60000)
+    const earlyStartTime = new Date(sessionDate.getTime() - 5 * 60000) // 5 minutes before
+    
+    // If session is live (5 min before or after start)
+    if (now >= earlyStartTime && now < sessionEnd) {
+      const elapsed = Math.floor((now.getTime() - earlyStartTime.getTime()) / 1000)
+      const hours = Math.floor(elapsed / 3600)
+      const minutes = Math.floor((elapsed % 3600) / 60)
+      const seconds = elapsed % 60
+      return {
+        type: 'active',
+        text: t(`Active depuis ${hours}h ${minutes}m ${seconds}s`, `Active For ${hours}h ${minutes}m ${seconds}s`),
+        hours,
+        minutes,
+        seconds
+      }
+    }
+    
+    // If session starts in less than 2h 45m, show countdown
+    const timeUntilStart = sessionDate.getTime() - now.getTime()
+    const twoHoursFortyFive = 2 * 3600 * 1000 + 45 * 60 * 1000
+    
+    if (timeUntilStart > 0 && timeUntilStart <= twoHoursFortyFive) {
+      const totalSeconds = Math.floor(timeUntilStart / 1000)
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
+      return {
+        type: 'starts',
+        text: t(`Démarre dans ${hours}h ${minutes}m ${seconds}s`, `Starts In ${hours}h ${minutes}m ${seconds}s`),
+        hours,
+        minutes,
+        seconds
+      }
+    }
+    
+    return null
+  }
+  
+  // Get tutor profile image - prioritize DB profileImage, fallback to email-based avatar
+  const getTutorProfileImage = (session: LiveSession) => {
+    if (!session.createdBy) return null
+    
+    const tutorEmail = session.createdBy.email || ''
+    const profileImage = session.createdBy.profileImage || ''
+    
+    // If profileImage exists in DB, use it directly (it's already an absolute URL from backend)
+    if (profileImage && profileImage.trim() !== '') {
+      // Backend saves absolute URLs, but handle both absolute and relative for safety
+      if (profileImage.startsWith('http://') || profileImage.startsWith('https://')) {
+        return profileImage // Already absolute URL
+      } else if (profileImage.startsWith('/uploads') || profileImage.startsWith('/')) {
+        // Relative URL - convert to absolute
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'
+        return `${backendUrl}${profileImage.startsWith('/') ? '' : '/'}${profileImage}`
+      } else {
+        // No leading slash - assume it's a relative path
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'
+        return `${backendUrl}/uploads/${profileImage}`
+      }
+    }
+    
+    // Fallback to email-based avatar (Gravatar, DiceBear, etc.)
+    return getComprehensiveProfilePictureUrl(tutorEmail, '')
+  }
+
+  // Get weekly schedule data
+  const getWeeklySchedule = () => {
+    const weekStart = new Date()
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1) // Monday
+    
+    const weekDays = []
+    for (let i = 0; i < 5; i++) {
+      const day = new Date(weekStart)
+      day.setDate(weekStart.getDate() + i)
+      weekDays.push(day)
+    }
+
+    return weekDays.map(day => {
+      const daySessions = upcomingSessions.filter(session => {
+        const sessionDate = new Date(session.date)
+        return sessionDate.toDateString() === day.toDateString()
+      })
+      return { day, sessions: daySessions }
+    })
+  }
+
+  const weeklySchedule = getWeeklySchedule()
+
   return (
     <PageShell>
-      <main className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-8 py-10">
-        <header className="mb-12 text-center">
+      <div className="relative min-h-screen w-full overflow-x-hidden bg-[#f5f8f6] dark:bg-[#0f2316]">
+
+        <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          {/* Hero Section */}
+          <main className="py-16 sm:py-24">
+          <div className="text-center mb-16">
           <div className="max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 mb-6">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
@@ -266,34 +503,157 @@ export default function LivePage() {
               </span>
             </div>
             
-            <h1 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white mb-6 leading-tight">
-              {t("Sessions Live Interactives", "Interactive Live Sessions")}
+            <h1 className="text-5xl md:text-7xl font-black tracking-tighter">
+              <span className="text-[#1A1A1A] dark:text-[#E0E0E0]">Aura</span>
+              <span className="text-[#06f957]"> Live</span>
+              <span className="text-[#1A1A1A] dark:text-[#E0E0E0]"> Sessions</span>
             </h1>
-            
-            <p className="text-xl text-slate-600 dark:text-white max-w-3xl mx-auto leading-relaxed">
+            <p className="mt-4 max-w-2xl mx-auto text-lg text-[#555555] dark:text-[#AAAAAA]">
               {t(
-                "Rejoignez nos sessions en direct animées par des experts certifiés. Apprenez, pratiquez et progressez en temps réel.",
-                "Join our live sessions led by certified experts. Learn, practice and progress in real time.",
+                "Découvrez l'avenir de l'apprentissage interactif avec nos experts certifiés, en direct et directement chez vous.",
+                "Experience the future of interactive learning with our certified experts, live and direct to you."
               )}
             </p>
-            
-            {/* Statistiques simples */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10 max-w-2xl mx-auto">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-900 dark:text-white mb-1">24/7</div>
-                <div className="text-sm text-slate-600 dark:text-white">{t("Disponibilité", "Availability")}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-900 dark:text-white mb-1">15+</div>
-                <div className="text-sm text-slate-600 dark:text-white">{t("Experts", "Experts")}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-slate-900 dark:text-white mb-1">500+</div>
-                <div className="text-sm text-slate-600 dark:text-white">{t("Sessions", "Sessions")}</div>
+          </div>
+        </div>
+
+          {/* Search/Filter Bar - Sticky Glass Card */}
+          <section className="px-4 sm:px-6 lg:px-8 -mt-16 relative z-20 mb-12">
+            <div className="mx-auto max-w-5xl">
+              <div className="glass-card rounded-2xl p-4 shadow-xl border border-white/30 dark:border-white/10">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Search Input */}
+                  <label className="flex flex-col w-full">
+                    <div className="flex w-full flex-1 items-stretch rounded-xl h-12">
+                      <div className="text-black dark:text-white flex bg-black/5 dark:bg-white/5 items-center justify-center pl-4 rounded-l-xl">
+                        <Search className="w-5 h-5" />
+                      </div>
+                      <Input
+                        className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-xl text-black dark:text-white focus:outline-0 focus:ring-2 focus:ring-[#2ECC71] border-none bg-black/5 dark:bg-white/5 h-full placeholder:text-[#5f8c6e] dark:placeholder:text-gray-400 px-4 text-base font-normal leading-normal"
+                        placeholder={t("Rechercher des sessions ou experts...", "Search for sessions or experts...")}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        style={{ fontFamily: 'Inter, sans-serif' }}
+                      />
+                    </div>
+                  </label>
+
+                  {/* Category Dropdown */}
+                  <div className="relative">
+                    <button
+                      data-category-dropdown
+                      onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                      className="flex h-12 w-full items-center justify-between gap-x-2 rounded-xl bg-black/5 dark:bg-white/5 px-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-white/30 dark:border-white/10"
+                    >
+                      <p className="text-black dark:text-white text-base font-medium leading-normal" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        {selectedCategory === "all" ? t("Catégorie", "Category") : selectedCategory}
+                      </p>
+                      <ChevronDown className={`w-5 h-5 text-black dark:text-white transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {/* Category Dropdown */}
+                    {showCategoryDropdown && (
+                      <div data-category-dropdown-menu className="absolute top-full left-0 mt-2 w-full bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl rounded-xl border border-[#2ECC71]/18 dark:border-[#2ECC71]/12 shadow-xl z-50">
+                        <div className="p-2">
+                          <button
+                            onClick={() => {
+                              setSelectedCategory("all")
+                              setShowCategoryDropdown(false)
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                              selectedCategory === "all"
+                                ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                            }`}
+                            style={{ fontFamily: 'Inter, sans-serif' }}
+                          >
+                            {t("Toutes", "All")}
+                          </button>
+                          {categories.map((cat) => (
+                            <button
+                              key={cat}
+                              onClick={() => {
+                                setSelectedCategory(cat)
+                                setShowCategoryDropdown(false)
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                selectedCategory === cat
+                                  ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                  : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                              }`}
+                              style={{ fontFamily: 'Inter, sans-serif' }}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Level Dropdown */}
+                  <div className="relative">
+                    <button
+                      data-level-dropdown
+                      onClick={() => setShowLevelDropdown(!showLevelDropdown)}
+                      className="flex h-12 w-full items-center justify-between gap-x-2 rounded-xl bg-black/5 dark:bg-white/5 px-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-white/30 dark:border-white/10"
+                    >
+                      <p className="text-black dark:text-white text-base font-medium leading-normal" style={{ fontFamily: 'Inter, sans-serif' }}>
+                        {selectedLevel === "all" ? t("Niveau", "Level") : selectedLevel}
+                      </p>
+                      <ChevronDown className={`w-5 h-5 text-black dark:text-white transition-transform ${showLevelDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    
+                    {/* Level Dropdown */}
+                    {showLevelDropdown && (
+                      <div data-level-dropdown-menu className="absolute top-full left-0 mt-2 w-full bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl rounded-xl border border-[#2ECC71]/18 dark:border-[#2ECC71]/12 shadow-xl z-50">
+                        <div className="p-2">
+                          <button
+                            onClick={() => {
+                              setSelectedLevel("all")
+                              setShowLevelDropdown(false)
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                              selectedLevel === "all"
+                                ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                            }`}
+                            style={{ fontFamily: 'Inter, sans-serif' }}
+                          >
+                            {t("Tous", "All")}
+                          </button>
+                          {levels.map((level) => (
+                            <button
+                              key={level}
+                              onClick={() => {
+                                setSelectedLevel(level)
+                                setShowLevelDropdown(false)
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                selectedLevel === level
+                                  ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                  : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                              }`}
+                              style={{ fontFamily: 'Inter, sans-serif' }}
+                            >
+                              {level}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Link href="/avantages-pro">
+                    <Button className="bg-[#2ECC71] text-white font-bold hover:bg-[#2ECC71]/90 transition-colors whitespace-nowrap">
+                      {t("Avantages PRO", "PRO Benefits")}
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-        </header>
+          </section>
 
         {/* Loading State */}
         {loading && (
@@ -328,546 +688,288 @@ export default function LivePage() {
         {/* Content - only show when not loading */}
         {!loading && !error && (
           <>
-        {/* Live Session Banner - Show first LIVE session if available */}
-        {sessions.filter(s => s.status === 'LIVE').length > 0 && (
-          <section className="mb-10">
-            {(() => {
-              const liveSession = sessions.filter(s => s.status === 'LIVE')[0]
-              return (
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                  {/* Simple live indicator */}
-                  <div className="bg-red-500 h-1"></div>
-                  
-                  <div className="p-8">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                      <div className="flex items-start gap-4">
-                        <div className="relative">
-                          <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                            <Video className="h-8 w-8 text-slate-600 dark:text-slate-400" />
-                          </div>
-                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                        </div>
-                        
-                        <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            <Badge className="bg-red-500 text-white text-xs px-2 py-1">LIVE</Badge>
-                            <Badge
-                              variant="outline"
-                              className="border-slate-300 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800"
-                            >
-                              {t("En cours", "Ongoing")}
-                            </Badge>
-                          </div>
-                          
-                          <h2 className="text-xl md:text-2xl font-bold mb-3 text-slate-900 dark:text-white">
-                            {liveSession.title}
-                          </h2>
-                          
-                          <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                            <div className="flex items-center gap-2">
-                              <Users className="h-4 w-4" />
-                              <span>{liveSession.participantCount} {t("participants actifs", "active participants")}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <UserCheck className="h-4 w-4" />
-                              <span>
-                                {t("Animé par", "Led by")} {liveSession.createdBy ? `${liveSession.createdBy.firstName} ${liveSession.createdBy.lastName}` : t("Instructeur", "Instructor")}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>{t("Commencé il y a", "Started")} {Math.floor((Date.now() - new Date(liveSession.date).getTime()) / (1000 * 60))} {t("min", "min ago")}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <Button
-                          size="lg"
-                          onClick={() => handleJoinSession(liveSession)}
-                          className="bg-red-500 hover:bg-red-600 text-white shadow-sm hover:shadow-md transition-all duration-200"
-                        >
-                          <Video className="h-5 w-5 mr-2" />
-                          {t("Rejoindre maintenant", "Join now")}
-                        </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="lg"
-                              variant="outline"
-                              className="border-slate-300 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors duration-200"
-                            >
-                              <Calendar className="h-5 w-5 mr-2" />
-                              {t("Programmer un rappel", "Set reminder")}
-                              <ChevronDown className="h-4 w-4 ml-2" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              onClick={() => handleSetReminder(liveSession.id, '5min')}
-                              disabled={reminderLoading === liveSession.id}
-                            >
-                              {reminderLoading === liveSession.id ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <Clock className="h-4 w-4 mr-2" />
-                              )}
-                              {t("5 minutes avant", "5 minutes before")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleSetReminder(liveSession.id, '10min')}
-                              disabled={reminderLoading === liveSession.id}
-                            >
-                              {reminderLoading === liveSession.id ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <Clock className="h-4 w-4 mr-2" />
-                              )}
-                              {t("10 minutes avant", "10 minutes before")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-          </section>
-        )}
+          {/* Available Live Sessions Section */}
+          <h2 className="text-3xl font-bold tracking-tight px-4 pb-3 pt-5 mb-6 text-[#1A1A1A] dark:text-[#E0E0E0]">
+            {t("Sessions Live Disponibles", "Available")} <span className="text-[#06f957]">{t("Live", "Live")}</span> {t("Sessions", "Sessions")}
+          </h2>
 
-        {/* Sessions Privées 1-on-1 - Pro+ Only */}
-        <section className="mb-10">
-          <div className="relative overflow-hidden rounded-2xl border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50/50 via-pink-50/50 to-orange-50/50 dark:from-purple-950/30 dark:via-pink-950/30 dark:to-orange-950/30 shadow-xl">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-orange-500/5" />
-            <div className="relative p-8">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div className="flex items-start gap-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center shadow-lg">
-                      <Crown className="h-8 w-8 text-white" />
-                    </div>
-                    <div className="absolute -top-2 -right-2">
-                      <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-1 shadow-lg">
-                        PRO+
-                      </Badge>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm">
-                        {t("Sessions Privées", "Private Sessions")}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="border-purple-300 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/20"
-                      >
-                        {t("1-on-1", "1-on-1")}
-                      </Badge>
-                    </div>
-                    <h2 className="text-xl md:text-2xl font-bold mb-2 text-slate-900 dark:text-white">
-                      {t("Sessions Privées avec Encadreurs", "Private Sessions with Instructors")}
-                    </h2>
-                    <p className="text-slate-600 dark:text-white mb-3 max-w-2xl">
-                      {t(
-                        "Réservez des sessions personnalisées 1-on-1 avec nos experts certifiés. Accès exclusif aux élèves Pro+ pour un apprentissage sur mesure.",
-                        "Book personalized 1-on-1 sessions with our certified experts. Exclusive access for Pro+ students for tailored learning."
-                      )}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-white">
-                      <div className="flex items-center gap-1">
-                        <UserCheck className="h-4 w-4" />
-                        <span>{t("15+ encadreurs disponibles", "15+ instructors available")}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Star className="h-4 w-4" />
-                        <span>{t("4.9/5 évaluation moyenne", "4.9/5 average rating")}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageCircle className="h-4 w-4" />
-                        <span>{t("Chat intégré", "Integrated chat")}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {userTier === "pro" ? (
-                    <>
-                      <Button
-                        size="lg"
-                        onClick={() => {
-                          // Use proper navigation for Pro users
-                          window.location.href = "/avantages-pro"
-                        }}
-                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-                      >
-                        <UserPlus className="h-5 w-5 mr-2" />
-                        {t("Voir les encadreurs", "View instructors")}
-                      </Button>
-                      <Button
-                        size="lg"
-                        variant="outline"
-                        className="border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors duration-200 bg-transparent"
-                      >
-                        <MessageCircle className="h-5 w-5 mr-2" />
-                        {t("Mes sessions", "My sessions")}
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="lg"
-                        onClick={() => window.location.href = "/abonnement"}
-                        className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-                      >
-                        <Crown className="h-5 w-5 mr-2" />
-                        {t("Passer en Pro", "Upgrade to Pro")}
-                      </Button>
-                      <Button
-                        size="lg"
-                        variant="outline"
-                        onClick={() => {
-                          // Check if user is authenticated before redirecting
-                          if (!user) {
-                            toast.error(t("Vous devez être connecté pour accéder à cette page", "You must be logged in to access this page"))
-                            return
-                          }
-
-                          // Check subscription tier
-                          if (userTier === "pro") {
-                            // Pro user - redirect to avantages-pro page
-                            window.location.href = "/avantages-pro"
-                          } else {
-                            // Non-pro user - show upgrade message and redirect to subscription page
-                            toast.info(t(
-                              "Cette fonctionnalité est réservée aux abonnés Pro+. Découvrez nos offres !",
-                              "This feature is reserved for Pro+ subscribers. Discover our offers!"
-                            ))
-                            setTimeout(() => {
-                              window.location.href = "/abonnement"
-                            }, 2000)
-                          }
-                        }}
-                        className="border-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/20 transition-colors duration-200 bg-transparent"
-                      >
-                        <Shield className="h-5 w-5 mr-2" />
-                        {t("Découvrir les avantages", "Discover benefits")}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-              
-              {/* Liste des encadreurs disponibles (visible uniquement pour Pro) */}
-              {userTier === "pro" && (
-                <div className="mt-8">
-                  <h3 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">
-                    {t("Encadreurs Disponibles", "Available Instructors")}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                      { name: "Aïcha Dubois", role: "Manager", rating: 4.9, students: 127, subjects: ["Grammaire", "Expression Orale"], online: true },
-                      { name: "Julien Martin", role: "Manager", rating: 4.8, students: 98, subjects: ["Vocabulaire", "Compréhension"], online: true },
-                      { name: "Marie Laurent", role: "Admin", rating: 5.0, students: 156, subjects: ["TCF/TEF", "Exam Prep"], online: false },
-                      { name: "Pierre Dubois", role: "Manager", rating: 4.7, students: 89, subjects: ["Expression Écrite", "Culture"], online: true },
-                      { name: "Sophie Moreau", role: "Admin", rating: 4.9, students: 134, subjects: ["Phonétique", "Conversation"], online: true },
-                      { name: "Thomas Bernard", role: "Manager", rating: 4.8, students: 112, subjects: ["Littérature", "Histoire"], online: false }
-                    ].map((instructor, index) => (
-                      <div
-                        key={index}
-                        className="group relative rounded-xl border border-gray-200 dark:border-gray-700 bg-card p-4 hover:shadow-lg hover:border-purple-300 dark:hover:border-purple-600 transition-all duration-200 cursor-pointer"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="relative">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold text-lg">
-                              {instructor.name.split(' ').map(n => n[0]).join('')}
-                            </div>
-                            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${instructor.online ? 'bg-green-500' : 'bg-gray-400'}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold text-slate-900 dark:text-white truncate">{instructor.name}</h4>
-                              <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 dark:text-purple-300">
-                                {instructor.role}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-1 mb-2">
-                              <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                              <span className="text-sm text-slate-600 dark:text-white">{instructor.rating}</span>
-                              <span className="text-xs text-slate-600 dark:text-white">({instructor.students} élèves)</span>
-                            </div>
-                            <div className="flex flex-wrap gap-1 mb-3">
-                              {instructor.subjects.slice(0, 2).map((subject, idx) => (
-                                <Badge key={idx} variant="outline" className="text-xs border-gray-200 dark:border-gray-700 text-slate-600 dark:text-white">
-                                  {subject}
-                                </Badge>
-                              ))}
-                            </div>
-                            <Button
-                              size="sm"
-                              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
-                            >
-                              <MessageCircle className="h-4 w-4 mr-2" />
-                              {t("Contacter", "Contact")}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* Filter bar - pill groups */}
-        <section className="w-full mb-8">
-          <div className="w-full flex flex-wrap gap-3 bg-secondary rounded-xl p-3 border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2">
-              <Chip active={selectedCategory === "all"} onClick={() => setSelectedCategory("all")}>
-                {t("Toutes", "All")}
-              </Chip>
-              {categories.map((c) => (
-                <Chip key={c} active={selectedCategory === c} onClick={() => setSelectedCategory(c)}>
-                  {c}
-                </Chip>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              {levels.map((l) => (
-                <Chip key={l} active={selectedLevel === l} onClick={() => setSelectedLevel(l)}>
-                  {l}
-                </Chip>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Results */}
-        <section className="mb-10">
-          <div className="grid grid-cols-1 gap-6">
+          {/* Session Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-24">
             {filteredSessions.length === 0 ? (
-              <div className="text-center py-12">
-                <Video className="h-12 w-12 text-slate-400 dark:text-slate-500 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+              <div className="col-span-full text-center py-12">
+                <Video className="h-12 w-12 text-[#555555] dark:text-[#AAAAAA] mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-[#1A1A1A] dark:text-[#E0E0E0] mb-2">
                   {t("Aucune session trouvée", "No sessions found")}
                 </h3>
-                <p className="text-slate-600 dark:text-white">
+                <p className="text-[#555555] dark:text-[#AAAAAA]">
                   {t("Essayez de modifier vos filtres ou revenez plus tard", "Try adjusting your filters or check back later")}
                 </p>
               </div>
             ) : (
-              filteredSessions.map((session) => (
-                <div key={session.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="text-center min-w-[100px] p-3 rounded-lg bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/40 dark:to-purple-950/40 border border-gray-200 dark:border-gray-700">
-                        <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                          {formatDate(session.date)}
-                        </div>
-                        <div className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                          {formatTime(session.date)}
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                            {session.title}
-                          </h3>
-                        </div>
-                        <p className="text-sm text-slate-600 dark:text-white mb-3 line-clamp-2">
-                          {session.description}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-white">
-                          <div className="flex items-center gap-1">
-                            <UserCheck className="h-4 w-4" />
-                            <span>{session.createdBy ? `${session.createdBy.firstName} ${session.createdBy.lastName}` : t("Instructeur", "Instructor")}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Users className="h-4 w-4" />
-                            <span>
-                              {session.participantCount}/{session.maxParticipants} {t("participants", "participants")}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            <span>{session.duration} min</span>
-                          </div>
-                        </div>
-                      </div>
+              filteredSessions.slice(0, 6).map((session) => {
+                const status = getSessionStatus(session)
+                const slotsPercentage = (session.participantCount / session.maxParticipants) * 100
+                const slotsLeft = session.maxParticipants - session.participantCount
+                const instructorName = session.createdBy ? `${session.createdBy.firstName} ${session.createdBy.lastName}` : t("Instructeur", "Instructor")
+                const instructorInitials = session.createdBy ? `${session.createdBy.firstName[0]}${session.createdBy.lastName[0]}` : "IN"
+                const tutorProfileImage = getTutorProfileImage(session)
+                const StatusIcon = status?.icon || Calendar
+                
+                return (
+                  <div key={session.id} className="glass-card rounded-xl p-6 flex flex-col gap-4 hover:-translate-y-1 hover:shadow-2xl transition-all duration-300">
+                    {/* Instructor & Status */}
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="flex flex-col items-end gap-2">
-                          <Badge
-                            className="text-white border-0 font-medium shadow-sm"
-                            style={{ backgroundColor: (sessionTypeColors as any)[session.category?.toLowerCase() || "workshop"] }}
-                          >
-                            {session.level || session.tags?.[0]?.toUpperCase() || "B1"}
-                          </Badge>
-                          {session.requiredTier !== "FREE" ? (
-                            <Badge variant="outline" className="text-xs border-gray-200 dark:border-gray-700">
-                              {session.requiredTier}
-                            </Badge>
+                        <div className="relative">
+                          {tutorProfileImage ? (
+                            <Image
+                              src={tutorProfileImage}
+                              alt={instructorName}
+                              width={40}
+                              height={40}
+                              className="rounded-full border-2 border-[#06f957]/30 object-cover"
+                              onError={(e) => {
+                                // Fallback to initials if image fails
+                                const target = e.target as HTMLImageElement
+                                target.style.display = 'none'
+                                const parent = target.parentElement
+                                if (parent) {
+                                  parent.innerHTML = `<div class="w-10 h-10 rounded-full border-2 border-[#06f957]/30 bg-[#06f957]/20 flex items-center justify-center text-[#06f957] font-bold text-sm">${instructorInitials}</div>`
+                                }
+                              }}
+                            />
                           ) : (
-                            <Badge className="bg-green-500 text-white text-xs shadow-sm">{t("Gratuit", "Free")}</Badge>
+                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-[#06f957]/30 bg-[#06f957]/20 flex items-center justify-center">
+                              <span className="text-[#06f957] font-bold text-sm">{instructorInitials}</span>
+                            </div>
                           )}
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <Button
-                            size="sm"
-                            className="gap-2"
-                            disabled={!canAccess(session.requiredTier)}
-                            variant={canAccess(session.requiredTier) ? "default" : "outline"}
-                            onClick={() => canAccess(session.requiredTier) && handleJoinSession(session)}
-                          >
-                            {!canAccess(session.requiredTier) ? (
-                              <>
-                                <Lock className="h-4 w-4" />
-                                {t("Upgrade", "Upgrade")}
-                              </>
-                            ) : session.status === "LIVE" ? (
-                              <>
-                                <Video className="h-4 w-4" />
-                                {t("Rejoindre", "Join")}
-                              </>
-                            ) : (
-                              <>
-                                <UserPlus className="h-4 w-4" />
-                                {t("S'inscrire", "Register")}
-                              </>
-                            )}
-                          </Button>
-                          {session.status === "SCHEDULED" && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-xs"
-                                >
-                                  <Calendar className="h-3 w-3 mr-1" />
-                                  {t("Rappel", "Reminder")}
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem 
-                                  onClick={() => handleSetReminder(session.id, '5min')}
-                                  disabled={reminderLoading === session.id}
-                                >
-                                  {reminderLoading === session.id ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  ) : (
-                                    <Clock className="h-4 w-4 mr-2" />
-                                  )}
-                                  {t("5 min avant", "5 min before")}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  onClick={() => handleSetReminder(session.id, '10min')}
-                                  disabled={reminderLoading === session.id}
-                                >
-                                  {reminderLoading === session.id ? (
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  ) : (
-                                    <Clock className="h-4 w-4 mr-2" />
-                                  )}
-                                  {t("10 min avant", "10 min before")}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
+                        <div>
+                          <p className="font-bold text-sm text-[#1A1A1A] dark:text-[#E0E0E0]">{instructorName}</p>
+                          <p className="text-xs text-[#555555] dark:text-[#AAAAAA]">{t("Expert", "Expert")}</p>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="mt-16">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold font-[var(--font-poppins)] text-slate-900 dark:text-white">
-              {t("Programme de la semaine", "This week's schedule")}
-            </h2>
-            <Button variant="outline" size="sm" className="border-gray-200 dark:border-gray-700 hover:bg-secondary bg-transparent">
-              {t("Voir tout", "View all")}
-            </Button>
-          </div>
-          <div className="space-y-4">
-            {upcomingSessions.slice(0, 5).map((session, index) => (
-              <div
-                key={session.id}
-                className="group relative overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-card p-6 hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-200"
-              >
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-purple-500" />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-6">
-                    <div className="text-center min-w-[100px] p-3 rounded-lg bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/40 dark:to-purple-950/40 border border-gray-200 dark:border-gray-700">
-                      <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                        {formatDate(session.date)}
-                      </div>
-                      <div className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                        {formatTime(session.date)}
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                          {session.title}
-                        </h3>
-                        {/* Supprimer la vérification isRecorded car elle n'existe pas */}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-white">
-                        <div className="flex items-center gap-1">
-                          <UserCheck className="h-4 w-4" />
-                          <span>{session.createdBy ? `${session.createdBy.firstName} ${session.createdBy.lastName}` : t("Instructeur", "Instructor")}</span>
+                      {status && (
+                        <div className={`flex items-center gap-1.5 ${status.color} text-black dark:text-white font-bold text-xs py-1 px-3 rounded-full ${status.pulse ? 'pulse-live' : ''}`}>
+                          <StatusIcon className="h-3 w-3" />
+                          <span>{status.text}</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4" />
-                          <span>
-                            {session.participantCount}/{session.maxParticipants} {t("participants", "participants")}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          <span>{session.duration} min</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-col items-end gap-2">
-                      <Badge
-                        className="text-white border-0 font-medium shadow-sm"
-                        style={{ backgroundColor: (sessionTypeColors as any)[session.category?.toLowerCase() || "workshop"] }}
-                      >
-                        {session.level || session.tags?.[0]?.toUpperCase() || "B1"}
-                      </Badge>
-                      {session.requiredTier !== "FREE" ? (
-                        <Badge variant="outline" className="text-xs border-gray-200 dark:border-gray-700">
-                          {session.requiredTier}
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-green-500 text-white text-xs shadow-sm">{t("Gratuit", "Free")}</Badge>
                       )}
                     </div>
-                    <Button
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity bg-primary hover:bg-primary/90"
-                    >
-                      {t("Rejoindre", "Join")}
-                    </Button>
+
+                    {/* Session Title */}
+                    <h3 className="text-xl font-bold text-[#1A1A1A] dark:text-[#E0E0E0]">{session.title}</h3>
+
+                    {/* Date/Time */}
+                    <div className="flex items-center gap-2 text-sm text-[#06f957] font-medium">
+                      <Calendar className="h-4 w-4" />
+                      <p>{formatDisplayDate(session.date)}, {formatDisplayTime(session.date)}</p>
+                    </div>
+
+                    {/* Timer Display */}
+                    {(() => {
+                      const timer = getSessionTimer(session)
+                      if (timer) {
+                        return (
+                          <div className="flex items-center gap-2 text-lg font-bold text-[#06f957]">
+                            <Clock className="h-5 w-5" />
+                            <span>{timer.text}</span>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
+
+                    {/* Tags */}
+                    <div className="flex items-center gap-2">
+                      <span className="glass-chip text-xs font-medium py-1 px-3 rounded-full text-[#1A1A1A] dark:text-[#E0E0E0]">
+                        {session.category || t("Général", "General")}
+                      </span>
+                      <span className="glass-chip text-xs font-medium py-1 px-3 rounded-full text-[#1A1A1A] dark:text-[#E0E0E0]">
+                        {session.level || "B1"}
+                      </span>
+                    </div>
+
+                    {/* Slots Progress */}
+                    <div>
+                      <div className="flex justify-between text-xs font-medium text-[#555555] dark:text-[#AAAAAA] mb-1">
+                        <span>{t("Places remplies", "Slots Filled")}</span>
+                        <span className={slotsLeft === 0 ? 'text-red-500 font-bold' : slotsLeft <= 5 ? 'text-yellow-500 font-bold' : ''}>
+                          {session.participantCount} / {session.maxParticipants} {slotsLeft > 0 && `(${slotsLeft} ${t("restantes", "left")})`}
+                        </span>
+                      </div>
+                      <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-1.5">
+                        <div 
+                          className={`h-1.5 rounded-full ${slotsLeft === 0 ? 'bg-red-500' : slotsLeft <= 5 ? 'bg-yellow-500' : 'bg-[#06f957]'}`} 
+                          style={{ width: `${slotsPercentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="mt-2 flex items-center gap-3">
+                      {status?.type === 'expired' ? (
+                        <Button
+                          disabled
+                          className="flex-1 flex max-w-full cursor-not-allowed items-center justify-center overflow-hidden rounded-lg h-11 bg-gray-400/50 text-gray-600 gap-2 text-sm font-bold tracking-wide"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          {t("Session terminée", "Session Ended")}
+                        </Button>
+                      ) : status?.type === 'live' ? (
+                        <Button
+                          onClick={() => handleJoinSession(session)}
+                          className="flex-1 flex max-w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 bg-red-500 hover:bg-red-600 text-white gap-2 text-sm font-bold tracking-wide transition-transform hover:scale-105"
+                        >
+                          <PlayCircle className="h-4 w-4" />
+                          {t("Rejoindre maintenant", "Join Now")}
+                        </Button>
+                      ) : status?.type === 'full' ? (
+                        <Button
+                          disabled
+                          className="flex-1 flex max-w-full cursor-not-allowed items-center justify-center overflow-hidden rounded-lg h-11 bg-red-400/50 text-red-700 gap-2 text-sm font-bold tracking-wide"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          {t("Complet", "Full")}
+                        </Button>
+                      ) : canAccess(session.requiredTier) ? (
+                        <Button
+                          onClick={() => handleJoinSession(session)}
+                          className="flex-1 flex max-w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 bg-[#06f957] text-black gap-2 text-sm font-bold tracking-wide transition-transform hover:scale-105"
+                        >
+                          {status?.type === 'starting' ? (
+                            <>
+                              <Clock className="h-4 w-4" />
+                              {t("Rejoindre bientôt", "Join Soon")}
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus className="h-4 w-4" />
+                              {t("S'inscrire", "Register")}
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => {
+                            toast.error(t("Upgradez votre abonnement", "Upgrade your subscription"))
+                            window.location.href = "/abonnement"
+                          }}
+                          className="flex-1 flex max-w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 bg-[#06f957]/20 text-[#06f957] gap-2 text-sm font-bold tracking-wide transition-colors hover:bg-[#06f957]/30"
+                        >
+                          <Lock className="h-4 w-4" />
+                          {t("Upgrade requis", "Upgrade Required")}
+                        </Button>
+                      )}
+                      {status?.type !== 'expired' && status?.type !== 'live' && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg glass-chip hover:bg-white/70 dark:hover:bg-black/50 transition-colors">
+                              <MoreVertical className="h-5 w-5 text-[#1A1A1A] dark:text-[#E0E0E0]" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleSetReminder(session.id, '5min')}>
+                              <Clock className="h-4 w-4 mr-2" />
+                              {t("5 min avant", "5 min before")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSetReminder(session.id, '10min')}>
+                              <Clock className="h-4 w-4 mr-2" />
+                              {t("10 min avant", "10 min before")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                )
+              })
+            )}
           </div>
-        </section>
+
+            {/* Weekly Schedule Section */}
+            <div className="mt-24">
+            <div className="flex items-center justify-between px-4 pb-3 pt-5 mb-6">
+              <h2 className="text-3xl font-bold tracking-tight text-[#1A1A1A] dark:text-[#E0E0E0]">
+                {t("Programme", "Weekly")} <span className="text-[#06f957]">{t("Hebdomadaire", "Schedule")}</span>
+              </h2>
+              <div className="flex items-center gap-2">
+                <button className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full glass-chip hover:bg-white/70 dark:hover:bg-black/50 transition-colors">
+                  <ChevronDown className="h-5 w-5 text-[#1A1A1A] dark:text-[#E0E0E0] rotate-90" />
+                </button>
+                <button className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full glass-chip hover:bg-white/70 dark:hover:bg-black/50 transition-colors">
+                  <ChevronDown className="h-5 w-5 text-[#1A1A1A] dark:text-[#E0E0E0] -rotate-90" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+              {weeklySchedule.map((dayData, index) => {
+                const dayName = dayData.day.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { weekday: "long" })
+                const dayDate = dayData.day.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { month: "short", day: "numeric" })
+                const hasSessions = dayData.sessions.length > 0
+                const isToday = dayData.day.toDateString() === new Date().toDateString()
+
+                return (
+                  <div key={index} className={`glass-card rounded-xl p-4 flex flex-col gap-4 ${isToday ? 'bg-[#06f957]/20 dark:bg-[#06f957]/20 border-[#06f957]/50' : ''}`}>
+                    {/* Day Header */}
+                    <div className={`text-center pb-3 border-b ${isToday ? 'border-[#06f957]/40 dark:border-[#06f957]/40' : 'border-white/30 dark:border-white/10'}`}>
+                      <p className="font-bold text-lg text-[#1A1A1A] dark:text-[#E0E0E0]">{dayName}</p>
+                      <p className="text-sm text-[#555555] dark:text-[#AAAAAA]">{dayDate}</p>
+                    </div>
+
+                    {/* Sessions */}
+                    <div className="space-y-3 flex-1">
+                      {hasSessions ? (
+                        dayData.sessions.map((session) => {
+                          const sessionStatus = getSessionStatus(session)
+                          const isFull = sessionStatus?.text === t("Complet", "Full")
+                          const instructorName = session.createdBy ? `${session.createdBy.firstName} ${session.createdBy.lastName}` : t("Instructeur", "Instructor")
+                          
+                          return (
+                            <div key={session.id} className="glass-chip rounded-lg p-3 relative">
+                              {isFull && (
+                                <div className="absolute top-2 right-2 flex items-center gap-2 bg-red-400/50 dark:bg-zinc-600/50 text-black dark:text-white font-bold text-[10px] py-0.5 px-2 rounded-full">
+                                  {t("Complet", "Full")}
+                                </div>
+                              )}
+                              <p className="text-sm font-bold text-[#1A1A1A] dark:text-[#E0E0E0] pr-16">{session.title}</p>
+                              <p className="text-xs text-[#555555] dark:text-[#AAAAAA] mt-1">
+                                {formatTime(session.date)} - {t("par", "by")} {instructorName}
+                              </p>
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="text-xs font-bold py-1 px-2 rounded-full bg-[#06f957]/20 text-[#06f957]">
+                                  {session.category || t("Général", "General")}
+                                </span>
+                                <button 
+                                  className={`flex items-center justify-center size-7 rounded-full ${isFull ? 'bg-zinc-400/50 dark:bg-zinc-700/50 text-[#555555] dark:text-[#AAAAAA] cursor-not-allowed' : 'bg-[#06f957]/20 hover:bg-[#06f957]/30 text-[#06f957] transition-colors'}`}
+                                  onClick={() => !isFull && handleSetReminder(session.id, '5min')}
+                                  disabled={isFull}
+                                >
+                                  <Bell className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center">
+                          <p className="text-center text-sm text-[#555555] dark:text-[#AAAAAA] font-medium">
+                            {t("Aucune session programmée.", "No sessions scheduled.")}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
           </>
         )}
-      </main>
+          </main>
+        </div>
+      </div>
     </PageShell>
   )
 }

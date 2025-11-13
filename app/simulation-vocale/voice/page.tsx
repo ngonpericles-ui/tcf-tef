@@ -21,8 +21,11 @@ import {
   Headphones,
   MessageSquare,
   TrendingUp,
-  X
+  X,
+  Globe,
+  Bell
 } from 'lucide-react';
+import { SimulationHeader } from '@/components/SimulationHeader';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
@@ -211,17 +214,20 @@ function VoicePageContent() {
       
       if (response.success && response.data) {
         const data = response.data as any;
-        const { audioBase64, previewText, useBrowserTTS, voiceId_11labs } = data;
+        const { audioBase64, previewText, useBrowserTTS, voiceId_11labs, error } = data;
         console.log('✅ Preview response:', {
           voiceId,
           voiceId_11labs,
           hasAudio: !!audioBase64,
-          useBrowserTTS
+          useBrowserTTS,
+          error,
+          gender: data.gender,
+          accent: data.accent
         });
 
-        if (audioBase64) {
+        if (audioBase64 && !useBrowserTTS) {
           // Play audio from base64 - THIS IS THE CORRECT UNIQUE VOICE FROM 11LABS
-          console.log('🎵 Playing audio for voice:', {
+          console.log('🎵 Playing ElevenLabs audio for voice:', {
             voiceId,
             voiceName: voice?.name,
             gender: voice?.gender,
@@ -230,7 +236,9 @@ function VoicePageContent() {
             audioLength: audioBase64.length
           });
           
-          const audio = new Audio(audioBase64);
+          // Ensure audioBase64 is a valid data URL
+          const audioSrc = audioBase64.startsWith('data:') ? audioBase64 : `data:audio/mpeg;base64,${audioBase64}`;
+          const audio = new Audio(audioSrc);
           audioRefs.current.set(voiceId, audio);
           
           audio.onended = () => {
@@ -244,9 +252,30 @@ function VoicePageContent() {
           };
 
           audio.onerror = (error) => {
-            console.error('❌ Audio playback error for voice:', voiceId, error);
-            toast.error(t_('Erreur de lecture audio', 'Audio playback error'));
+            console.warn('⚠️ Audio playback error, falling back to browser TTS:', error);
+            // Silently fall back to browser TTS
+            const previewText = 'Bonjour, je suis votre intervieweur. Prêt à commencer notre conversation ?';
+            const utterance = new SpeechSynthesisUtterance(previewText);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 1.0;
+            utterance.pitch = voice?.gender === 'MALE' ? 0.8 : 1.2;
+            
+            const voices = window.speechSynthesis.getVoices();
+            const frenchVoice = voices.find(v => v.lang.startsWith('fr')) || voices.find(v => v.lang.includes('FR'));
+            if (frenchVoice) {
+              utterance.voice = frenchVoice;
+            }
+            
+            utterance.onend = () => {
             setPlayingVoice(null);
+              setLoadingPreview(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(voiceId);
+                return newSet;
+              });
+            };
+            
+            window.speechSynthesis.speak(utterance);
             setLoadingPreview(prev => {
               const newSet = new Set(prev);
               newSet.delete(voiceId);
@@ -258,14 +287,43 @@ function VoicePageContent() {
             await audio.play();
             console.log('▶️ Audio playing successfully for voice:', voiceId);
           } catch (playError) {
-            console.error('❌ Error starting audio playback:', playError);
-            toast.error(t_('Impossible de lire l\'audio. Vérifiez que l\'audio n\'est pas bloqué.', 'Could not play audio. Check that audio is not blocked.'));
+            console.warn('⚠️ Error starting audio playback, falling back to browser TTS:', playError);
+            // Silently fall back to browser TTS
+            const previewText = 'Bonjour, je suis votre intervieweur. Prêt à commencer notre conversation ?';
+            const utterance = new SpeechSynthesisUtterance(previewText);
+            utterance.lang = 'fr-FR';
+            utterance.rate = 1.0;
+            utterance.pitch = voice?.gender === 'MALE' ? 0.8 : 1.2;
+            
+            const voices = window.speechSynthesis.getVoices();
+            const frenchVoice = voices.find(v => v.lang.startsWith('fr')) || voices.find(v => v.lang.includes('FR'));
+            if (frenchVoice) {
+              utterance.voice = frenchVoice;
+            }
+            
+            utterance.onend = () => {
+              setPlayingVoice(null);
+              setLoadingPreview(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(voiceId);
+                return newSet;
+              });
+            };
+            
+            window.speechSynthesis.speak(utterance);
+            setLoadingPreview(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(voiceId);
+              return newSet;
+            });
           }
-        } else if (useBrowserTTS || !audioBase64) {
-          // Fallback to browser SpeechSynthesis API (WARNING: This will sound the same!)
-          console.warn('⚠️ Using browser TTS fallback - voices will sound similar!', {
+        } else {
+          // Fallback to browser SpeechSynthesis API (silently, no error toast)
+          console.log('⚠️ Using browser TTS fallback - voices will sound similar!', {
             voiceId,
-            reason: 'No 11labs audio received. Configure ELEVENLABS_API_KEY for unique voices.'
+            voiceName: voice?.name,
+            reason: error || 'No 11labs audio received. Configure ELEVENLABS_API_KEY for unique voices.',
+            useBrowserTTS
           });
           
           const utterance = new SpeechSynthesisUtterance(previewText);
@@ -292,7 +350,7 @@ function VoicePageContent() {
           };
 
           utterance.onerror = () => {
-            toast.error(t_('Erreur de lecture audio', 'Audio playback error'));
+            console.warn('Browser TTS error, stopping playback');
             setPlayingVoice(null);
             setLoadingPreview(prev => {
               const newSet = new Set(prev);
@@ -307,8 +365,47 @@ function VoicePageContent() {
         throw new Error('Failed to generate preview');
       }
     } catch (error: any) {
+      // Don't show error for 401 - it's expected to fall back to browser TTS
+      const is401Error = error?.response?.status === 401 || error?.message?.includes('401');
+      
+      if (!is401Error) {
       console.error('Error generating voice preview:', error);
       toast.error(t_('Erreur lors de la génération de l\'aperçu', 'Error generating preview'));
+      } else {
+        // Silently fall back to browser TTS for 401 errors
+        console.log('⚠️ ElevenLabs API returned 401, using browser TTS fallback');
+        const previewText = 'Bonjour, je suis votre intervieweur. Prêt à commencer notre conversation ?';
+        const utterance = new SpeechSynthesisUtterance(previewText);
+        utterance.lang = 'fr-FR';
+        utterance.rate = 1.0;
+        
+        const voice = availableVoices.find(v => v.id === voiceId);
+        utterance.pitch = voice?.gender === 'MALE' ? 0.8 : 1.2;
+        
+        const voices = window.speechSynthesis.getVoices();
+        const frenchVoice = voices.find(v => v.lang.startsWith('fr')) || voices.find(v => v.lang.includes('FR'));
+        if (frenchVoice) {
+          utterance.voice = frenchVoice;
+        }
+        
+        utterance.onend = () => {
+          setPlayingVoice(null);
+          setLoadingPreview(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(voiceId);
+            return newSet;
+          });
+        };
+        
+        window.speechSynthesis.speak(utterance);
+        setLoadingPreview(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(voiceId);
+          return newSet;
+        });
+        return; // Early return to prevent error state
+      }
+      
       setPlayingVoice(null);
       setLoadingPreview(prev => {
         const newSet = new Set(prev);
@@ -436,7 +533,7 @@ function VoicePageContent() {
 
   // Show skeleton loading instead of blocking spinner
   const SkeletonCard = () => (
-    <div className="animate-pulse">
+    <div className="animate-pulse rounded-xl p-5 bg-white/10 dark:bg-white/5 backdrop-blur-xl border border-white/20">
       <div className="h-48 bg-gray-200 dark:bg-gray-700 rounded-lg mb-4"></div>
       <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
       <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
@@ -444,433 +541,218 @@ function VoicePageContent() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-purple-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-      {/* Enhanced Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 border-b border-gray-200 dark:border-gray-800">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(147,51,234,0.1)_1px,transparent_0)] dark:bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] [background-size:32px_32px]"></div>
-        
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-200/30 dark:bg-purple-900/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-pink-200/30 dark:bg-pink-900/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
+    <div className="min-h-screen bg-white dark:bg-black">
+      <SimulationHeader currentPage="voice" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Side: Text Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-center lg:text-left"
-            >
-              {/* Badge */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800"
-              >
-                <Volume2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">
-                  {t_("Configuration Vocale", "Voice Settings")}
-                </span>
-              </motion.div>
-
-              {/* Main Title */}
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 dark:from-purple-400 dark:via-pink-400 dark:to-purple-400 bg-clip-text text-transparent leading-tight">
+      <div className="px-4 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
+        <div className="flex flex-col w-full max-w-[960px] flex-1">
+          {/* Page Heading */}
+          <div className="flex flex-wrap justify-between gap-3 p-4 text-center items-center my-8 md:my-12">
+            <div className="flex w-full flex-col gap-3">
+              <h1 className="text-transparent bg-clip-text bg-gradient-to-r from-[#2ECC71] to-[#27c066] text-3xl sm:text-4xl md:text-5xl font-bold leading-tight tracking-[-0.033em]">
                 {t_("Paramètres Vocaux", "Voice Settings")}
               </h1>
-
-              {/* Description */}
-              <p className="text-lg md:text-xl text-gray-700 dark:text-gray-300 mb-8 leading-relaxed">
+              <p className="text-muted-foreground text-sm font-normal leading-normal max-w-xl mx-auto">
                 {t_(
-                  "Personnalisez votre expérience avec nos voix IA de haute qualité. Écoutez et choisissez parmi différentes voix, accents français (France, Québec, Belgique) pour des simulations réalistes et adaptées à vos besoins.",
-                  "Customize your experience with our high-quality AI voices. Listen and choose from different voices, French accents (France, Quebec, Belgium) for realistic and tailored simulations."
+                  "Personnalisez votre partenaire d'entretien IA. Choisissez la voix et l'accent qui conviennent le mieux à votre session de pratique.",
+                  "Customize your AI interview partner. Choose the voice and accent that best suits your practice session."
                 )}
               </p>
-
-              {/* Key Features */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                {[
-                  { icon: Volume2, text: t_("Voix Premium", "Premium Voices"), desc: t_("Haute qualité", "High Quality") },
-                  { icon: Headphones, text: t_("Aperçu Audio", "Audio Preview"), desc: t_("Écoutez avant", "Listen First") },
-                  { icon: Settings, text: t_("Personnalisation", "Customization"), desc: t_("À votre goût", "To Your Taste") }
-                ].map((feature, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + idx * 0.1 }}
-                    className="flex flex-col items-center lg:items-start gap-2 p-4 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-gray-200 dark:border-gray-700"
-                  >
-                    <feature.icon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{feature.text}</div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">{feature.desc}</div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Right Side: Visual Element */}
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="flex flex-col items-center justify-center"
-            >
-              {/* Visual Illustration - Voice/Sound Waves */}
-              <div className="relative w-full max-w-md">
-                {/* SVG Illustration */}
-                <svg viewBox="0 0 400 300" className="w-full h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* Background circles */}
-                  <circle cx="200" cy="150" r="130" fill="url(#voiceGradient1)" opacity="0.1"/>
-                  <circle cx="200" cy="150" r="80" fill="url(#voiceGradient2)" opacity="0.15"/>
-                  
-                  {/* Microphone */}
-                  <rect x="180" y="100" width="40" height="100" rx="20" fill="#EC4899" opacity="0.3"/>
-                  <ellipse cx="200" cy="100" rx="25" ry="15" fill="#EC4899" opacity="0.5"/>
-                  
-                  {/* Sound waves */}
-                  <path d="M 240 120 Q 260 100 280 120 Q 260 140 240 120" stroke="#8B5CF6" strokeWidth="3" fill="none" opacity="0.6"/>
-                  <path d="M 245 140 Q 270 115 295 140 Q 270 165 245 140" stroke="#8B5CF6" strokeWidth="3" fill="none" opacity="0.6"/>
-                  <path d="M 250 160 Q 280 130 310 160 Q 280 190 250 160" stroke="#8B5CF6" strokeWidth="3" fill="none" opacity="0.6"/>
-                  
-                  {/* Left sound waves */}
-                  <path d="M 160 120 Q 140 100 120 120 Q 140 140 160 120" stroke="#EC4899" strokeWidth="3" fill="none" opacity="0.6"/>
-                  <path d="M 155 140 Q 130 115 105 140 Q 130 165 155 140" stroke="#EC4899" strokeWidth="3" fill="none" opacity="0.6"/>
-                  <path d="M 150 160 Q 120 130 90 160 Q 120 190 150 160" stroke="#EC4899" strokeWidth="3" fill="none" opacity="0.6"/>
-                  
-                  {/* Voice quality indicators */}
-                  <circle cx="120" cy="60" r="20" fill="#10B981" opacity="0.2"/>
-                  <circle cx="280" cy="60" r="20" fill="#06B6D4" opacity="0.2"/>
-                  <circle cx="280" cy="240" r="20" fill="#F59E0B" opacity="0.2"/>
-                  
-                  <defs>
-                    <linearGradient id="voiceGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#8B5CF6"/>
-                      <stop offset="100%" stopColor="#EC4899"/>
-                    </linearGradient>
-                    <linearGradient id="voiceGradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#EC4899"/>
-                      <stop offset="100%" stopColor="#F59E0B"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Voice Configuration */}
-        <Card className="mb-8 shadow-lg border-2 border-purple-100 dark:border-purple-900/50 dark:bg-gray-800/80">
-          <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                <Settings className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {t_("Configuration Vocale", "Voice Configuration")}
-                </CardTitle>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  {t_("Définissez vos préférences par défaut", "Set your default preferences")}
-                </p>
-              </div>
             </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  {t_("Préférence vocale", "Voice Preference")}
+          </div>
+
+          {/* Voice Configuration Section */}
+          <div className="bg-white/5 dark:bg-white/5 backdrop-blur-2xl rounded-xl p-4 sm:p-6 mb-12 border border-white/10">
+            <h2 className="text-black dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] pb-5">
+              {t_("Configuration Vocale", "Voice Configuration")}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+              <div className="relative w-full md:col-span-1">
+                <label className="block text-black dark:text-white text-sm font-medium leading-normal pb-2" htmlFor="voice-preference">
+                  {t_("Préférence Vocale", "Voice Preference")}
                 </label>
                 <Select 
                   value={voicePreference} 
                   onValueChange={(value) => {
                     setVoicePreference(value);
-                    // Clear selected voice when changing gender preference
                     setSelectedVoice('');
                   }}
                 >
-                  <SelectTrigger className="w-full h-12 dark:bg-gray-700 dark:border-gray-600 border-2">
+                  <SelectTrigger className="w-full rounded-lg text-black dark:text-white border border-[#3b5445] dark:border-white/20 bg-white/5 dark:bg-white/5 backdrop-blur-2xl focus:border-[#2ECC71] h-12 p-3 text-sm font-normal leading-normal ring-0 focus:ring-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="TOUS">{t_("Tous", "All")}</SelectItem>
-                    <SelectItem value="MALE">{t_("Voix masculine", "Male Voice")}</SelectItem>
-                    <SelectItem value="FEMALE">{t_("Voix féminine", "Female Voice")}</SelectItem>
+                    <SelectItem value="TOUS">{t_("Tous", "Any")}</SelectItem>
+                    <SelectItem value="MALE">{t_("Masculin", "Male")}</SelectItem>
+                    <SelectItem value="FEMALE">{t_("Féminin", "Female")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                  {t_("Préférence d'accent", "Accent Preference")}
+              <div className="relative w-full md:col-span-1">
+                <label className="block text-black dark:text-white text-sm font-medium leading-normal pb-2" htmlFor="accent-preference">
+                  {t_("Préférence d'Accent", "Accent Preference")}
                 </label>
                 <Select 
                   value={accentPreference} 
                   onValueChange={(value) => {
                     setAccentPreference(value);
-                    // Clear selected voice when changing accent preference
                     setSelectedVoice('');
                   }}
                 >
-                  <SelectTrigger className="w-full h-12 dark:bg-gray-700 dark:border-gray-600 border-2">
+                  <SelectTrigger className="w-full rounded-lg text-black dark:text-white border border-[#3b5445] dark:border-white/20 bg-white/5 dark:bg-white/5 backdrop-blur-2xl focus:border-[#2ECC71] h-12 p-3 text-sm font-normal leading-normal ring-0 focus:ring-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="TOUS">{t_("Tous", "All")}</SelectItem>
-                    <SelectItem value="FRANCE">🇫🇷 {t_("Français (France)", "French (France)")}</SelectItem>
-                    <SelectItem value="QUEBEC">🇨🇦 {t_("Français (Québec)", "French (Quebec)")}</SelectItem>
-                    <SelectItem value="BELGIUM">🇧🇪 {t_("Français (Belgique)", "French (Belgium)")}</SelectItem>
+                    <SelectItem value="FRANCE">🇫🇷 {t_("France", "France")}</SelectItem>
+                    <SelectItem value="QUEBEC">🇨🇦 {t_("Québec", "Quebec")}</SelectItem>
+                    <SelectItem value="BELGIUM">🇧🇪 {t_("Belgique", "Belgium")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <Button 
-              onClick={handleSavePreferences}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg w-full md:w-auto"
-              size="lg"
-            >
-              <CheckCircle className="w-5 h-5 mr-2" />
-              {t_("Sauvegarder les préférences", "Save Preferences")}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Enhanced Voice Options */}
-        <Card className="shadow-lg border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800/80">
-          <CardHeader className="pb-4 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
-                <Headphones className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {t_("Voix Disponibles", "Available Voices")}
-                </CardTitle>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                  {t_("Écoutez et sélectionnez votre voix préférée", "Listen and select your preferred voice")}
-                </p>
+              <div className="md:col-span-1">
+                <Button 
+                  onClick={handleSavePreferences}
+                  className="flex w-full min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-[#2ECC71] hover:bg-[#27c066] text-black text-sm font-bold leading-normal tracking-[0.015em] transition-opacity"
+                >
+                  <span className="truncate">{t_("Sauvegarder les Préférences", "Save Preferences")}</span>
+                </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="p-6">
+          </div>
+
+          {/* Available Voices Section */}
+          <h2 className="text-black dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5">
+            {t_("Voix Disponibles", "Available Voices")}
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
             {loading && filteredVoices.length === 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {[1, 2, 3, 4].map((i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
+              [1, 2, 3, 4, 5, 6].map((i) => (
+                <SkeletonCard key={i} />
+              ))
             ) : filteredVoices.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Volume2 className="w-10 h-10 text-purple-600 dark:text-purple-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              <div className="col-span-full text-center py-12">
+                <Volume2 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-black dark:text-white mb-2">
                   {t_("Aucune voix correspondante", "No matching voices")}
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  {accentPreference !== 'TOUS' || voicePreference !== 'TOUS'
-                    ? t_(
-                        `Aucune voix ne correspond aux filtres sélectionnés (${accentPreference !== 'TOUS' ? accentPreference : 'Tous'} ${voicePreference !== 'TOUS' ? `• ${voicePreference === 'MALE' ? 'Masculin' : 'Féminin'}` : ''}). Veuillez ajuster vos préférences.`,
-                        `No voices match the selected filters (${accentPreference !== 'TOUS' ? accentPreference : 'All'} ${voicePreference !== 'TOUS' ? `• ${voicePreference === 'MALE' ? 'Male' : 'Female'}` : ''}). Please adjust your preferences.`
-                      )
-                    : t_("Aucune voix disponible pour le moment", "No voices available at the moment")
-                  }
+                <p className="text-sm text-muted-foreground">
+                  {t_("Aucune voix disponible pour le moment", "No voices available at the moment")}
                 </p>
-                {(accentPreference !== 'TOUS' || voicePreference !== 'TOUS') && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setAccentPreference('TOUS');
-                      setVoicePreference('TOUS');
-                      setSelectedVoice('');
-                    }}
-                    className="mt-2"
-                  >
-                    {t_("Réinitialiser les préférences", "Reset Preferences")}
-                  </Button>
-                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredVoices.map((voice, idx) => {
-                  const accentInfo = getAccentLabel(voice.accent);
-                  const isSelected = selectedVoice === voice.id;
-                  const isPlaying = playingVoice === voice.id;
-                  const isLoading = loadingPreview.has(voice.id);
+              filteredVoices.map((voice, idx) => {
+                const accentInfo = getAccentLabel(voice.accent);
+                const isSelected = selectedVoice === voice.id;
+                const isPlaying = playingVoice === voice.id;
+                const isLoading = loadingPreview.has(voice.id);
+                const isPremium = voice.quality === 'HIGH';
 
-                  return (
-                    <motion.div
-                      key={voice.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.1 }}
-                      className={`group relative overflow-hidden rounded-xl border-2 ${
-                        isSelected
-                          ? 'border-purple-500 dark:border-purple-500 bg-purple-50/50 dark:bg-purple-900/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700'
-                      } bg-white dark:bg-gray-800/50 hover:shadow-lg transition-all duration-300`}
-                    >
-                      {/* Selected indicator */}
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 z-10">
-                          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg">
-                            <CheckCircle className="w-5 h-5 text-white" />
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center space-x-4 flex-1">
-                            <div className={`w-14 h-14 rounded-xl flex items-center justify-center shadow-md ${
-                              isSelected
-                                ? 'bg-gradient-to-br from-purple-500 to-pink-500'
-                                : 'bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30'
-                            }`}>
-                              <Volume2 className={`w-7 h-7 ${isSelected ? 'text-white' : 'text-purple-600 dark:text-purple-400'}`} />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                                  {voice.name}
-                                </h3>
-                                <span className="text-2xl">{accentInfo.flag}</span>
-                              </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {voice.gender === 'MALE' 
-                                  ? t_('Voix masculine', 'Male Voice')
-                                  : t_('Voix féminine', 'Female Voice')} • {accentInfo.text}
-                              </p>
-                              {voice.description && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                  {voice.description}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Voice characteristics */}
-                        <div className="mb-4 flex flex-wrap gap-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                            {voice.gender === 'MALE' 
-                              ? t_('Masculin', 'Male')
-                              : t_('Féminin', 'Female')}
-                          </span>
-                          <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-indigo-100 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                            {accentInfo.text}
-                          </span>
-                          {voice.quality && (
-                            <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium ${getQualityColor(voice.quality)}`}>
-                              {voice.quality === 'HIGH' 
-                                ? t_('Haute qualité', 'High Quality')
-                                : voice.quality === 'MEDIUM'
-                                ? t_('Qualité moyenne', 'Medium Quality')
-                                : t_('Qualité basique', 'Basic Quality')}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-3">
-                          <Button
-                            size="lg"
-                            variant={isPlaying ? "default" : "outline"}
-                            onClick={() => handleVoicePreview(voice.id)}
-                            disabled={isLoading}
-                            className={`flex-1 ${
-                              isPlaying
-                                ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0'
-                                : 'border-2 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'
-                            }`}
-                          >
-                            {isLoading ? (
-                              <>
-                                <div className="w-4 h-4 mr-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                {t_("Chargement...", "Loading...")}
-                              </>
-                            ) : isPlaying ? (
-                              <>
-                                <Pause className="w-5 h-5 mr-2" />
-                                {t_("En cours...", "Playing...")}
-                              </>
-                            ) : (
-                              <>
-                                <Play className="w-5 h-5 mr-2" />
-                                {t_("Écouter", "Preview")}
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="lg"
-                            variant={isSelected ? "default" : "outline"}
-                            onClick={() => handleVoiceSelection(voice.id)}
-                            className={`flex-1 transition-all ${
-                              isSelected
-                                ? 'bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white border-0 shadow-lg'
-                                : 'border-2 border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/10'
-                            }`}
-                          >
-                            {isSelected ? (
-                              <>
-                                <X className="w-5 h-5 mr-2" />
-                                {t_("Désélectionner", "Deselect")}
-                              </>
-                            ) : (
-                              <>
-                                <Settings className="w-5 h-5 mr-2" />
-                                {t_("Sélectionner", "Select")}
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                return (
+                  <div
+                    key={voice.id}
+                    className={`bg-white/5 dark:bg-white/5 backdrop-blur-2xl rounded-xl p-5 flex flex-col border-2 ${
+                      isSelected 
+                        ? 'border-[#2ECC71] ring-2 ring-[#2ECC71]/20 shadow-lg' 
+                        : 'border-gray-300/30 dark:border-white/20 shadow-sm'
+                    } transition-all hover:border-[#2ECC71]/50 hover:shadow-md`}
+                  >
+                    <div className="flex justify-between items-start gap-4 mb-3">
+                      <div className="flex-1">
+                        <h3 className="text-black dark:text-white text-lg font-bold">{voice.name}</h3>
+                        <p className="text-muted-foreground text-xs">
+                          {voice.gender === 'MALE' 
+                            ? t_('Masculin', 'Male') 
+                            : t_('Féminin', 'Female')}, {accentInfo.text} {accentInfo.flag}
+                        </p>
                       </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
+                      <div className={`flex items-center gap-1.5 ${
+                        isPremium 
+                          ? 'bg-[#2ECC71]/20 text-[#2ECC71]' 
+                          : 'bg-[#3b5445] dark:bg-white/10 text-muted-foreground'
+                      } text-xs font-semibold px-2 py-1 rounded-full`}>
+                        {isPremium && <Star className="w-3 h-3" />}
+                        <span>{isPremium ? t_('Premium', 'Premium') : t_('Standard', 'Standard')}</span>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-xs font-normal leading-normal mb-4 flex-grow">
+                      {voice.description || t_('Une voix claire et professionnelle.', 'A clear, professional, and friendly voice.')}
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <Button
+                        onClick={() => handleVoicePreview(voice.id)}
+                        disabled={isLoading}
+                        className={`flex items-center justify-center h-12 w-12 rounded-full ${
+                          isPlaying
+                            ? 'bg-[#2ECC71] text-black hover:opacity-90'
+                            : 'bg-[#3b5445] dark:bg-white/10 text-white hover:bg-[#4a6956] dark:hover:bg-white/20'
+                        } transition-opacity`}
+                      >
+                        {isLoading ? (
+                          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : isPlaying ? (
+                          <Pause className="w-5 h-5" />
+                        ) : (
+                          <Play className="w-5 h-5" />
+                        )}
+                      </Button>
+                      <Button
+                        onClick={() => handleVoiceSelection(voice.id)}
+                        className={`flex-1 flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 ${
+                          isSelected
+                            ? 'bg-[#2ECC71] text-black font-bold'
+                            : 'bg-[#3b5445] dark:bg-white/10 text-white hover:bg-[#4a6956] dark:hover:bg-white/20'
+                        } text-sm font-bold leading-normal tracking-[0.015em] transition-colors`}
+                      >
+                        <span className="truncate">
+                          {isSelected ? t_('Sélectionné', 'Selected') : t_('Sélectionner la Voix', 'Select Voice')}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
             )}
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Voice Quality Information */}
-        <Card className="mt-8 shadow-lg border-2 border-blue-100 dark:border-blue-900/50 dark:bg-gray-800/80">
-          <CardContent className="p-6">
-            <div className="flex items-start">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mr-4 flex-shrink-0">
-                <Info className="w-6 h-6 text-white" />
+          {/* About Our Voices Section */}
+          <div className="bg-white/5 dark:bg-white/5 backdrop-blur-2xl rounded-xl p-4 sm:p-6 my-12 border border-white/10">
+            <h2 className="text-black dark:text-white text-lg font-bold leading-tight tracking-[-0.015em] pb-5">
+              {t_("À Propos de Nos Voix", "About Our Voices")}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex gap-4 items-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#2ECC71]/20 flex items-center justify-center mt-1">
+                  <Star className="text-[#2ECC71] text-lg" />
+                </div>
+                <div>
+                  <h4 className="text-black dark:text-white text-sm font-bold">{t_("Voix Premium", "Premium Voices")}</h4>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    {t_(
+                      "Nos voix premium utilisent les dernières technologies IA pour offrir des conversations les plus naturelles et humaines, offrant une expérience d'entretien exceptionnellement réaliste.",
+                      "Our premium voices leverage the latest AI for the most natural and human-like conversations, providing an exceptionally realistic interview experience."
+                    )}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-3">
-                  {t_("À Propos des Voix", "About the Voices")}
-                </h3>
-                <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                  <p>
-                    <strong className="text-blue-600 dark:text-blue-400">{t_("Voix Premium:", "Premium Voices:")}</strong>{' '}
-                    {t_("Voix IA de haute qualité avec prononciation naturelle, idéales pour des simulations professionnelles.", 
-                        "High-quality AI voices with natural pronunciation, ideal for professional simulations.")}
-                  </p>
-                  <p>
-                    <strong className="text-purple-600 dark:text-purple-400">{t_("Accents Disponibles:", "Available Accents:")}</strong>{' '}
-                    {t_("France, Québec, et Belgique pour une expérience d'apprentissage complète du français.", 
-                        "France, Quebec, and Belgium for a complete French learning experience.")}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-                    {t_("💡 Conseil: Écoutez plusieurs voix avant de faire votre choix pour trouver celle qui vous convient le mieux.", 
-                        "💡 Tip: Listen to several voices before making your choice to find the one that suits you best.")}
+              <div className="flex gap-4 items-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#2ECC71]/20 flex items-center justify-center mt-1">
+                  <Globe className="text-[#2ECC71] text-lg" />
+                </div>
+                <div>
+                  <h4 className="text-black dark:text-white text-sm font-bold">{t_("Diversité des Accents", "Accent Diversity")}</h4>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    {t_(
+                      "Pratiquez avec une variété d'accents français authentiques de France, Québec et Belgique pour élargir votre compréhension et votre adaptabilité.",
+                      "Practice with a variety of authentic French accents from France, Quebec, and Belgium to broaden your comprehension and adaptability."
+                    )}
                   </p>
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </main>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
