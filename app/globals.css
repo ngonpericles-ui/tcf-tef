@@ -40,6 +40,45 @@
   background: #64748b;
 }
 
+/* Calendar selected date styling - green theme */
+.rdp-day_selected {
+  background-color: #2ECC71 !important;
+  color: white !important;
+}
+
+.rdp-day_selected:hover {
+  background-color: #27c066 !important;
+}
+
+/* Glass-morphism utilities for Live Sessions page */
+.glass-card {
+  @apply bg-white/50 dark:bg-black/30 backdrop-blur-xl border border-white/30 dark:border-white/10 shadow-lg;
+}
+
+.glass-chip {
+  @apply bg-white/40 dark:bg-black/20 backdrop-blur-lg border border-white/20 dark:border-white/10 shadow-sm;
+}
+
+.pulse-live {
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(6, 249, 87, 0.7);
+  }
+  70% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 8px rgba(6, 249, 87, 0);
+  }
+}
+
+.rdp-day_selected:focus {
+  background-color: #2ECC71 !important;
+  color: white !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
