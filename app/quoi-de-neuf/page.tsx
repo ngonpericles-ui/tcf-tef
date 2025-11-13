@@ -538,7 +538,7 @@ export default function QuoiDeNeufPage() {
           </aside>
 
           {/* Main Feed */}
-          <main className="col-span-12 lg:col-span-6 flex flex-col gap-8">
+          <main className="col-span-12 lg:col-span-6 flex flex-col gap-8 lg:pr-[20%]">
             {/* Post Composer */}
             <div className="glass-card rounded-xl p-4">
               <div className="flex items-start gap-4">
