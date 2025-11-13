@@ -113,9 +113,27 @@ export default function CoursesPage() {
         setLoading(true)
         const response = await apiClient.get(`/courses?page=${currentPage}&limit=${itemsPerPage}`)
 
+        // Debug: Log the actual API response
+        console.log('🔍 API Response:', {
+          success: (response as any).success,
+          hasData: !!(response as any).data,
+          dataType: Array.isArray((response as any).data) ? 'array' : typeof (response as any).data,
+          dataLength: Array.isArray((response as any).data) ? (response as any).data.length : 'N/A',
+          fullResponse: response
+        });
+
         if ((response as any).success && (response as any).data && Array.isArray((response as any).data)) {
           const coursesData = (response as any).data
           const pagination = (response as any).pagination
+          
+          console.log('✅ Courses received from API:', coursesData.length);
+          console.log('📚 Courses data:', coursesData.map((c: any) => ({
+            id: c.id,
+            title: c.title,
+            requiredTier: c.requiredTier,
+            hasAccess: c.hasAccess,
+            availableSubscriptions: c.availableSubscriptions
+          })));
           
           // Update pagination state
           if (pagination) {
@@ -193,6 +211,12 @@ export default function CoursesPage() {
               ? (course as any).availableSubscriptions.map((tier: string) => tier.toLowerCase() as SubscriptionTier)
               : [tierValue];
             
+            // Get access information from backend
+            const hasAccess = (course as any).hasAccess !== undefined ? (course as any).hasAccess : true;
+            const requiredTierForAccess = (course as any).requiredTierForAccess 
+              ? ((course as any).requiredTierForAccess as string).toLowerCase() as SubscriptionTier
+              : tierValue;
+            
             return {
               id: course.id,
               title: course.title,
@@ -203,6 +227,8 @@ export default function CoursesPage() {
               availableLevels: availableLevels, // Add for filtering
               availableSubscriptions: availableSubscriptions, // Add for access control
               requiredTier: tierValue,
+              requiredTierForAccess: requiredTierForAccess, // Minimum tier needed for access
+              hasAccess: hasAccess, // Whether user can access this course
               type: mappedType,
               duration: (() => {
                 if (isPDFContent) {
@@ -306,16 +332,10 @@ export default function CoursesPage() {
       )
     }
 
-    // Filter by user subscription tier access - check availableSubscriptions array
-    // A course is accessible if user's tier is in the course's availableSubscriptions array
-    filtered = filtered.filter(course => {
-      const courseSubscriptions = (course as any).availableSubscriptions && Array.isArray((course as any).availableSubscriptions) && (course as any).availableSubscriptions.length > 0
-        ? (course as any).availableSubscriptions
-        : [course.requiredTier];
-      
-      // Check if user's subscription tier is in course's available subscriptions
-      return courseSubscriptions.includes(userTier);
-    })
+    // IMPORTANT: Don't filter by subscription here - show ALL courses
+    // The backend already sets hasAccess flag correctly using hierarchy logic
+    // Frontend will use hasAccess to show/hide upgrade prompts, not filter courses out
+    // This allows PRO users to see all courses (with upgrade prompts for inaccessible ones)
 
     return filtered
   }, [courses, selectedType, selectedLevel, searchTerm, userTier])
@@ -730,13 +750,27 @@ function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCour
   }), [])
 
   const canAccess = useCallback((course: any) => {
-    // Check if user's subscription tier is in course's availableSubscriptions array
+    // Use hasAccess from backend if available (most reliable - uses hierarchy logic)
+    if (course.hasAccess !== undefined) {
+      return course.hasAccess;
+    }
+    
+    // IMPORTANT: FREE courses are always accessible to everyone
+    const isFreeCourse = course.requiredTier === "free" || 
+      (course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.includes("free"));
+    
+    if (isFreeCourse) {
+      return true; // Everyone can access FREE courses
+    }
+    
+    // Fallback: For paid courses, check if user's subscription tier is in course's availableSubscriptions array
     const courseSubscriptions = course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.length > 0
       ? course.availableSubscriptions
       : [course.requiredTier];
     
-    return courseSubscriptions.includes(userTier);
-  }, [userTier])
+    // Use tier hierarchy: pro can access all, premium can access premium/essential, etc.
+    return tierHierarchy[userTier].some(tier => courseSubscriptions.includes(tier));
+  }, [userTier, tierHierarchy])
 
   const getTierBadgeColor = useCallback((tier: SubscriptionTier) => {
     switch (tier) {
@@ -758,20 +792,34 @@ function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCour
   const hasCoursesButNoAccess = useMemo(() => {
     if (allCourses.length === 0) return false; // No courses in database
     
-    // Check if any course in allCourses requires a subscription tier higher than user's
+    // Check if any course in allCourses has hasAccess=false (uses backend's hierarchy logic)
     const hasInaccessibleCourses = allCourses.some((course: any) => {
+      // Use hasAccess from backend if available (most reliable)
+      if (course.hasAccess !== undefined) {
+        return !course.hasAccess;
+      }
+      
+      // Fallback: Check using hierarchy
+      const isFreeCourse = course.requiredTier === "free" || 
+        (course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.includes("free"));
+      
+      if (isFreeCourse) return false; // FREE courses are accessible
+      
+      // Use tier hierarchy to check access
       const courseSubscriptions = course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.length > 0
         ? course.availableSubscriptions
         : [course.requiredTier];
       
-      // Course is inaccessible if user's tier is not in course's available subscriptions
-      return !courseSubscriptions.includes(userTier);
+      // Check if user's tier can access any of the course's subscription tiers
+      return !tierHierarchy[userTier].some(tier => courseSubscriptions.includes(tier));
     });
     
     return hasInaccessibleCourses && courses.length === 0;
-  }, [allCourses, courses, userTier]);
+  }, [allCourses, courses, userTier, tierHierarchy]);
   
-  if (courses.length === 0) {
+  // Show courses even if filteredCourses is empty (they might be filtered by type/level)
+  // Only show "no courses" if there are truly no courses from API
+  if (courses.length === 0 && !loading) {
     return (
       <div className="text-center py-12">
         <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
@@ -824,16 +872,24 @@ function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCour
                 className="object-cover group-hover:scale-105 transition-transform duration-200"
               />
               {!hasAccess && (
-                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                  <div className="flex items-center gap-2 text-white text-sm font-medium">
-                    <Lock className="h-4 w-4" />
-                    <span>
-                      {course.requiredTier === "essential"
-                        ? "Essential"
-                        : course.requiredTier === "premium"
-                          ? "Premium"
-                          : "Pro"}
-                    </span>
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10">
+                  <div className="text-center p-4">
+                    <Lock className="h-8 w-8 mx-auto mb-2 text-white" />
+                    <p className="text-white font-semibold mb-2 text-sm">
+                      {t("Abonnement requis", "Subscription required")}
+                    </p>
+                    <p className="text-white/80 text-xs">
+                      {(() => {
+                        const requiredTier = course.requiredTierForAccess || course.requiredTier;
+                        return requiredTier === "essential"
+                          ? t("Nécessite Essentiel", "Requires Essential")
+                          : requiredTier === "premium"
+                          ? t("Nécessite Premium", "Requires Premium")
+                          : requiredTier === "pro"
+                          ? t("Nécessite Pro+", "Requires Pro+")
+                          : t("Abonnement requis", "Subscription required");
+                      })()}
+                    </p>
                   </div>
                 </div>
               )}
@@ -936,11 +992,16 @@ function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCour
                   <>
                     <Lock className="h-4 w-4" />
                     {t("Passer en", "Upgrade to")}{" "}
-                    {course.requiredTier === "essential"
-                      ? "Essential"
-                      : course.requiredTier === "premium"
-                        ? "Premium"
-                        : "Pro"}
+                    {(() => {
+                      const requiredTier = course.requiredTierForAccess || course.requiredTier;
+                      return requiredTier === "essential"
+                        ? t("Essentiel", "Essential")
+                        : requiredTier === "premium"
+                        ? t("Premium", "Premium")
+                        : requiredTier === "pro"
+                        ? t("Pro+", "Pro+")
+                        : t("Premium", "Premium");
+                    })()}
                   </>
                 )}
               </Button>
