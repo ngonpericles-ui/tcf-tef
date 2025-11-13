@@ -8,9 +8,12 @@ const getDatabaseUrl = () => {
   }
   
   // Add connection pool parameters if not already present
+  // Increased for 800+ concurrent users
   const url = new URL(baseUrl);
   if (!url.searchParams.has('connection_limit')) {
-    url.searchParams.set('connection_limit', '20');
+    // Increased from 20 to 100 for better concurrency
+    // Formula: (concurrent_users / 10) + buffer = (800/10) + 20 = 100
+    url.searchParams.set('connection_limit', '100');
   }
   if (!url.searchParams.has('pool_timeout')) {
     url.searchParams.set('pool_timeout', '60');
@@ -52,6 +55,33 @@ if (process.env.NODE_ENV === 'development') {
   // Disable SSL verification for development with cloud databases
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
+
+// Enhanced connection retry logic for Neon database
+const connectWithRetry = async (maxRetries = 3, delay = 2000) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await prisma.$connect();
+      console.log('✅ Database connected successfully');
+      return true;
+    } catch (error: any) {
+      console.error(`❌ Database connection attempt ${i + 1}/${maxRetries} failed:`, error.message);
+      if (i < maxRetries - 1) {
+        console.log(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5; // Exponential backoff
+      } else {
+        console.error('❌ All database connection attempts failed');
+        throw error;
+      }
+    }
+  }
+  return false;
+};
+
+// Initialize connection on startup
+connectWithRetry().catch(err => {
+  console.error('❌ Failed to connect to database:', err);
+});
 
 // Connection pool monitoring and error handling
 let connectionPoolHealthy = true;
