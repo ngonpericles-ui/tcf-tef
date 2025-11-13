@@ -9,7 +9,7 @@ const getDatabaseUrl = () => {
     }
     const url = new URL(baseUrl);
     if (!url.searchParams.has('connection_limit')) {
-        url.searchParams.set('connection_limit', '20');
+        url.searchParams.set('connection_limit', '100');
     }
     if (!url.searchParams.has('pool_timeout')) {
         url.searchParams.set('pool_timeout', '60');
@@ -46,6 +46,31 @@ exports.prisma = prisma;
 if (process.env.NODE_ENV === 'development') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
+const connectWithRetry = async (maxRetries = 3, delay = 2000) => {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            await prisma.$connect();
+            console.log('✅ Database connected successfully');
+            return true;
+        }
+        catch (error) {
+            console.error(`❌ Database connection attempt ${i + 1}/${maxRetries} failed:`, error.message);
+            if (i < maxRetries - 1) {
+                console.log(`⏳ Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 1.5;
+            }
+            else {
+                console.error('❌ All database connection attempts failed');
+                throw error;
+            }
+        }
+    }
+    return false;
+};
+connectWithRetry().catch(err => {
+    console.error('❌ Failed to connect to database:', err);
+});
 let connectionPoolHealthy = true;
 const monitorConnectionPool = async () => {
     try {

@@ -20,7 +20,8 @@ import {
   Star,
   Settings,
   Check,
-  X
+  X,
+  Video
 } from "lucide-react"
 import { useLanguage } from "@/components/language-provider"
 import { apiClient } from "@/lib/api-client"
@@ -34,7 +35,8 @@ interface UnifiedCourse {
   contentType: string
   fileUrl?: string
   thumbnailUrl?: string
-  duration: number
+  duration: number // Duration in minutes (calculated from all lessons)
+  totalVideoCount?: number // Total number of video lessons
   tags: string[]
   isPublished: boolean
   createdBy: {
@@ -228,7 +230,7 @@ export default function UnifiedCourseCard({ course, onUpdate }: UnifiedCourseCar
 
       <CardContent className="space-y-4">
         {/* Course Details */}
-        <div className={`grid ${course.contentType === 'VIDEO' ? 'grid-cols-2' : 'grid-cols-1'} gap-4 text-sm`}>
+        <div className={`grid ${course.contentType === 'VIDEO' ? 'grid-cols-3' : 'grid-cols-1'} gap-4 text-sm`}>
           <div className="flex items-center space-x-2">
             <Calendar className="w-4 h-4 text-muted-foreground" />
             <span className="text-muted-foreground">
@@ -236,12 +238,22 @@ export default function UnifiedCourseCard({ course, onUpdate }: UnifiedCourseCar
             </span>
           </div>
           {course.contentType === 'VIDEO' && (
+            <>
             <div className="flex items-center space-x-2">
               <Clock className="w-4 h-4 text-muted-foreground" />
               <span className="text-muted-foreground">
-                {course.duration}h {t("durée", "duration")}
+                  {course.duration} {t("min", "min")} {t("durée", "duration")}
+                </span>
+              </div>
+              {course.totalVideoCount !== undefined && (
+                <div className="flex items-center space-x-2">
+                  <Video className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">
+                    {course.totalVideoCount} {t("vidéo(s)", "video(s)")}
               </span>
             </div>
+              )}
+            </>
           )}
         </div>
 

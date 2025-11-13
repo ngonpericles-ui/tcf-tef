@@ -865,13 +865,18 @@ router.get('/free-attempts/count', auth_1.authenticate, async (req, res, next) =
             database_1.prisma.voiceSimulation.count({
                 where: {
                     userId,
-                    createdAt: { gte: limitInfo.periodStartDate }
+                    createdAt: { gte: limitInfo.periodStartDate },
+                    status: 'COMPLETED',
+                    aiFeedbacks: {
+                        some: {}
+                    }
                 }
             }),
             database_1.prisma.immigrationSimulation.count({
                 where: {
                     userId,
-                    createdAt: { gte: limitInfo.periodStartDate }
+                    createdAt: { gte: limitInfo.periodStartDate },
+                    status: 'COMPLETED'
                 }
             })
         ]);
@@ -901,10 +906,19 @@ router.get('/free-attempts/count', auth_1.authenticate, async (req, res, next) =
         });
     }
     catch (error) {
-        console.error('Error getting simulation attempts count:', error);
+        console.error('❌ Error getting simulation attempts count:', error);
+        console.error('Error details:', {
+            message: error?.message,
+            stack: error?.stack,
+            code: error?.code,
+            meta: error?.meta
+        });
         res.status(500).json({
             success: false,
-            error: { message: 'Failed to get simulation attempts count' }
+            error: {
+                message: error?.message || 'Failed to get simulation attempts count',
+                details: error?.meta || error?.code
+            }
         });
     }
 });

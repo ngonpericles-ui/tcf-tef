@@ -262,7 +262,13 @@ router.post('/test-complete-flow', async (req, res) => {
 });
 router.get('/voices', async (req, res) => {
     try {
+        if (!vapiService_1.default) {
+            throw new Error('VAPI service not initialized');
+        }
         const voices = vapiService_1.default.getVoiceOptions();
+        if (!voices || !Array.isArray(voices)) {
+            throw new Error('Invalid voice options returned');
+        }
         res.json({
             success: true,
             data: voices,
@@ -270,9 +276,11 @@ router.get('/voices', async (req, res) => {
         });
     }
     catch (error) {
+        console.error('Error fetching voices:', error);
         res.status(500).json({
             success: false,
-            message: error.message
+            message: error.message || 'Failed to fetch available voices',
+            error: error.message
         });
     }
 });
@@ -300,22 +308,46 @@ router.post('/preview', async (req, res) => {
             elevenlabsVoiceId: voice.voiceId,
             hasCustomText: !!text
         });
-        const previewText = text || "Bonjour ! Je suis votre assistant vocal. Écoutez cette voix pour vous assurer qu'elle vous convient.";
+        let previewText = text;
+        if (!previewText) {
+            switch (voice.accent) {
+                case 'FRANCE':
+                    previewText = voice.gender === 'MALE'
+                        ? "Bonjour, je suis Pierre. Je viens de Paris et je serai votre intervieweur aujourd'hui. Écoutez attentivement ma voix française."
+                        : "Bonjour, je suis Marie. Je viens de France et je serai votre intervieweuse. Ma voix reflète l'élégance du français parisien.";
+                    break;
+                case 'QUEBEC':
+                    previewText = voice.gender === 'MALE'
+                        ? "Salut ! Moi c'est Jean-Baptiste, du Québec. J'ai un accent québécois authentique. Écoutez bien ma prononciation distincte."
+                        : "Bonjour ! Je suis Céline du Québec. Mon accent québécois est chaleureux et unique. Écoutez la différence avec le français de France.";
+                    break;
+                case 'BELGIUM':
+                    previewText = voice.gender === 'MALE'
+                        ? "Bonjour, je suis Thomas de Belgique. Mon accent belge est professionnel et distinct. Écoutez les nuances de ma prononciation."
+                        : "Bonjour, je suis Sophie de Belgique. Mon accent belge est élégant et raffiné. Remarquez les particularités de ma voix.";
+                    break;
+                default:
+                    previewText = "Bonjour ! Je suis votre assistant vocal. Écoutez cette voix pour vous assurer qu'elle vous convient.";
+            }
+        }
         const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
         if (!elevenLabsApiKey) {
+            console.error('❌ ELEVENLABS_API_KEY is not set! Voices will sound the same.');
             return res.json({
                 success: true,
                 data: {
                     voiceId: voice.id,
                     previewText,
                     audioUrl: null,
-                    voiceId_11labs: voice.voiceId
+                    voiceId_11labs: voice.voiceId,
+                    useBrowserTTS: true,
+                    error: 'ELEVENLABS_API_KEY not configured'
                 },
-                message: 'Preview ready (using browser TTS)'
+                message: 'Preview ready (using browser TTS - configure ELEVENLABS_API_KEY for unique voices)'
             });
         }
         try {
-            console.log('🎵 Calling 11labs API with voice ID:', voice.voiceId);
+            console.log('🎵 Calling 11labs API with voice ID:', voice.voiceId, 'for voice:', voice.name);
             const elevenLabsResponse = await axios_1.default.post(`https://api.elevenlabs.io/v1/text-to-speech/${voice.voiceId}`, {
                 text: previewText,
                 model_id: 'eleven_multilingual_v2',
@@ -331,13 +363,16 @@ router.post('/preview', async (req, res) => {
                     'Content-Type': 'application/json',
                     'xi-api-key': elevenLabsApiKey
                 },
-                responseType: 'arraybuffer'
+                responseType: 'arraybuffer',
+                timeout: 30000
             });
             const audioBuffer = Buffer.from(elevenLabsResponse.data);
-            const audioBase64 = audioBuffer.toString('base64');
+            const audioBase64 = `data:audio/mpeg;base64,${audioBuffer.toString('base64')}`;
             console.log('✅ Successfully generated audio preview:', {
                 voiceId: voice.id,
                 voiceName: voice.name,
+                gender: voice.gender,
+                accent: voice.accent,
                 elevenlabsVoiceId: voice.voiceId,
                 audioSize: audioBuffer.length,
                 audioBase64Length: audioBase64.length
@@ -347,14 +382,24 @@ router.post('/preview', async (req, res) => {
                 data: {
                     voiceId: voice.id,
                     previewText,
-                    audioBase64: `data:audio/mpeg;base64,${audioBase64}`,
-                    voiceId_11labs: voice.voiceId
+                    audioBase64: audioBase64,
+                    voiceId_11labs: voice.voiceId,
+                    useBrowserTTS: false,
+                    gender: voice.gender,
+                    accent: voice.accent
                 },
                 message: 'Preview audio generated successfully'
             });
         }
         catch (elevenLabsError) {
-            console.error('11labs API error:', elevenLabsError.response?.data || elevenLabsError.message);
+            console.error('❌ 11labs API error:', {
+                status: elevenLabsError.response?.status,
+                statusText: elevenLabsError.response?.statusText,
+                data: elevenLabsError.response?.data,
+                message: elevenLabsError.message,
+                voiceId: voice.voiceId,
+                voiceName: voice.name
+            });
             res.json({
                 success: true,
                 data: {
@@ -362,7 +407,8 @@ router.post('/preview', async (req, res) => {
                     previewText,
                     audioUrl: null,
                     voiceId_11labs: voice.voiceId,
-                    useBrowserTTS: true
+                    useBrowserTTS: true,
+                    error: elevenLabsError.response?.data?.detail?.message || elevenLabsError.message
                 },
                 message: 'Preview ready (using browser TTS as fallback)'
             });
@@ -409,6 +455,50 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
             success: false,
             message: errorMessage,
             error: error.message || 'Unknown error'
+        });
+    }
+});
+router.delete('/delete/:id', auth_1.authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || req.user?.id;
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'User ID not found in token'
+            });
+        }
+        const simulation = await prisma.voiceSimulation.findFirst({
+            where: {
+                id,
+                userId,
+                status: 'CANCELLED'
+            }
+        });
+        if (!simulation) {
+            return res.status(404).json({
+                success: false,
+                message: language === 'fr'
+                    ? 'Simulation annulée introuvable'
+                    : 'Cancelled simulation not found'
+            });
+        }
+        await prisma.voiceSimulation.delete({
+            where: { id }
+        });
+        res.json({
+            success: true,
+            message: language === 'fr'
+                ? 'Simulation supprimée avec succès'
+                : 'Simulation deleted successfully'
+        });
+    }
+    catch (error) {
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        res.status(400).json({
+            success: false,
+            message: error.message || (language === 'fr' ? 'Erreur lors de la suppression' : 'Error deleting simulation')
         });
     }
 });
@@ -581,7 +671,39 @@ router.get('/history', auth_1.authenticate, async (req, res) => {
             }
             return isValid;
         });
-        const serializedSimulations = validSimulations.map((sim) => ({
+        const now = new Date();
+        const simulationsToUpdate = [];
+        const processedSimulations = validSimulations.map((sim) => {
+            const scheduledDate = sim.scheduledDate ? new Date(sim.scheduledDate) : null;
+            if (sim.status === 'SCHEDULED' && scheduledDate && scheduledDate < now) {
+                simulationsToUpdate.push(sim.id);
+                sim.status = 'EXPIRED';
+            }
+            if (sim.status === 'EXPIRED' && scheduledDate && scheduledDate >= now) {
+                simulationsToUpdate.push(sim.id);
+                sim.status = 'SCHEDULED';
+            }
+            return sim;
+        });
+        if (simulationsToUpdate.length > 0) {
+            console.log(`🔄 Updating ${simulationsToUpdate.length} simulation(s) with corrected status`);
+            await Promise.all(simulationsToUpdate.map(async (id) => {
+                const sim = processedSimulations.find(s => s.id === id);
+                if (sim) {
+                    try {
+                        await prisma.voiceSimulation.update({
+                            where: { id },
+                            data: { status: sim.status }
+                        });
+                        console.log(`✅ Updated simulation ${id} status to ${sim.status}`);
+                    }
+                    catch (error) {
+                        console.error(`❌ Error updating simulation ${id}:`, error);
+                    }
+                }
+            }));
+        }
+        const serializedSimulations = processedSimulations.map((sim) => ({
             ...sim,
             scheduledDate: sim.scheduledDate instanceof Date
                 ? sim.scheduledDate.toISOString()
@@ -634,6 +756,10 @@ router.get('/monthly-count', auth_1.authenticate, async (req, res) => {
                 createdAt: {
                     gte: startOfMonth,
                     lte: endOfMonth
+                },
+                status: 'COMPLETED',
+                aiFeedbacks: {
+                    some: {}
                 }
             }
         });
@@ -667,6 +793,23 @@ router.get('/monthly-count', auth_1.authenticate, async (req, res) => {
             message: language === 'fr'
                 ? 'Erreur lors de la récupération du compte mensuel'
                 : 'Failed to get monthly count'
+        });
+    }
+});
+router.post('/admin/mark-expired', (0, auth_1.requireRole)(['ADMIN', 'SENIOR_MANAGER']), async (req, res) => {
+    try {
+        const result = await voiceSimulationService_1.default.markExpiredSessions();
+        res.json({
+            success: true,
+            message: `Marked ${result.scheduled + result.active} expired session(s)`,
+            data: result
+        });
+    }
+    catch (error) {
+        console.error('Error marking expired sessions:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to mark expired sessions'
         });
     }
 });
@@ -1422,89 +1565,6 @@ router.post('/end/:simulationId', (0, temporaryAuth_1.temporaryOrRegularAuth)('v
         res.status(400).json({
             success: false,
             message: error.message
-        });
-    }
-});
-router.get('/question-bank/sujets', async (req, res) => {
-    try {
-        const questionBanks = await prisma.questionBank.findMany({
-            where: {
-                isActive: true,
-                OR: [
-                    { category: 'GENERAL' },
-                    { category: 'IMMIGRATION' }
-                ]
-            },
-            select: {
-                id: true,
-                title: true,
-                extractedQuestions: true,
-                level: true,
-                category: true,
-                createdAt: true
-            },
-            orderBy: {
-                createdAt: 'desc'
-            }
-        });
-        console.log(`📚 Found ${questionBanks.length} question banks for voice simulation (shared with immigration)`);
-        const allSujets = new Set();
-        questionBanks.forEach(bank => {
-            if (bank.extractedQuestions && Array.isArray(bank.extractedQuestions)) {
-                bank.extractedQuestions.forEach((q) => {
-                    if (q.question) {
-                        allSujets.add(q.question);
-                    }
-                });
-            }
-            else if (bank.extractedQuestions && typeof bank.extractedQuestions === 'object') {
-                const data = bank.extractedQuestions;
-                if (data.questions && Array.isArray(data.questions)) {
-                    data.questions.forEach((q) => {
-                        if (q.question) {
-                            allSujets.add(q.question);
-                        }
-                    });
-                }
-            }
-        });
-        const sujets = Array.from(allSujets);
-        console.log(`📝 Found ${sujets.length} sujets from question banks`);
-        if (sujets.length === 0) {
-            const defaultSujets = [
-                'Immigration et intégration',
-                'Vie quotidienne et culture',
-                'Travail et carrière',
-                'Éducation et formation',
-                'Santé et bien-être',
-                'Voyages et tourisme',
-                'Technologie et innovation',
-                'Environnement et développement durable'
-            ];
-            return res.json({
-                success: true,
-                data: {
-                    sujets: defaultSujets,
-                    source: 'default',
-                    message: 'Aucun contenu extrait trouvé - Utilisation des sujets par défaut'
-                }
-            });
-        }
-        res.json({
-            success: true,
-            data: {
-                sujets: sujets.sort(),
-                source: 'question_banks',
-                count: sujets.length,
-                message: `${sujets.length} sujets trouvés dans la banque de questions`
-            }
-        });
-    }
-    catch (error) {
-        console.error('Error fetching sujets:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to fetch sujets'
         });
     }
 });

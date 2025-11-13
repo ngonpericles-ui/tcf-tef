@@ -51,6 +51,7 @@ export interface ContentItem {
     levels?: CourseLevel[];
     subscriptions?: SubscriptionTier[];
     totalVariants?: number;
+    totalVideoCount?: number;
 }
 export declare class ContentManagementService {
     static uploadContent(uploadData: ContentUploadData, userId: string, userRole: string): Promise<{
@@ -58,6 +59,14 @@ export declare class ContentManagementService {
         analysis?: ContentAnalysisResult;
     }>;
     private static createCourseContent;
+    static uploadBulkCourseContent(title: string, description: string, level: CourseLevel, category: CourseCategory, subscriptionTier: SubscriptionTier, availableLevels: CourseLevel[], availableTiers: SubscriptionTier[], files: Array<{
+        path: string;
+        mimetype: string;
+        originalname: string;
+    }>, userId: string, userRole: string, tags?: string[]): Promise<{
+        content: ContentItem;
+        lessons: number;
+    }>;
     private static createTestContent;
     private static createSimulationContent;
     private static performAIAnalysis;

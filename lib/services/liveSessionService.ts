@@ -18,6 +18,8 @@ export interface LiveSession {
     id: string
     firstName: string
     lastName: string
+    email?: string
+    profileImage?: string
   }
   participants: Array<{
     id: string

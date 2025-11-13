@@ -11,10 +11,35 @@ const questionBankService_1 = __importDefault(require("./questionBankService"));
 class AiChatService {
     static async sendMessage(userId, message, chatId, context) {
         try {
-            let session = chatId
-                ? await prisma_1.prisma.chatSession.findUnique({ where: { id: chatId } })
-                : null;
-            if (!session) {
+            const user = await prisma_1.prisma.user.findUnique({
+                where: { id: userId },
+                select: { currentLevel: true, preferences: true }
+            });
+            const safeContext = {
+                userLevel: context?.userLevel || user?.currentLevel || 'BASIC',
+                language: context?.language || 'fr',
+                previousMessages: context?.previousMessages || [],
+                ...context
+            };
+            let session = null;
+            if (chatId) {
+                session = await prisma_1.prisma.chatSession.findFirst({
+                    where: {
+                        id: chatId,
+                        userId: userId
+                    }
+                });
+                if (!session) {
+                    session = await prisma_1.prisma.chatSession.create({
+                        data: {
+                            userId,
+                            title: this.generateSessionTitle(message),
+                            isActive: true
+                        }
+                    });
+                }
+            }
+            else {
                 session = await prisma_1.prisma.chatSession.create({
                     data: {
                         userId,
@@ -28,11 +53,11 @@ class AiChatService {
                     sessionId: session.id,
                     role: 'USER',
                     content: message,
-                    metadata: { context }
+                    metadata: { context: safeContext }
                 }
             });
-            const relevantQuestions = await this.getRelevantQuestions(message, context);
-            const aiResponse = await this.generateAIResponse(message, context, relevantQuestions, session.id);
+            const relevantQuestions = await this.getRelevantQuestions(message, safeContext).then(questions => questions.slice(0, 2)).catch(() => []);
+            const aiResponse = await this.generateAIResponse(message, safeContext, relevantQuestions, session.id);
             await prisma_1.prisma.chatMessage.create({
                 data: {
                     sessionId: session.id,
@@ -42,7 +67,7 @@ class AiChatService {
                     confidence: aiResponse.confidence,
                     metadata: {
                         questionBankUsed: relevantQuestions.length > 0,
-                        context
+                        context: safeContext
                     }
                 }
             });
@@ -54,8 +79,19 @@ class AiChatService {
             };
         }
         catch (error) {
-            logger_1.logger.error('Error in AiChatService.sendMessage:', error);
-            throw error;
+            logger_1.logger.error('Error in AiChatService.sendMessage:', {
+                error: error?.message || error,
+                stack: error?.stack,
+                name: error?.name,
+                code: error?.code,
+                status: error?.status || error?.statusCode,
+                fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+            });
+            if (error?.message?.includes('QUOTA_EXCEEDED') || error?.message?.includes('AUTH_ERROR')) {
+                throw error;
+            }
+            const errorMsg = error?.message || error?.toString() || 'Failed to process message';
+            throw new Error(`AI_SERVICE_ERROR: ${errorMsg}`);
         }
     }
     static async getChatHistory(userId, limit = 10) {
@@ -115,8 +151,12 @@ class AiChatService {
     }
     static async getRelevantQuestions(message, context) {
         try {
-            const keywords = this.extractKeywords(message);
-            const questions = await questionBankService_1.default.searchQuestions(message, 5);
+            const messageLower = message.toLowerCase().trim();
+            if (messageLower.length < 10 ||
+                ['salut', 'bonjour', 'bonsoir', 'hey', 'hi', 'hello', 'ça va', 'ca va'].some(g => messageLower.includes(g))) {
+                return [];
+            }
+            const questions = await questionBankService_1.default.searchQuestions(message, 2);
             return questions;
         }
         catch (error) {
@@ -126,65 +166,109 @@ class AiChatService {
     }
     static async generateAIResponse(message, context, relevantQuestions, sessionId) {
         try {
-            const systemPrompt = this.buildSystemPrompt(context, relevantQuestions);
-            const recentMessages = await prisma_1.prisma.chatMessage.findMany({
-                where: { sessionId },
-                orderBy: { createdAt: 'desc' },
-                take: 10
-            });
-            const response = await aiService_1.AIService.generateResponse({
-                message,
-                systemPrompt,
-                context: {
-                    userLevel: context.userLevel,
-                    language: context.language,
-                    relevantQuestions,
-                    conversationHistory: recentMessages.reverse()
+            const systemPrompt = this.buildSystemPrompt(context, relevantQuestions || []);
+            let recentMessages = [];
+            try {
+                recentMessages = await prisma_1.prisma.chatMessage.findMany({
+                    where: { sessionId },
+                    orderBy: { createdAt: 'desc' },
+                    take: 5
+                });
+            }
+            catch (dbError) {
+                logger_1.logger.warn('Error fetching conversation history, continuing without it:', dbError);
+                recentMessages = [];
+            }
+            let response;
+            try {
+                response = await aiService_1.AIService.generateResponse({
+                    message,
+                    systemPrompt,
+                    context: {
+                        userLevel: context.userLevel || 'BASIC',
+                        language: context.language || 'fr',
+                        relevantQuestions: relevantQuestions || [],
+                        conversationHistory: recentMessages.reverse()
+                    }
+                });
+            }
+            catch (aiError) {
+                logger_1.logger.error('Error calling AIService.generateResponse:', {
+                    error: aiError?.message || aiError,
+                    status: aiError?.status || aiError?.statusCode,
+                    code: aiError?.code
+                });
+                const errorMessage = aiError?.message || '';
+                if (errorMessage.includes('QUOTA_EXCEEDED') || errorMessage.includes('AUTH_ERROR')) {
+                    throw aiError;
                 }
-            });
+                logger_1.logger.warn('AI service unavailable, returning fallback response');
+                return {
+                    message: 'Désolé, le service IA est temporairement indisponible. Veuillez réessayer dans quelques instants.',
+                    sources: [],
+                    confidence: 0.5
+                };
+            }
+            if (!response || !response.content) {
+                logger_1.logger.warn('AI response is empty, returning fallback');
+                return {
+                    message: 'Désolé, je n\'ai pas pu générer de réponse. Veuillez réessayer.',
+                    sources: [],
+                    confidence: 0.5
+                };
+            }
             return {
-                message: response.content,
-                sources: this.extractSources(response, relevantQuestions),
+                message: response.content.trim() || 'Désolé, je n\'ai pas pu générer de réponse. Veuillez réessayer.',
+                sources: this.extractSources(response, relevantQuestions || []),
                 confidence: response.confidence || 0.8
             };
         }
         catch (error) {
-            logger_1.logger.error('Error generating AI response:', error);
-            return {
-                message: "Désolé, je rencontre un problème technique. Veuillez réessayer.",
-                sources: [],
-                confidence: 0.1
-            };
+            logger_1.logger.error('Error generating AI response:', {
+                error: error?.message || error,
+                message,
+                sessionId,
+                context: { userLevel: context.userLevel, language: context.language }
+            });
+            const errorMessage = error?.message || error?.toString() || '';
+            if (errorMessage.includes('quota') || errorMessage.includes('limit') || errorMessage.includes('rate limit')) {
+                throw new Error("QUOTA_EXCEEDED: Désolé, j'ai atteint ma limite de requêtes pour ce mois. Veuillez réessayer le mois prochain ou contactez le support pour plus d'informations.");
+            }
+            else if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
+                throw new Error("AUTH_ERROR: Désolé, je rencontre un problème d'authentification avec le service IA. Veuillez contacter le support technique.");
+            }
+            else {
+                return {
+                    message: 'Désolé, je rencontre un problème technique. Veuillez réessayer dans quelques instants.',
+                    sources: [],
+                    confidence: 0.5
+                };
+            }
         }
     }
     static buildSystemPrompt(context, relevantQuestions) {
-        const currentDate = new Date().toLocaleDateString('fr-FR', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-        const currentTime = new Date().toLocaleTimeString('fr-FR', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        const basePrompt = `Tu es l'assistant IA d'Aura.ca, alimenté par Gemini AI et spécialisé dans l'aide aux étudiants pour le TCF/TEF.
+        const currentHour = new Date().getHours();
+        let greetingInstruction = '';
+        if (currentHour >= 5 && currentHour < 12) {
+            greetingInstruction = 'Matin: Utilise "Salut" ou "Bonjour".';
+        }
+        else if (currentHour >= 12 && currentHour < 17) {
+            greetingInstruction = 'Après-midi: Utilise "Salut" ou "Bonjour".';
+        }
+        else if (currentHour >= 17 && currentHour < 21) {
+            greetingInstruction = 'Soir: Utilise "Salut" ou "Bonsoir".';
+        }
+        else {
+            greetingInstruction = 'Nuit: Utilise "Salut" ou "Bonsoir".';
+        }
+        const userLevel = context?.userLevel || 'BASIC';
+        const language = context?.language || 'fr';
+        const basePrompt = `Assistant IA Aura.ca - TCF/TEF. Niveau: ${userLevel}. Langue: ${language === 'fr' ? 'français' : 'anglais'}.
 
-INFORMATION ACTUELLE:
-- Date d'aujourd'hui: ${currentDate}
-- Heure actuelle: ${currentTime}
-
-Ton rôle:
-- Aider les étudiants avec leurs questions sur le français en utilisant la puissance de Gemini AI
-- Fournir des explications claires et pédagogiques
-- Utiliser les questions de la banque de données TCF/TEF pour enrichir tes réponses
-- Adapter ton niveau de langue au niveau de l'étudiant (${context.userLevel})
-- Répondre en ${context.language === 'fr' ? 'français' : 'anglais'}
-- Tu as accès à la date et heure actuelles pour répondre aux questions temporelles
-
-Contexte de l'utilisateur:
-- Niveau: ${context.userLevel}
-- Langue préférée: ${context.language}`;
+RÈGLES:
+1. Salutations: ${greetingInstruction} Utilise "Salut" pour un ton décontracté.
+2. Formatage: JAMAIS d'astérisques (*). Écris naturellement.
+3. Longueur: CONCIS. Questions simples: 1-2 phrases. Moyennes: 2-4 phrases. Complexes: 4-6 phrases max.`;
         if (relevantQuestions.length > 0) {
             const questionsContext = `
 Questions pertinentes de la banque de données:

@@ -74,5 +74,55 @@ router.get('/test', async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+router.get('/api-status', auth_1.authenticate, async (req, res) => {
+    try {
+        const mistralApiManager = require('../utils/mistralApiManager');
+        const usageStatus = mistralApiManager.getUsageStatus();
+        const modelName = 'mistral-small-latest';
+        const hasApiKeys = usageStatus.length > 0;
+        const availableKeys = usageStatus.filter(key => key.available).length;
+        const totalKeys = usageStatus.length;
+        let apiTestResult = null;
+        try {
+            const testResponse = await mistralApiManager.generateContent('Test', {
+                maxTokens: 10
+            });
+            apiTestResult = {
+                working: true,
+                message: 'API key is working'
+            };
+        }
+        catch (testError) {
+            apiTestResult = {
+                working: false,
+                error: testError.message || 'API test failed',
+                status: testError.status || testError.statusCode || testError.code,
+                details: {
+                    message: testError.message,
+                    status: testError.status || testError.statusCode,
+                    code: testError.code
+                }
+            };
+        }
+        res.json({
+            success: true,
+            data: {
+                modelName,
+                hasApiKeys,
+                totalKeys,
+                availableKeys,
+                usageStatus,
+                status: availableKeys > 0 ? 'active' : 'exhausted',
+                apiTest: apiTestResult
+            }
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            error: { message: error.message || 'Failed to get API status' }
+        });
+    }
+});
 exports.default = router;
 //# sourceMappingURL=aiChat.js.map

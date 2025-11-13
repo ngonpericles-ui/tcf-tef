@@ -1633,7 +1633,7 @@ class AdminService {
                     country: data.country,
                     immigrationType: data.immigrationType,
                     level: data.level,
-                    status: 'draft',
+                    status: 'SCHEDULED',
                     personalInfo: JSON.stringify(data),
                     questions: JSON.stringify(data.questions),
                     responses: '{}',

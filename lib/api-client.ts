@@ -1278,12 +1278,12 @@ class ApiClient {
   }
 
   // AI Content Generation methods
-  async generateNotes(content: string, lessonTitle: string, courseTitle: string): Promise<ApiResponse<any>> {
-    return this.post('/ai/generate-notes', { content, lessonTitle, courseTitle })
+  async generateNotes(content: string, lessonTitle: string, courseTitle: string, transcription?: string): Promise<ApiResponse<any>> {
+    return this.post('/ai/generate-notes', { content, lessonTitle, courseTitle, transcription })
   }
 
-  async generateQuestions(content: string, lessonTitle: string, courseTitle: string): Promise<ApiResponse<any>> {
-    return this.post('/ai/generate-questions', { content, lessonTitle, courseTitle })
+  async generateQuestions(content: string, lessonTitle: string, courseTitle: string, transcription?: string): Promise<ApiResponse<any>> {
+    return this.post('/ai/generate-questions', { content, lessonTitle, courseTitle, transcription })
   }
 
   async generateTranscription(videoUrl: string, lessonTitle: string, courseTitle: string): Promise<ApiResponse<any>> {

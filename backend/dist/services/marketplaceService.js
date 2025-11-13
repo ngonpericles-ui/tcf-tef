@@ -77,8 +77,8 @@ class MarketplaceService {
             }
             const marketplaceProfile = preferences.marketplaceProfile || {};
             const isActive = marketplaceProfile.isActive === true;
-            const isCurrentlyOnline = user.status === 'ONLINE' || user.status === 'ACTIVE';
-            const displayStatus = isCurrentlyOnline ? 'ONLINE' : 'OFFLINE';
+            const isCurrentlyOnline = user.status === 'ONLINE';
+            const displayStatus = user.status || 'OFFLINE';
             const profileLocation = marketplaceProfile.location || user.city || null;
             const acceptsMessages = marketplaceProfile.acceptsMessages !== false;
             const profile = {
@@ -318,8 +318,7 @@ class MarketplaceService {
             console.log('📚 Fetching all tutors for marketplace...');
             const tutors = await connection_1.prisma.user.findMany({
                 where: {
-                    role: { in: ['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'] },
-                    status: { in: ['ACTIVE', 'ONLINE'] }
+                    role: { in: ['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'] }
                 },
                 select: {
                     id: true,
@@ -332,6 +331,7 @@ class MarketplaceService {
                     role: true,
                     status: true,
                     profilePicture: true,
+                    profileImage: true,
                     preferences: true,
                     createdAt: true,
                     lastActivityAt: true,
@@ -344,8 +344,15 @@ class MarketplaceService {
                 }
             });
             console.log(`✅ Found ${tutors.length} total tutors (ADMIN, SENIOR_MANAGER, JUNIOR_MANAGER)`);
+            tutors.forEach(tutor => {
+                console.log(`📋 Tutor found: ${tutor.email} (${tutor.role}, status=${tutor.status})`);
+            });
             const activatedTutors = tutors.filter(user => {
-                if (user.role !== 'ADMIN' && user.role !== 'SENIOR_MANAGER') {
+                if (user.role === 'ADMIN') {
+                    console.log(`✅ Including ADMIN ${user.email} (${user.firstName} ${user.lastName}) - always visible, status=${user.status}`);
+                    return true;
+                }
+                if (user.role !== 'SENIOR_MANAGER') {
                     console.log(`⚠️ Excluding ${user.email} - role: ${user.role}`);
                     return false;
                 }
@@ -367,7 +374,6 @@ class MarketplaceService {
                 const marketplaceProfile = preferences.marketplaceProfile || {};
                 const isActive = marketplaceProfile.isActive;
                 console.log(`🔍 Checking ${user.email} (${user.role}): isActive=${isActive}, type=${typeof isActive}, strict=${isActive === true}`);
-                console.log(`   Full preferences:`, JSON.stringify(preferences, null, 2));
                 const passes = isActive === true;
                 if (!passes) {
                     console.log(`   ❌ Filtered out: isActive is not exactly true`);
@@ -377,10 +383,19 @@ class MarketplaceService {
             console.log(`✅ Filtered to ${activatedTutors.length} activated tutors`);
             if (activatedTutors.length === 0) {
                 console.warn('⚠️ WARNING: No activated tutors found! Check if profiles are activated.');
-                console.log('📋 All tutors found:', tutors.map(u => `${u.email} (${u.role}, isActive=${(JSON.parse(u.preferences || '{}')).marketplaceProfile?.isActive})`));
+                console.log('📋 All tutors found:', tutors.map(u => {
+                    let prefs = {};
+                    try {
+                        if (u.preferences) {
+                            prefs = typeof u.preferences === 'string' ? JSON.parse(u.preferences) : u.preferences;
+                        }
+                    }
+                    catch (e) { }
+                    return `${u.email} (${u.role}, status=${u.status}, isActive=${prefs.marketplaceProfile?.isActive})`;
+                }));
             }
             else {
-                console.log('📋 Activated tutors:', activatedTutors.map(u => `${u.email} (${u.role})`));
+                console.log('📋 Activated tutors:', activatedTutors.map(u => `${u.email} (${u.firstName} ${u.lastName}, ${u.role}, status=${u.status})`));
             }
             const tutorProfiles = activatedTutors.map(user => {
                 let preferences = {};
@@ -406,8 +421,8 @@ class MarketplaceService {
                     : marketplaceProfile.specialties
                         ? [marketplaceProfile.specialties]
                         : [];
-                const isCurrentlyOnline = user.status === 'ONLINE' || user.status === 'ACTIVE';
-                const displayStatus = isCurrentlyOnline ? 'ONLINE' : 'OFFLINE';
+                const isCurrentlyOnline = user.status === 'ONLINE';
+                const displayStatus = user.status || 'OFFLINE';
                 const tutorLocation = marketplaceProfile.location || user.city || null;
                 const acceptsMessages = marketplaceProfile.acceptsMessages !== false;
                 return {
@@ -423,7 +438,7 @@ class MarketplaceService {
                     acceptsMessages: acceptsMessages,
                     specialties: specialties,
                     location: tutorLocation,
-                    profilePicture: user.profilePicture || null,
+                    profilePicture: user.profileImage || user.profilePicture || null,
                     status: displayStatus,
                     isActive: isActive,
                     languages: Array.isArray(marketplaceProfile.languages)

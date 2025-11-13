@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionService = void 0;
 const connection_1 = require("../database/connection");
@@ -42,7 +75,9 @@ class LiveSessionService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true
+                            lastName: true,
+                            email: true,
+                            profileImage: true
                         }
                     },
                     participants: true
@@ -70,7 +105,9 @@ class LiveSessionService {
                             id: true,
                             firstName: true,
                             lastName: true,
-                            role: true
+                            role: true,
+                            email: true,
+                            profileImage: true
                         }
                     },
                     participants: {
@@ -160,7 +197,9 @@ class LiveSessionService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true
+                            lastName: true,
+                            email: true,
+                            profileImage: true
                         }
                     },
                     participants: userId ? {
@@ -337,7 +376,9 @@ class LiveSessionService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true
+                            lastName: true,
+                            email: true,
+                            profileImage: true
                         }
                     },
                     participants: {
@@ -346,13 +387,66 @@ class LiveSessionService {
                                 select: {
                                     id: true,
                                     firstName: true,
-                                    lastName: true
+                                    lastName: true,
+                                    email: true
+                                }
+                            }
+                        }
+                    },
+                    reminders: {
+                        where: {
+                            emailSent: false,
+                            reminderType: 'status_change'
+                        },
+                        include: {
+                            user: {
+                                select: {
+                                    id: true,
+                                    firstName: true,
+                                    lastName: true,
+                                    email: true
                                 }
                             }
                         }
                     }
                 }
             });
+            if (existingSession.status === 'SCHEDULED' && newStatus === 'LIVE') {
+                console.log('📧 Status changed to LIVE - sending reminder emails to participants...');
+                const { EmailService } = await Promise.resolve().then(() => __importStar(require('./emailService')));
+                const sessionDate = new Date(updatedSession.date);
+                const sessionEnd = new Date(sessionDate.getTime() + (updatedSession.duration * 60 * 1000));
+                for (const participant of updatedSession.participants) {
+                    try {
+                        const emailData = {
+                            firstName: participant.user.firstName || 'Étudiant',
+                            email: participant.user.email,
+                            sessionTitle: updatedSession.title,
+                            sessionDate: sessionDate.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                            sessionTime: sessionDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                            joinUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/live`,
+                            duration: updatedSession.duration || 60,
+                            reminderMinutes: 5
+                        };
+                        await EmailService.sendLiveSessionReminderEmail(emailData);
+                        console.log(`✅ Reminder email sent to ${participant.user.email}`);
+                    }
+                    catch (error) {
+                        console.error(`❌ Failed to send reminder email to ${participant.user.email}:`, error);
+                    }
+                }
+                await connection_1.prisma.sessionReminder.updateMany({
+                    where: {
+                        sessionId,
+                        reminderType: 'status_change',
+                        emailSent: false
+                    },
+                    data: {
+                        emailSent: true,
+                        sentAt: new Date()
+                    }
+                });
+            }
             console.log('✅ Session status updated successfully in database:', {
                 sessionId,
                 oldStatus: existingSession.status,
@@ -367,7 +461,7 @@ class LiveSessionService {
             });
             return {
                 ...updatedSession,
-                participantCount: updatedSession.participants.length,
+                participantCount: updatedSession.participants?.length || 0,
                 isRegistered: false,
                 isFavorited: false
             };
@@ -412,6 +506,7 @@ class LiveSessionService {
             const totalPages = Math.ceil(total / limit);
             const sessions = participants.map(participant => ({
                 ...participant.liveSession,
+                createdBy: participant.liveSession.createdBy,
                 participantCount: participant.liveSession._count.participants,
                 isRegistered: true,
                 isFavorited: false
@@ -440,7 +535,9 @@ class LiveSessionService {
                         select: {
                             id: true,
                             firstName: true,
-                            lastName: true
+                            lastName: true,
+                            email: true,
+                            profileImage: true
                         }
                     },
                     _count: {

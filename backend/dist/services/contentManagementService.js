@@ -1,10 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContentManagementService = void 0;
 const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const cloudinaryService_1 = require("./cloudinaryService");
+const get_video_duration_1 = __importDefault(require("get-video-duration"));
 class ContentManagementService {
     static async uploadContent(uploadData, userId, userRole) {
         try {
@@ -23,18 +27,60 @@ class ContentManagementService {
             let thumbnailUrl;
             let extractedDuration = undefined;
             if (uploadData.file) {
+                if (uploadData.contentType === 'VIDEO') {
+                    try {
+                        const durationInSeconds = await (0, get_video_duration_1.default)(uploadData.file.path);
+                        extractedDuration = Math.round(durationInSeconds / 60);
+                        logger_1.logger.info('Video duration extracted from file', {
+                            filePath: uploadData.file.path,
+                            durationSeconds: durationInSeconds,
+                            durationMinutes: extractedDuration
+                        });
+                    }
+                    catch (error) {
+                        logger_1.logger.warn('Failed to extract duration from video file, will try Cloudinary', {
+                            filePath: uploadData.file.path,
+                            error: error instanceof Error ? error.message : 'Unknown error'
+                        });
+                    }
+                }
                 const uploadResult = await cloudinaryService_1.CloudinaryService.uploadFile(uploadData.file.path, {
                     folder: `tcf-tef-platform/content/${uploadData.contentType.toLowerCase()}`,
                     resource_type: this.getResourceType(uploadData.file.mimetype),
                     tags: [uploadData.contentType, uploadData.level, uploadData.category]
                 });
                 fileUrl = uploadResult.secure_url;
-                if (uploadData.contentType === 'VIDEO' && uploadResult.duration) {
-                    extractedDuration = Math.round((uploadResult.duration / 60) * 10) / 10;
-                    logger_1.logger.info('Video duration extracted from Cloudinary', {
-                        durationSeconds: uploadResult.duration,
-                        durationMinutes: extractedDuration,
-                        publicId: uploadResult.public_id
+                if (uploadData.contentType === 'VIDEO') {
+                    if (uploadResult.duration) {
+                        const cloudinaryDuration = Math.round(uploadResult.duration / 60);
+                        if (!extractedDuration) {
+                            extractedDuration = cloudinaryDuration;
+                            logger_1.logger.info('Video duration extracted from Cloudinary', {
+                                durationSeconds: uploadResult.duration,
+                                durationMinutes: extractedDuration,
+                                publicId: uploadResult.public_id
+                            });
+                        }
+                        else {
+                            logger_1.logger.info('Video duration comparison', {
+                                fileExtraction: extractedDuration,
+                                cloudinaryExtraction: cloudinaryDuration,
+                                using: extractedDuration
+                            });
+                        }
+                    }
+                    else if (!extractedDuration) {
+                        logger_1.logger.error('No duration extracted from video file or Cloudinary - duration will be 0', {
+                            filePath: uploadData.file.path,
+                            publicId: uploadResult.public_id
+                        });
+                        extractedDuration = 0;
+                    }
+                }
+                if (uploadData.contentType === 'VIDEO' && (!extractedDuration || extractedDuration === 0)) {
+                    logger_1.logger.error('Video duration is 0 or undefined - this should not happen', {
+                        filePath: uploadData.file.path,
+                        extractedDuration
                     });
                 }
                 if (uploadData.contentType === 'VIDEO') {
@@ -149,6 +195,181 @@ class ContentManagementService {
             createdAt: course.createdAt,
             updatedAt: course.updatedAt
         };
+    }
+    static async uploadBulkCourseContent(title, description, level, category, subscriptionTier, availableLevels, availableTiers, files, userId, userRole, tags) {
+        try {
+            if (!['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'].includes(userRole)) {
+                throw new errors_1.ForbiddenError('Insufficient permissions to upload content');
+            }
+            if (userRole === 'JUNIOR_MANAGER') {
+                if (!['A1', 'A2', 'B1'].includes(level)) {
+                    throw new errors_1.ForbiddenError('Junior managers can only create content for levels A1-B1');
+                }
+            }
+            if (files.length === 0) {
+                throw new errors_1.ValidationError('At least one file is required');
+            }
+            if (files.length > 20) {
+                throw new errors_1.ValidationError('Maximum 20 files allowed per course');
+            }
+            const lessonData = [];
+            let totalDuration = 0;
+            let thumbnailUrl;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                let duration = 0;
+                try {
+                    const durationInSeconds = await (0, get_video_duration_1.default)(file.path);
+                    duration = Math.round(durationInSeconds / 60);
+                    totalDuration += duration;
+                    logger_1.logger.info('Video duration extracted from file', {
+                        filePath: file.path,
+                        fileName: file.originalname,
+                        durationSeconds: durationInSeconds,
+                        durationMinutes: duration,
+                        lessonNumber: i + 1
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.warn('Failed to extract duration from video file, will try Cloudinary', {
+                        filePath: file.path,
+                        fileName: file.originalname,
+                        error: error instanceof Error ? error.message : 'Unknown error'
+                    });
+                }
+                const uploadResult = await cloudinaryService_1.CloudinaryService.uploadFile(file.path, {
+                    folder: `tcf-tef-platform/content/video`,
+                    resource_type: 'video',
+                    tags: ['VIDEO', level, category, `lesson-${i + 1}`]
+                });
+                const fileUrl = uploadResult.secure_url;
+                if (duration === 0 && uploadResult.duration) {
+                    duration = Math.round(uploadResult.duration / 60);
+                    totalDuration += duration;
+                    logger_1.logger.info('Video duration extracted from Cloudinary (fallback)', {
+                        fileName: file.originalname,
+                        durationSeconds: uploadResult.duration,
+                        durationMinutes: duration,
+                        lessonNumber: i + 1
+                    });
+                }
+                else if (uploadResult.duration && duration > 0) {
+                    const cloudinaryDuration = Math.round(uploadResult.duration / 60);
+                    logger_1.logger.info('Video duration comparison', {
+                        fileName: file.originalname,
+                        fileExtraction: duration,
+                        cloudinaryExtraction: cloudinaryDuration,
+                        using: duration
+                    });
+                }
+                if (duration === 0) {
+                    logger_1.logger.error('Video duration is 0 - extraction failed for both file and Cloudinary', {
+                        fileName: file.originalname,
+                        filePath: file.path
+                    });
+                }
+                if (i === 0) {
+                    thumbnailUrl = cloudinaryService_1.CloudinaryService.getVideoThumbnailUrl(uploadResult.public_id);
+                }
+                const lessonTitle = file.originalname.replace(/\.[^/.]+$/, "") || `${title} - Leçon ${i + 1}`;
+                lessonData.push({
+                    title: lessonTitle,
+                    description: description || `Leçon ${i + 1} du cours ${title}`,
+                    content: fileUrl,
+                    videoUrl: fileUrl,
+                    duration: Math.round(duration),
+                    order: i + 1,
+                    thumbnailUrl: i === 0 ? thumbnailUrl : undefined
+                });
+                try {
+                    const fs = require('fs');
+                    if (fs.existsSync(file.path)) {
+                        await fs.promises.unlink(file.path);
+                    }
+                }
+                catch (unlinkError) {
+                    logger_1.logger.warn('Failed to delete local file after Cloudinary upload', {
+                        filePath: file.path,
+                        error: unlinkError
+                    });
+                }
+            }
+            const course = await connection_1.prisma.course.create({
+                data: {
+                    title,
+                    description,
+                    level,
+                    category,
+                    requiredTier: subscriptionTier,
+                    availableLevels: availableLevels.length > 0 ? availableLevels : [level],
+                    availableSubscriptions: availableTiers.length > 0 ? availableTiers : [subscriptionTier],
+                    duration: Math.round(totalDuration),
+                    lessons: lessonData.length,
+                    tags: tags || [],
+                    thumbnail: thumbnailUrl,
+                    isPublished: true,
+                    createdById: userId,
+                    lessons_data: {
+                        create: lessonData.map(lesson => ({
+                            title: lesson.title,
+                            description: lesson.description,
+                            content: lesson.content,
+                            videoUrl: lesson.videoUrl,
+                            duration: lesson.duration,
+                            order: lesson.order,
+                            resources: tags || []
+                        }))
+                    }
+                },
+                include: {
+                    lessons_data: true,
+                    createdBy: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            role: true
+                        }
+                    }
+                }
+            });
+            logger_1.logger.info(`Bulk course content uploaded successfully: ${course.id}`, {
+                courseId: course.id,
+                lessonsCount: lessonData.length,
+                totalDuration,
+                userId,
+                userRole
+            });
+            return {
+                content: {
+                    id: course.id,
+                    title: course.title,
+                    description: course.description,
+                    level: course.level,
+                    category: course.category,
+                    subscriptionTier: course.requiredTier,
+                    contentType: 'VIDEO',
+                    fileUrl: lessonData[0]?.content,
+                    thumbnailUrl,
+                    duration: Math.round(totalDuration),
+                    tags: course.tags,
+                    isPublished: course.isPublished,
+                    createdBy: {
+                        id: course.createdBy.id,
+                        firstName: course.createdBy.firstName,
+                        lastName: course.createdBy.lastName,
+                        role: course.createdBy.role
+                    },
+                    createdAt: course.createdAt,
+                    updatedAt: course.updatedAt
+                },
+                lessons: lessonData.length
+            };
+        }
+        catch (error) {
+            logger_1.logger.error('Error uploading bulk course content:', error);
+            throw error;
+        }
     }
     static async createTestContent(uploadData, userId, fileUrl, duration) {
         const test = await connection_1.prisma.test.create({
@@ -300,18 +521,6 @@ class ContentManagementService {
             const where = {
                 isPublished: true
             };
-            if (level) {
-                where.level = level;
-            }
-            if (subscriptionTier) {
-                const tierHierarchy = ['FREE', 'ESSENTIAL', 'PREMIUM', 'PRO'];
-                const userTierIndex = tierHierarchy.indexOf(subscriptionTier);
-                const allowedTiers = tierHierarchy.slice(0, userTierIndex + 1);
-                where.requiredTier = { in: allowedTiers };
-            }
-            else {
-                where.requiredTier = 'FREE';
-            }
             if (category)
                 where.category = category;
             if (search) {
@@ -321,7 +530,7 @@ class ContentManagementService {
                     { tags: { hasSome: [search] } }
                 ];
             }
-            const [courses, total] = await Promise.all([
+            const [allCourses, total] = await Promise.all([
                 connection_1.prisma.course.findMany({
                     where,
                     include: {
@@ -335,19 +544,50 @@ class ContentManagementService {
                             }
                         }
                     },
-                    orderBy: { createdAt: 'desc' },
-                    skip: (page - 1) * limit,
-                    take: limit
+                    orderBy: { createdAt: 'desc' }
                 }),
                 connection_1.prisma.course.count({ where })
             ]);
-            const content = courses.map(course => {
-                const realDuration = course.lessons_data.reduce((total, lesson) => total + (lesson.duration || 0), 0);
+            const courseMap = new Map();
+            const studentSubscription = subscriptionTier || 'FREE';
+            for (const course of allCourses) {
+                const availableSubs = course.availableSubscriptions && course.availableSubscriptions.length > 0
+                    ? course.availableSubscriptions
+                    : [course.requiredTier];
+                const hasAccess = availableSubs.includes(studentSubscription);
+                if (!hasAccess)
+                    continue;
+                const normalizedTitle = course.title.trim().toLowerCase();
+                if (!courseMap.has(normalizedTitle)) {
+                    courseMap.set(normalizedTitle, course);
+                }
+                else {
+                    const existing = courseMap.get(normalizedTitle);
+                    const existingLessons = existing?.lessons_data?.length || 0;
+                    const currentLessons = course.lessons_data?.length || 0;
+                    if (currentLessons > existingLessons ||
+                        (currentLessons === existingLessons && course.createdAt > existing.createdAt)) {
+                        courseMap.set(normalizedTitle, course);
+                    }
+                }
+            }
+            const uniqueCourses = Array.from(courseMap.values());
+            const paginatedCourses = uniqueCourses.slice((page - 1) * limit, page * limit);
+            const content = paginatedCourses.map(course => {
+                const realDuration = course.lessons_data && course.lessons_data.length > 0
+                    ? course.lessons_data.reduce((total, lesson) => {
+                        const lessonDuration = lesson.duration || 0;
+                        return total + lessonDuration;
+                    }, 0)
+                    : 0;
+                const availableLevels = course.availableLevels && course.availableLevels.length > 0
+                    ? course.availableLevels
+                    : [course.level];
                 return {
                     id: course.id,
                     title: course.title,
                     description: course.description,
-                    level: course.level,
+                    level: availableLevels[0],
                     category: course.category,
                     subscriptionTier: course.requiredTier,
                     contentType: course.lessons_data.length > 0 && course.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
@@ -372,8 +612,8 @@ class ContentManagementService {
             });
             return {
                 content,
-                total,
-                pages: Math.ceil(total / limit)
+                total: uniqueCourses.length,
+                pages: Math.ceil(uniqueCourses.length / limit)
             };
         }
         catch (error) {
@@ -465,7 +705,7 @@ class ContentManagementService {
                 where.createdById = userId;
                 where.level = { in: ['A1', 'A2', 'B1'] };
             }
-            const [courses, tests] = await Promise.all([
+            const [allCourses, tests] = await Promise.all([
                 connection_1.prisma.course.findMany({
                     where,
                     include: {
@@ -479,9 +719,7 @@ class ContentManagementService {
                             }
                         }
                     },
-                    orderBy: { createdAt: 'desc' },
-                    skip: (page - 1) * limit,
-                    take: limit
+                    orderBy: { createdAt: 'desc' }
                 }),
                 connection_1.prisma.test.findMany({
                     where,
@@ -501,36 +739,97 @@ class ContentManagementService {
                 })
             ]);
             const courseGroups = new Map();
-            courses.forEach(course => {
-                const key = course.title;
-                if (!courseGroups.has(key)) {
-                    courseGroups.set(key, []);
+            for (const course of allCourses) {
+                const normalizedTitle = course.title.trim().toLowerCase();
+                if (!courseGroups.has(normalizedTitle)) {
+                    courseGroups.set(normalizedTitle, []);
                 }
-                courseGroups.get(key).push(course);
-            });
-            const courseContent = Array.from(courseGroups.entries()).map(([title, courseGroup]) => {
-                const primaryCourse = courseGroup[0];
-                const allLevels = [...new Set(courseGroup.map(c => c.level))];
-                const allSubscriptions = [...new Set(courseGroup.map(c => c.requiredTier))];
+                courseGroups.get(normalizedTitle).push(course);
+            }
+            const unifiedCourses = Array.from(courseGroups.entries()).map(([normalizedTitle, courseGroup]) => {
+                const primaryCourse = courseGroup.reduce((best, current) => {
+                    const bestLessons = best.lessons_data?.length || 0;
+                    const currentLessons = current.lessons_data?.length || 0;
+                    if (currentLessons > bestLessons)
+                        return current;
+                    if (currentLessons === bestLessons && current.createdAt > best.createdAt)
+                        return current;
+                    return best;
+                });
+                const allLevelsSet = new Set();
+                courseGroup.forEach(c => {
+                    if (c.availableLevels && Array.isArray(c.availableLevels) && c.availableLevels.length > 0) {
+                        c.availableLevels.forEach((level) => allLevelsSet.add(level));
+                    }
+                    else {
+                        allLevelsSet.add(c.level);
+                    }
+                });
+                const aggregatedLevels = Array.from(allLevelsSet);
+                const allSubscriptionsSet = new Set();
+                courseGroup.forEach(c => {
+                    if (c.availableSubscriptions && Array.isArray(c.availableSubscriptions) && c.availableSubscriptions.length > 0) {
+                        c.availableSubscriptions.forEach((tier) => allSubscriptionsSet.add(tier));
+                    }
+                    else {
+                        allSubscriptionsSet.add(c.requiredTier);
+                    }
+                });
+                const aggregatedSubscriptions = Array.from(allSubscriptionsSet);
                 return {
-                    id: primaryCourse.id,
-                    title: primaryCourse.title,
-                    description: primaryCourse.description,
+                    ...primaryCourse,
+                    level: aggregatedLevels[0] || primaryCourse.level,
+                    requiredTier: aggregatedSubscriptions[0] || primaryCourse.requiredTier,
+                    availableLevels: aggregatedLevels,
+                    availableSubscriptions: aggregatedSubscriptions,
+                };
+            });
+            const paginatedCourses = unifiedCourses.slice((page - 1) * limit, page * limit);
+            const courseContent = paginatedCourses.map(course => {
+                const realDuration = course.lessons_data && course.lessons_data.length > 0
+                    ? course.lessons_data.reduce((total, lesson) => {
+                        const lessonDuration = lesson.duration || 0;
+                        return total + lessonDuration;
+                    }, 0)
+                    : 0;
+                const videoLessons = course.lessons_data.filter(lesson => lesson.videoUrl);
+                const totalVideoCount = videoLessons.length;
+                const allLevels = course.availableLevels && Array.isArray(course.availableLevels) && course.availableLevels.length > 0
+                    ? course.availableLevels
+                    : [course.level];
+                const allSubscriptions = course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.length > 0
+                    ? course.availableSubscriptions
+                    : [course.requiredTier];
+                const mapTierToFrench = (tier) => {
+                    const tierMap = {
+                        'FREE': 'Gratuit',
+                        'ESSENTIAL': 'Essentiel',
+                        'PREMIUM': 'Premium',
+                        'PRO': 'Pro+'
+                    };
+                    return tierMap[tier] || tier;
+                };
+                const subscriptionsFrench = allSubscriptions.map(mapTierToFrench);
+                return {
+                    id: course.id,
+                    title: course.title,
+                    description: course.description,
                     level: allLevels,
-                    category: primaryCourse.category,
+                    category: course.category,
                     subscriptionTier: allSubscriptions,
-                    contentType: primaryCourse.lessons_data.length > 0 && primaryCourse.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
-                    fileUrl: primaryCourse.lessons_data.length > 0 ? primaryCourse.lessons_data[0].content : undefined,
-                    thumbnailUrl: primaryCourse.thumbnail,
-                    duration: primaryCourse.duration,
-                    tags: primaryCourse.tags,
-                    isPublished: primaryCourse.isPublished,
-                    createdBy: primaryCourse.createdBy,
-                    createdAt: primaryCourse.createdAt,
-                    updatedAt: primaryCourse.updatedAt,
+                    contentType: course.lessons_data.length > 0 && course.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
+                    fileUrl: course.lessons_data.length > 0 ? course.lessons_data[0].content : undefined,
+                    thumbnailUrl: course.thumbnail,
+                    duration: realDuration,
+                    totalVideoCount,
+                    tags: course.tags,
+                    isPublished: course.isPublished,
+                    createdBy: course.createdBy,
+                    createdAt: course.createdAt,
+                    updatedAt: course.updatedAt,
                     levels: allLevels,
-                    subscriptions: allSubscriptions,
-                    totalVariants: courseGroup.length
+                    subscriptions: subscriptionsFrench,
+                    lessons_data: course.lessons_data
                 };
             });
             const testContent = tests.map(test => ({
@@ -556,8 +855,8 @@ class ContentManagementService {
                 : allContent;
             return {
                 content: filteredContent,
-                total: filteredContent.length,
-                pages: Math.ceil(filteredContent.length / limit)
+                total: unifiedCourses.length,
+                pages: Math.ceil(unifiedCourses.length / limit)
             };
         }
         catch (error) {
@@ -587,37 +886,33 @@ class ContentManagementService {
             if (userRole !== 'ADMIN' && primaryCourse.createdById !== userId) {
                 throw new errors_1.ForbiddenError('You can only update your own courses');
             }
-            const allCourses = await connection_1.prisma.course.findMany({
-                where: { title: primaryCourse.title },
-                include: {
-                    lessons_data: true,
-                    createdBy: {
-                        select: {
-                            id: true,
-                            firstName: true,
-                            lastName: true,
-                            role: true
-                        }
-                    }
-                }
-            });
             if (!levels || levels.length === 0) {
                 throw new errors_1.ValidationError('At least one level must be provided');
             }
             if (!subscriptions || subscriptions.length === 0) {
                 throw new errors_1.ValidationError('At least one subscription tier must be provided');
             }
-            const selectedLevel = levels.includes('ALL') || levels.length === 6
-                ? 'A1'
-                : levels[0];
-            const selectedTier = subscriptions.includes('ALL') || subscriptions.length === 4
-                ? 'FREE'
-                : subscriptions[0];
+            const mapFrenchToTier = (frenchName) => {
+                const tierMap = {
+                    'Gratuit': 'FREE',
+                    'Essentiel': 'ESSENTIAL',
+                    'Premium': 'PREMIUM',
+                    'Pro+': 'PRO'
+                };
+                return tierMap[frenchName] || frenchName;
+            };
+            const backendSubscriptions = subscriptions.map(mapFrenchToTier);
+            const backendLevels = levels.map(level => level);
+            const realDuration = primaryCourse.lessons_data.reduce((total, lesson) => total + (lesson.duration || 0), 0);
+            const videoLessons = primaryCourse.lessons_data.filter(lesson => lesson.videoUrl);
+            const totalVideoCount = videoLessons.length;
             const updatedCourse = await connection_1.prisma.course.update({
-                where: { id: courseId },
+                where: { id: primaryCourse.id },
                 data: {
-                    level: selectedLevel,
-                    requiredTier: selectedTier,
+                    availableLevels: backendLevels,
+                    availableSubscriptions: backendSubscriptions,
+                    level: backendLevels[0],
+                    requiredTier: backendSubscriptions[0],
                 },
                 include: {
                     lessons_data: true,
@@ -631,23 +926,41 @@ class ContentManagementService {
                     }
                 }
             });
+            const mapTierToFrench = (tier) => {
+                const tierMap = {
+                    'FREE': 'Gratuit',
+                    'ESSENTIAL': 'Essentiel',
+                    'PREMIUM': 'Premium',
+                    'PRO': 'Pro+'
+                };
+                return tierMap[tier] || tier;
+            };
+            const subscriptionsFrench = backendSubscriptions.map(mapTierToFrench);
             return {
                 id: updatedCourse.id,
                 title: updatedCourse.title,
                 description: updatedCourse.description,
-                level: updatedCourse.level,
+                level: backendLevels,
                 category: updatedCourse.category,
-                subscriptionTier: updatedCourse.requiredTier,
-                requiredTier: updatedCourse.requiredTier,
+                subscriptionTier: backendSubscriptions,
                 contentType: updatedCourse.lessons_data.length > 0 && updatedCourse.lessons_data[0].videoUrl ? 'VIDEO' : 'NOTE',
                 fileUrl: updatedCourse.lessons_data.length > 0 ? updatedCourse.lessons_data[0].content : undefined,
                 thumbnailUrl: updatedCourse.thumbnail,
-                duration: updatedCourse.duration,
+                duration: realDuration,
+                totalVideoCount,
                 tags: updatedCourse.tags,
                 isPublished: updatedCourse.isPublished,
-                createdBy: updatedCourse.createdBy,
+                createdBy: {
+                    id: updatedCourse.createdBy.id,
+                    firstName: updatedCourse.createdBy.firstName,
+                    lastName: updatedCourse.createdBy.lastName,
+                    role: updatedCourse.createdBy.role
+                },
                 createdAt: updatedCourse.createdAt,
-                updatedAt: updatedCourse.updatedAt
+                updatedAt: updatedCourse.updatedAt,
+                levels: backendLevels,
+                subscriptions: subscriptionsFrench,
+                lessons_data: updatedCourse.lessons_data
             };
         }
         catch (error) {

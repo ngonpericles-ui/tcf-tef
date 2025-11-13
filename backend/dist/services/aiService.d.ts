@@ -19,12 +19,17 @@ export declare class AIService {
         confidence?: number;
     }>;
     static generateContent(prompt: string): Promise<string>;
-    static generateNotes(content: string, lessonTitle: string, courseTitle: string): Promise<{
+    static generateNotes(content: string, lessonTitle: string, courseTitle: string, transcription?: string): Promise<{
         notes: string[];
     }>;
-    static generateQuestions(content: string, lessonTitle: string, courseTitle: string, questionCount?: number, questionTypes?: string[], category?: string, difficulty?: string): Promise<{
+    static generateQuestions(content: string, lessonTitle: string, courseTitle: string, questionCount?: number, questionTypes?: string[], category?: string, difficulty?: string, transcription?: string, audioUrl?: string | null, videoUrl?: string | null, minWords?: number, maxWords?: number, writingType?: string): Promise<{
         questions: any[];
     }>;
+    private static getVocabularyGrammarPrompt;
+    private static getExpressionEcritePrompt;
+    private static getListeningComprehensionPrompt;
+    private static getReadingComprehensionPrompt;
+    private static getStandardPrompt;
     private static generateRealisticOptions;
     static generateChatResponse(message: string, context: {
         lessonTitle: string;

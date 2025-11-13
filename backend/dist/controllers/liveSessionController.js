@@ -262,16 +262,68 @@ LiveSessionController.setReminder = (0, errorHandler_1.asyncHandler)(async (req,
         const sessionDate = new Date(session.date);
         const reminderMinutes = reminderTime === '5min' ? 5 : 10;
         const reminderDate = new Date(sessionDate.getTime() - (reminderMinutes * 60 * 1000));
+        const existingReminder = await database_1.prisma.sessionReminder.findFirst({
+            where: {
+                userId,
+                sessionId,
+                reminderTime: reminderMinutes,
+                reminderType: 'scheduled'
+            }
+        });
+        let reminder;
+        if (existingReminder) {
+            reminder = await database_1.prisma.sessionReminder.update({
+                where: { id: existingReminder.id },
+                data: {
+                    reminderDate,
+                    emailSent: false,
+                    sentAt: null
+                }
+            });
+        }
+        else {
+            reminder = await database_1.prisma.sessionReminder.create({
+                data: {
+                    userId,
+                    sessionId,
+                    reminderTime: reminderMinutes,
+                    reminderDate,
+                    emailSent: false,
+                    reminderType: 'scheduled'
+                }
+            });
+        }
+        const statusChangeReminderDate = new Date(sessionDate.getTime() - (5 * 60 * 1000));
+        const existingStatusReminder = await database_1.prisma.sessionReminder.findFirst({
+            where: {
+                userId,
+                sessionId,
+                reminderType: 'status_change'
+            }
+        });
+        if (!existingStatusReminder) {
+            await database_1.prisma.sessionReminder.create({
+                data: {
+                    userId,
+                    sessionId,
+                    reminderTime: 5,
+                    reminderDate: statusChangeReminderDate,
+                    emailSent: false,
+                    reminderType: 'status_change'
+                }
+            });
+        }
         const emailData = {
             firstName: user.firstName,
             email: user.email,
             sessionTitle: session.title,
-            sessionDate: sessionDate.toLocaleDateString('fr-FR'),
+            sessionDate: sessionDate.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
             sessionTime: sessionDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            joinUrl: `${process.env.FRONTEND_URL}/live/${sessionId}`,
-            duration: session.duration || 60
+            joinUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/live`,
+            duration: session.duration || 60,
+            reminderMinutes: reminderMinutes
         };
-        await emailService_1.EmailService.sendLiveSessionReminderEmail(emailData);
+        await emailService_1.EmailService.sendLiveSessionReminderConfirmationEmail(emailData);
         logger_1.logger.info('Reminder set for live session', {
             sessionId,
             userId,

@@ -22,8 +22,7 @@ router.get('/tutors', auth_1.authenticate, async (req, res, next) => {
         }
         const tutors = await prisma.user.findMany({
             where: {
-                role: { in: ['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'] },
-                status: { in: ['ACTIVE', 'ONLINE'] }
+                role: { in: ['ADMIN', 'SENIOR_MANAGER', 'JUNIOR_MANAGER'] }
             },
             select: {
                 id: true,
@@ -32,7 +31,9 @@ router.get('/tutors', auth_1.authenticate, async (req, res, next) => {
                 email: true,
                 role: true,
                 profilePicture: true,
+                profileImage: true,
                 preferences: true,
+                status: true,
                 createdAt: true,
             }
         });
@@ -77,12 +78,13 @@ router.get('/tutors', auth_1.authenticate, async (req, res, next) => {
                 preferences = {};
             }
             const marketplaceProfile = preferences.marketplaceProfile || {};
+            const displayStatus = tutor.status || 'OFFLINE';
             return {
                 id: tutor.id,
                 name: `${tutor.firstName} ${tutor.lastName}`,
                 email: tutor.email,
                 role: tutor.role,
-                profilePicture: tutor.profilePicture,
+                profilePicture: tutor.profileImage || tutor.profilePicture,
                 bio: marketplaceProfile.bio || `Expert formateur en français langue étrangère`,
                 specialties: Array.isArray(marketplaceProfile.specialties) ? marketplaceProfile.specialties : ['Grammaire', 'Expression Orale'],
                 languages: Array.isArray(marketplaceProfile.languages) ? marketplaceProfile.languages : ['Français', 'English'],
@@ -92,7 +94,9 @@ router.get('/tutors', auth_1.authenticate, async (req, res, next) => {
                 rating: 4.5 + Math.random() * 0.5,
                 reviewCount: Math.floor(Math.random() * 100) + 10,
                 responseTime: '< 24h',
-                isAvailable: true
+                isAvailable: true,
+                status: displayStatus,
+                isActive: marketplaceProfile.isActive === true
             };
         });
         res.json({

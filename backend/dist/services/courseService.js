@@ -157,8 +157,7 @@ class CourseService {
             if (tier) {
                 where.requiredTier = tier;
             }
-            const total = await connection_1.prisma.course.count({ where });
-            const courses = await connection_1.prisma.course.findMany({
+            const allCourses = await connection_1.prisma.course.findMany({
                 where,
                 include: {
                     createdBy: {
@@ -196,16 +195,58 @@ class CourseService {
                         }
                     }
                 },
-                orderBy: { [sortBy]: sortOrder },
-                skip: (page - 1) * limit,
-                take: limit
+                orderBy: { [sortBy]: sortOrder }
             });
+            let userSubscriptionTier = client_1.SubscriptionTier.FREE;
+            if (userId) {
+                const user = await connection_1.prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { subscriptionTier: true }
+                });
+                if (user?.subscriptionTier) {
+                    userSubscriptionTier = user.subscriptionTier;
+                }
+            }
+            const courseMap = new Map();
+            for (const course of allCourses) {
+                const availableSubs = course.availableSubscriptions && course.availableSubscriptions.length > 0
+                    ? course.availableSubscriptions
+                    : [course.requiredTier];
+                const hasAccess = availableSubs.includes(userSubscriptionTier);
+                if (!hasAccess)
+                    continue;
+                const normalizedTitle = course.title.trim().toLowerCase();
+                if (!courseMap.has(normalizedTitle)) {
+                    courseMap.set(normalizedTitle, course);
+                }
+                else {
+                    const existing = courseMap.get(normalizedTitle);
+                    const existingLessons = existing?.lessons_data?.length || 0;
+                    const currentLessons = course.lessons_data?.length || 0;
+                    if (currentLessons > existingLessons ||
+                        (currentLessons === existingLessons && course.createdAt > existing.createdAt)) {
+                        courseMap.set(normalizedTitle, course);
+                    }
+                }
+            }
+            const uniqueCourses = Array.from(courseMap.values());
+            const total = uniqueCourses.length;
             const totalPages = Math.ceil(total / limit);
-            const coursesWithDetails = courses.map(course => {
-                const realDuration = course.lessons_data.reduce((total, lesson) => total + (lesson.duration || 0), 0);
+            const paginatedCourses = uniqueCourses.slice((page - 1) * limit, page * limit);
+            const coursesWithDetails = paginatedCourses.map(course => {
+                const realDuration = course.lessons_data && course.lessons_data.length > 0
+                    ? course.lessons_data.reduce((total, lesson) => {
+                        const lessonDuration = lesson.duration || 0;
+                        return total + lessonDuration;
+                    }, 0)
+                    : 0;
                 return {
                     ...course,
                     duration: realDuration,
+                    lessons_data: course.lessons_data,
+                    availableLevels: course.availableLevels || [course.level],
+                    availableSubscriptions: course.availableSubscriptions || [course.requiredTier],
+                    thumbnail: course.thumbnail,
                     userProgress: course.progress?.[0],
                     isFavorited: false,
                     isEnrolled: course.enrollments.length > 0,

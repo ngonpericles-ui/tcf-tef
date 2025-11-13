@@ -77,7 +77,7 @@ async function checkSimulationLimit(userId) {
         maxSimulations = getDefaultLimit(subscriptionTier);
         console.log('⚠️ Plan found but maxSimulations is NULL. Using default limit for tier:', subscriptionTier, '=', maxSimulations);
     }
-    const [testAttempts, voiceSimulations, immigrationSimulations] = await Promise.all([
+    const [testAttempts, voiceSimulationsWithFeedback, immigrationSimulations] = await Promise.all([
         database_1.prisma.testAttempt.count({
             where: {
                 userId,
@@ -87,17 +87,22 @@ async function checkSimulationLimit(userId) {
         database_1.prisma.voiceSimulation.count({
             where: {
                 userId,
-                createdAt: { gte: periodStartDate }
+                createdAt: { gte: periodStartDate },
+                status: 'COMPLETED',
+                aiFeedbacks: {
+                    some: {}
+                }
             }
         }),
         database_1.prisma.immigrationSimulation.count({
             where: {
                 userId,
-                createdAt: { gte: periodStartDate }
+                createdAt: { gte: periodStartDate },
+                status: 'COMPLETED'
             }
         })
     ]);
-    const totalSimulationsUsed = testAttempts + voiceSimulations + immigrationSimulations;
+    const totalSimulationsUsed = testAttempts + voiceSimulationsWithFeedback + immigrationSimulations;
     const remaining = maxSimulations === Infinity ? Infinity : Math.max(0, maxSimulations - totalSimulationsUsed);
     const canCreate = maxSimulations === Infinity ? true : totalSimulationsUsed < maxSimulations;
     return {

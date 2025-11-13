@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const connection_1 = require("../database/connection");
+const prisma_1 = require("../lib/prisma");
 const vapiService_1 = __importDefault(require("./vapiService"));
 const emailService_1 = require("./emailService");
 const i18nService_1 = __importDefault(require("./i18nService"));
@@ -68,7 +68,7 @@ class VoiceSimulationService {
                     assignedDate = await this.getNextAvailableSlot();
                 }
             }
-            const booking = await connection_1.prisma.simulationBooking.create({
+            const booking = await prisma_1.prisma.simulationBooking.create({
                 data: {
                     userId: request.userId,
                     bookingType: request.bookingType || 'MANUAL',
@@ -78,7 +78,7 @@ class VoiceSimulationService {
             });
             let voicePreference = request.voicePreference;
             if (!voicePreference) {
-                const user = await connection_1.prisma.user.findUnique({
+                const user = await prisma_1.prisma.user.findUnique({
                     where: { id: request.userId },
                     select: { preferences: true }
                 });
@@ -107,7 +107,7 @@ class VoiceSimulationService {
                 voiceType = gender;
             }
             const questionsData = voicePreference ? { voiceId: voicePreference } : null;
-            const simulation = await connection_1.prisma.voiceSimulation.create({
+            const simulation = await prisma_1.prisma.voiceSimulation.create({
                 data: {
                     userId: request.userId,
                     scheduledDate: assignedDate,
@@ -117,7 +117,7 @@ class VoiceSimulationService {
                     duration: 300
                 }
             });
-            const user = await connection_1.prisma.user.findUnique({
+            const user = await prisma_1.prisma.user.findUnique({
                 where: { id: simulation.userId },
                 select: {
                     firstName: true,
@@ -172,15 +172,34 @@ class VoiceSimulationService {
     }
     async startSimulation(simulationId) {
         try {
-            const simulation = await connection_1.prisma.voiceSimulation.findUnique({
-                where: { id: simulationId }
+            const result = await prisma_1.prisma.$transaction(async (tx) => {
+                const simulation = await tx.voiceSimulation.findUnique({
+                    where: { id: simulationId }
+                });
+                if (!simulation) {
+                    throw new Error('Simulation not found');
+                }
+                if (simulation.status !== 'SCHEDULED') {
+                    throw new Error(`Simulation is not in scheduled status. Current status: ${simulation.status}`);
+                }
+                const updatedSimulation = await tx.voiceSimulation.update({
+                    where: {
+                        id: simulationId,
+                        status: 'SCHEDULED'
+                    },
+                    data: {
+                        status: 'ACTIVE'
+                    }
+                });
+                if (!updatedSimulation) {
+                    throw new Error('Simulation was already started by another request');
+                }
+                return { simulation: updatedSimulation };
+            }, {
+                timeout: 10000,
+                isolationLevel: 'Serializable'
             });
-            if (!simulation) {
-                throw new Error('Simulation not found');
-            }
-            if (simulation.status !== 'SCHEDULED') {
-                throw new Error('Simulation is not in scheduled status');
-            }
+            const simulation = result.simulation;
             const progressiveQuestions = await vapiService_1.default.getProgressiveQuestions();
             let voiceId;
             if (simulation.questionsData && typeof simulation.questionsData === 'object') {
@@ -196,7 +215,6 @@ class VoiceSimulationService {
                 voiceId = randomVoice.id;
                 console.log(`🎲 Using ${matchingVoices.length > 0 ? 'gender-matched' : 'random'} voice:`, voiceId);
             }
-            const assistant = await vapiService_1.default.createFrenchAssistant(voiceId, progressiveQuestions);
             const questionsForStorage = {
                 personalInfo: progressiveQuestions.personalInfo,
                 byLevel: {
@@ -210,7 +228,20 @@ class VoiceSimulationService {
                     return acc;
                 }, {})
             };
-            const call = await vapiService_1.default.startVoiceSimulation(simulationId, assistant.id);
+            let assistant;
+            let call;
+            try {
+                assistant = await vapiService_1.default.createFrenchAssistant(voiceId, progressiveQuestions);
+                call = await vapiService_1.default.startVoiceSimulation(simulationId, assistant.id);
+            }
+            catch (vapiError) {
+                await prisma_1.prisma.voiceSimulation.update({
+                    where: { id: simulationId },
+                    data: { status: 'SCHEDULED' }
+                });
+                throw new Error(`Failed to start VAPI call: ${vapiError.message || 'Unknown error'}. ` +
+                    `This may be due to rate limiting. Please try again in a moment.`);
+            }
             const session = {
                 simulationId,
                 userId: simulation.userId,
@@ -230,11 +261,10 @@ class VoiceSimulationService {
                 startTime: new Date()
             };
             this.activeSessions.set(simulationId, session);
-            await connection_1.prisma.voiceSimulation.update({
+            await prisma_1.prisma.voiceSimulation.update({
                 where: { id: simulationId },
                 data: {
-                    questionsData: questionsForStorage,
-                    status: 'ACTIVE'
+                    questionsData: questionsForStorage
                 }
             });
             return {
@@ -274,7 +304,7 @@ class VoiceSimulationService {
     }
     async getSimulation(simulationId, userId) {
         try {
-            const simulation = await connection_1.prisma.voiceSimulation.findFirst({
+            const simulation = await prisma_1.prisma.voiceSimulation.findFirst({
                 where: {
                     id: simulationId,
                     userId: userId
@@ -313,7 +343,7 @@ class VoiceSimulationService {
     async getUserSimulations(userId) {
         try {
             console.log('📋 getUserSimulations: Fetching simulations for user:', userId);
-            const simulations = await connection_1.prisma.voiceSimulation.findMany({
+            const simulations = await prisma_1.prisma.voiceSimulation.findMany({
                 where: { userId },
                 orderBy: { scheduledDate: 'desc' },
                 include: {
@@ -358,7 +388,7 @@ class VoiceSimulationService {
                     hasFeedback: s.aiFeedbacks?.length > 0
                 }))
             });
-            const bookings = await connection_1.prisma.simulationBooking.findMany({
+            const bookings = await prisma_1.prisma.simulationBooking.findMany({
                 where: { userId },
                 orderBy: { createdAt: 'desc' }
             });
@@ -392,7 +422,7 @@ class VoiceSimulationService {
             const hourStart = new Date(candidateDate);
             const hourEnd = new Date(candidateDate);
             hourEnd.setHours(hourEnd.getHours() + 1);
-            const existingCount = await connection_1.prisma.voiceSimulation.count({
+            const existingCount = await prisma_1.prisma.voiceSimulation.count({
                 where: {
                     scheduledDate: {
                         gte: hourStart,
@@ -429,7 +459,7 @@ class VoiceSimulationService {
                 const hourStart = new Date(slotTime);
                 const hourEnd = new Date(slotTime);
                 hourEnd.setHours(hourEnd.getHours() + 1);
-                const existingCount = await connection_1.prisma.voiceSimulation.count({
+                const existingCount = await prisma_1.prisma.voiceSimulation.count({
                     where: {
                         scheduledDate: {
                             gte: hourStart,
@@ -450,14 +480,19 @@ class VoiceSimulationService {
         return availableSlots;
     }
     async getMonthlySimulationCount(userId) {
-        const currentMonth = new Date();
-        currentMonth.setDate(1);
-        currentMonth.setHours(0, 0, 0, 0);
-        return await connection_1.prisma.voiceSimulation.count({
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return await prisma_1.prisma.voiceSimulation.count({
             where: {
                 userId,
                 createdAt: {
-                    gte: currentMonth
+                    gte: startOfMonth,
+                    lte: endOfMonth
+                },
+                status: 'COMPLETED',
+                aiFeedbacks: {
+                    some: {}
                 }
             }
         });
@@ -520,7 +555,7 @@ class VoiceSimulationService {
     }
     async sendResultsEmail(simulation) {
         try {
-            const user = await connection_1.prisma.user.findUnique({
+            const user = await prisma_1.prisma.user.findUnique({
                 where: { id: simulation.userId }
             });
             if (!user)
@@ -548,7 +583,7 @@ class VoiceSimulationService {
             try {
                 const thirtyMinutesFromNow = new Date();
                 thirtyMinutesFromNow.setMinutes(thirtyMinutesFromNow.getMinutes() + 30);
-                const upcomingSimulations = await connection_1.prisma.voiceSimulation.findMany({
+                const upcomingSimulations = await prisma_1.prisma.voiceSimulation.findMany({
                     where: {
                         scheduledDate: {
                             lte: thirtyMinutesFromNow,
@@ -559,7 +594,7 @@ class VoiceSimulationService {
                     }
                 });
                 for (const simulation of upcomingSimulations) {
-                    const user = await connection_1.prisma.user.findUnique({
+                    const user = await prisma_1.prisma.user.findUnique({
                         where: { id: simulation.userId },
                         select: {
                             firstName: true,
@@ -570,7 +605,7 @@ class VoiceSimulationService {
                     if (user) {
                         await this.sendReminderEmail({ ...simulation, user });
                     }
-                    await connection_1.prisma.voiceSimulation.update({
+                    await prisma_1.prisma.voiceSimulation.update({
                         where: { id: simulation.id },
                         data: { notificationSent: true }
                     });
@@ -581,27 +616,62 @@ class VoiceSimulationService {
             }
         });
         node_cron_1.default.schedule('0 * * * *', async () => {
-            try {
-                const expiredSimulations = await connection_1.prisma.voiceSimulation.findMany({
+            await this.markExpiredSessions();
+        });
+        this.markExpiredSessions().catch(error => {
+            console.error('Error marking expired sessions on startup:', error);
+        });
+    }
+    async markExpiredSessions() {
+        try {
+            const now = new Date();
+            const scheduledExpiredCount = await prisma_1.prisma.voiceSimulation.updateMany({
+                where: {
+                    status: 'SCHEDULED',
+                    scheduledDate: {
+                        lt: now
+                    }
+                },
+                data: {
+                    status: 'EXPIRED'
+                }
+            });
+            console.log(`✅ Marked ${scheduledExpiredCount.count} SCHEDULED simulation(s) as EXPIRED`);
+            const activeExpiredCount = await prisma_1.prisma.voiceSimulation.updateMany({
+                where: {
+                    status: 'ACTIVE',
+                    scheduledDate: {
+                        lt: new Date(Date.now() - 30 * 60 * 1000)
+                    }
+                },
+                data: {
+                    status: 'EXPIRED'
+                }
+            });
+            if (activeExpiredCount.count > 0) {
+                const activeExpired = await prisma_1.prisma.voiceSimulation.findMany({
                     where: {
-                        status: 'ACTIVE',
+                        status: 'EXPIRED',
                         scheduledDate: {
                             lt: new Date(Date.now() - 30 * 60 * 1000)
                         }
-                    }
+                    },
+                    select: { id: true }
                 });
-                for (const simulation of expiredSimulations) {
-                    await connection_1.prisma.voiceSimulation.update({
-                        where: { id: simulation.id },
-                        data: { status: 'CANCELLED' }
-                    });
-                    this.activeSessions.delete(simulation.id);
-                }
+                activeExpired.forEach(sim => {
+                    this.activeSessions.delete(sim.id);
+                });
             }
-            catch (error) {
-                console.error('Error in cleanup cron job:', error);
-            }
-        });
+            console.log(`✅ Marked ${activeExpiredCount.count} ACTIVE simulation(s) as EXPIRED`);
+            return {
+                scheduled: scheduledExpiredCount.count,
+                active: activeExpiredCount.count
+            };
+        }
+        catch (error) {
+            console.error('Error marking expired sessions:', error);
+            throw error;
+        }
     }
     async sendReminderEmail(simulation) {
         try {
@@ -701,7 +771,7 @@ class VoiceSimulationService {
                 currentQuestionsData.responses = [];
             }
             currentQuestionsData.responses.push(responseData);
-            await connection_1.prisma.voiceSimulation.update({
+            await prisma_1.prisma.voiceSimulation.update({
                 where: { id: simulationId },
                 data: {
                     questionsData: currentQuestionsData
@@ -949,14 +1019,14 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                 simulationId: cleanSimulationId,
                 userId: cleanUserId
             });
-            let simulation = await connection_1.prisma.voiceSimulation.findFirst({
+            let simulation = await prisma_1.prisma.voiceSimulation.findFirst({
                 where: {
                     id: cleanSimulationId,
                     userId: cleanUserId
                 }
             });
             if (!simulation) {
-                simulation = await connection_1.prisma.voiceSimulation.findFirst({
+                simulation = await prisma_1.prisma.voiceSimulation.findFirst({
                     where: { id: simulationId, userId }
                 });
             }
@@ -967,7 +1037,7 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                 triedOriginalIds: !simulation
             });
             if (!simulation) {
-                const anySimulation = await connection_1.prisma.voiceSimulation.findUnique({
+                const anySimulation = await prisma_1.prisma.voiceSimulation.findUnique({
                     where: { id: cleanSimulationId || simulationId },
                     select: {
                         id: true,
@@ -1006,7 +1076,7 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                     ? 'Cette simulation ne peut pas être annulée'
                     : 'This simulation cannot be cancelled');
             }
-            const updatedSimulation = await connection_1.prisma.voiceSimulation.update({
+            const updatedSimulation = await prisma_1.prisma.voiceSimulation.update({
                 where: { id: simulationId },
                 data: {
                     status: 'CANCELLED',
@@ -1037,14 +1107,14 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                 simulationId: cleanSimulationId,
                 userId: cleanUserId
             });
-            let simulation = await connection_1.prisma.voiceSimulation.findFirst({
+            let simulation = await prisma_1.prisma.voiceSimulation.findFirst({
                 where: {
                     id: cleanSimulationId,
                     userId: cleanUserId
                 }
             });
             if (!simulation) {
-                simulation = await connection_1.prisma.voiceSimulation.findFirst({
+                simulation = await prisma_1.prisma.voiceSimulation.findFirst({
                     where: { id: simulationId, userId }
                 });
             }
@@ -1055,7 +1125,7 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                 triedOriginalIds: !simulation
             });
             if (!simulation) {
-                const anySimulation = await connection_1.prisma.voiceSimulation.findUnique({
+                const anySimulation = await prisma_1.prisma.voiceSimulation.findUnique({
                     where: { id: cleanSimulationId || simulationId }
                 });
                 console.log('🔍 Simulation exists (any user) - reschedule:', {
@@ -1082,10 +1152,13 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                 scheduledDate: newDate,
                 updatedAt: new Date()
             };
+            if (simulation.status === 'EXPIRED') {
+                updateData.status = 'SCHEDULED';
+            }
             if (voicePreference) {
                 updateData.voicePreference = voicePreference;
             }
-            const updatedSimulation = await connection_1.prisma.voiceSimulation.update({
+            const updatedSimulation = await prisma_1.prisma.voiceSimulation.update({
                 where: { id: simulationId },
                 data: updateData
             });
@@ -1102,7 +1175,7 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
         hourStart.setMinutes(0, 0, 0);
         const hourEnd = new Date(hourStart);
         hourEnd.setHours(hourEnd.getHours() + 1);
-        const existingCount = await connection_1.prisma.voiceSimulation.count({
+        const existingCount = await prisma_1.prisma.voiceSimulation.count({
             where: {
                 scheduledDate: {
                     gte: hourStart,
@@ -1117,7 +1190,7 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
     }
     async sendCancellationEmail(simulation, language) {
         try {
-            const user = await connection_1.prisma.user.findUnique({
+            const user = await prisma_1.prisma.user.findUnique({
                 where: { id: simulation.userId },
                 select: { firstName: true, email: true }
             });
@@ -1130,17 +1203,71 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
         }
     }
     async sendReschedulingEmail(simulation, language) {
+        let user = null;
         try {
-            const user = await connection_1.prisma.user.findUnique({
+            user = await prisma_1.prisma.user.findUnique({
                 where: { id: simulation.userId },
                 select: { firstName: true, email: true }
             });
-            if (user) {
-                console.log(`Rescheduling email would be sent to ${user.email}`);
+            if (!user) {
+                console.warn('⚠️ User not found, cannot send rescheduling email');
+                return;
+            }
+            const { default: TemporaryTokenService } = await Promise.resolve().then(() => __importStar(require('./temporaryTokenService')));
+            const scheduledDate = new Date(simulation.scheduledDate);
+            const durationInSeconds = simulation.duration || 300;
+            const estimatedEndTime = new Date(scheduledDate.getTime() + durationInSeconds * 1000);
+            const now = new Date();
+            const hoursUntilEstimatedEnd = Math.max(1, (estimatedEndTime.getTime() - now.getTime()) / (1000 * 60 * 60) + (2 / 60));
+            const temporaryToken = await TemporaryTokenService.generateToken(simulation.userId, simulation.id, 'voice', hoursUntilEstimatedEnd);
+            const simulationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/simulation-vocale/${simulation.id}?token=${temporaryToken}`;
+            let voiceDisplayName = simulation.voicePreference === 'MALE' ? 'Voix masculine' : 'Voix féminine';
+            if (simulation.questionsData && typeof simulation.questionsData === 'object') {
+                const questionsData = simulation.questionsData;
+                const voiceId = questionsData.voiceId;
+                if (voiceId) {
+                    const { default: vapiService } = await Promise.resolve().then(() => __importStar(require('./vapiService')));
+                    const availableVoices = vapiService.getVoiceOptions();
+                    const voice = availableVoices.find(v => v.id === voiceId);
+                    if (voice) {
+                        voiceDisplayName = voice.name;
+                    }
+                }
+            }
+            const { EmailService } = await Promise.resolve().then(() => __importStar(require('./emailService')));
+            const scheduledDateStr = scheduledDate.toLocaleDateString('fr-FR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const emailData = {
+                firstName: user.firstName,
+                email: user.email,
+                scheduledDate: scheduledDate,
+                voicePreference: voiceDisplayName,
+                duration: `${Math.floor((simulation.duration || 300) / 60)} minutes`,
+                simulationId: simulation.id,
+                accessUrl: simulationUrl
+            };
+            const emailSent = await EmailService.sendVoiceSimulationReschedulingEmail(emailData);
+            if (emailSent) {
+                console.log('✅ Rescheduling confirmation email sent successfully to:', user.email);
+            }
+            else {
+                console.error('❌ Failed to send rescheduling confirmation email to:', user.email);
+                throw new Error('Email service returned false');
             }
         }
         catch (error) {
-            console.error('Error sending rescheduling email:', error);
+            console.error('❌ Error sending rescheduling email:', {
+                error: error?.message,
+                stack: error?.stack,
+                simulationId: simulation.id,
+                userEmail: user?.email
+            });
         }
     }
 }

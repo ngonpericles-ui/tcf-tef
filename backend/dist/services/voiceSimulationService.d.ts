@@ -37,6 +37,10 @@ declare class VoiceSimulationService {
     private sendBookingConfirmation;
     private sendResultsEmail;
     private initializeCronJobs;
+    markExpiredSessions(): Promise<{
+        scheduled: number;
+        active: number;
+    }>;
     private sendReminderEmail;
     getActiveSession(simulationId: string): SimulationSession | undefined;
     handleFetchNextQuestion(simulationId: string, level: string, category?: string, excludeQuestionIds?: string[]): Promise<any>;

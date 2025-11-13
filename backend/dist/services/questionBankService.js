@@ -320,23 +320,29 @@ class QuestionBankService {
     }
     async searchQuestions(query, limit = 5) {
         try {
+            if (!query || typeof query !== 'string' || query.trim().length === 0) {
+                return [];
+            }
             const questions = await connection_1.prisma.questionBank.findMany({
                 where: {
                     OR: [
-                        { title: { contains: query, mode: 'insensitive' } },
-                        { description: { contains: query, mode: 'insensitive' } },
-                        { level: { equals: query } }
+                        { title: { contains: query.trim(), mode: 'insensitive' } },
+                        { description: { contains: query.trim(), mode: 'insensitive' } },
+                        { level: { equals: query.trim() } }
                     ],
                     isActive: true
                 },
-                take: limit,
+                take: Math.min(limit, 10),
                 orderBy: { createdAt: 'desc' }
+            }).catch((error) => {
+                console.warn('QuestionBank search failed, returning empty array:', error?.message || error);
+                return [];
             });
-            return questions;
+            return questions || [];
         }
         catch (error) {
-            console.error('Error searching questions:', error);
-            throw error;
+            console.warn('Error searching questions, returning empty array:', error);
+            return [];
         }
     }
 }

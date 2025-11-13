@@ -13,5 +13,5 @@ declare global {
 }
 export declare const temporaryAuthMiddleware: (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
 export declare const simulationAccessMiddleware: (simulationType: "voice" | "immigration") => (req: Request, res: Response, next: NextFunction) => Promise<Response<any, Record<string, any>>>;
-export declare const temporaryOrRegularAuth: (simulationType: "voice" | "immigration") => ((req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>)[];
+export declare const temporaryOrRegularAuth: (simulationType: "voice" | "immigration") => (req: Request, res: Response, next: NextFunction) => Promise<void>;
 //# sourceMappingURL=temporaryAuth.d.ts.map

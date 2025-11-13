@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const connection_1 = require("../database/connection");
+const client_1 = require("@prisma/client");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -673,7 +674,8 @@ router.post('/generate-notes', auth_1.authenticate, async (req, res, next) => {
                 error: 'Missing required fields: content, lessonTitle, courseTitle'
             });
         }
-        const result = await aiService_1.AIService.generateNotes(content, lessonTitle, courseTitle);
+        const { transcription } = req.body;
+        const result = await aiService_1.AIService.generateNotes(content, lessonTitle, courseTitle, transcription);
         res.json({
             success: true,
             data: result
@@ -693,7 +695,8 @@ router.post('/generate-questions', auth_1.authenticate, async (req, res, next) =
             });
         }
         const validQuestionCount = Math.min(Math.max(1, questionCount), 30);
-        const result = await aiService_1.AIService.generateQuestions(content, lessonTitle, courseTitle, validQuestionCount, questionTypes, category, difficulty);
+        const { transcription, minWords, maxWords, writingType } = req.body;
+        const result = await aiService_1.AIService.generateQuestions(content, lessonTitle, courseTitle, validQuestionCount, questionTypes, category, difficulty, transcription, undefined, undefined, minWords, maxWords, writingType);
         console.log('✅ AI Questions Generated:', {
             questionCount: result.questions?.length || 0,
             lessonTitle,
@@ -800,7 +803,8 @@ router.post('/generate-questions-from-file', auth_1.authenticate, upload.single(
             points: q.points || 1,
             keywords: q.keywords || [],
             difficulty: q.difficulty || 5,
-            explanation: q.explanation || ''
+            explanation: q.explanation || '',
+            passage: q.passage || null
         }));
         if (fs_1.default.existsSync(req.file.path)) {
             fs_1.default.unlinkSync(req.file.path);
@@ -824,6 +828,53 @@ router.post('/generate-questions-from-file', auth_1.authenticate, upload.single(
             fs_1.default.unlinkSync(req.file.path);
         }
         console.error('❌ Error generating questions from file:', error);
+        next(error);
+    }
+});
+router.post('/generate-questions-from-media', auth_1.authenticate, (0, auth_1.authorize)(client_1.UserRole.ADMIN, client_1.UserRole.SENIOR_MANAGER, client_1.UserRole.JUNIOR_MANAGER), async (req, res, next) => {
+    try {
+        const { audioUrl, videoUrl, lessonTitle, courseTitle, level, category, difficulty, questionCount, questionTypes } = req.body;
+        if (!audioUrl && !videoUrl) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Audio URL or Video URL is required'
+                }
+            });
+        }
+        if (!lessonTitle || !level || !category) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Missing required fields: lessonTitle, level, category'
+                }
+            });
+        }
+        console.log('🎧 Generating questions from media:', {
+            audioUrl: audioUrl ? 'provided' : 'none',
+            videoUrl: videoUrl ? 'provided' : 'none',
+            lessonTitle,
+            courseTitle,
+            level,
+            category,
+            difficulty,
+            questionCount
+        });
+        const result = await aiService_1.AIService.generateQuestions('', lessonTitle, courseTitle || lessonTitle, level, category, difficulty || 'medium', questionCount || 5, questionTypes || ['multiple-choice', 'true-false'], audioUrl || null, videoUrl || null);
+        res.json({
+            success: true,
+            data: {
+                questions: result.questions || [],
+                metadata: {
+                    totalQuestions: result.questions?.length || 0,
+                    source: audioUrl ? 'audio' : 'video',
+                    sourceUrl: audioUrl || videoUrl
+                }
+            }
+        });
+    }
+    catch (error) {
+        console.error('❌ Error generating questions from media:', error);
         next(error);
     }
 });

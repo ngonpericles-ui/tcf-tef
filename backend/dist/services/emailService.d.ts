@@ -51,6 +51,15 @@ export interface VoiceSimulationBookingEmailData {
     simulationId?: string;
     accessUrl?: string;
 }
+export interface VoiceSimulationReschedulingEmailData {
+    firstName: string;
+    email: string;
+    scheduledDate: Date;
+    voicePreference: string;
+    duration: string;
+    simulationId?: string;
+    accessUrl?: string;
+}
 export interface VoiceSimulationReminderEmailData {
     firstName: string;
     email: string;
@@ -69,6 +78,17 @@ export interface VoiceSimulationResultsEmailData {
     coherenceScore: number;
     feedback: string;
     completedAt: Date;
+}
+export interface ImmigrationSimulationReschedulingEmailData {
+    to: string;
+    firstName: string;
+    lastName: string;
+    country: string;
+    immigrationType: string;
+    scheduledDate: Date;
+    duration: string;
+    simulationId: string;
+    accessUrl: string;
 }
 export interface ImmigrationSimulationConfirmationEmailData {
     firstName: string;
@@ -113,20 +133,31 @@ export declare class EmailService {
     private static fromAddress;
     private static replyToAddress;
     private static getLogoDataUri;
-    private static wrapEmailWithLogo;
+    private static wrapEmailWithProfessionalDesign;
+    private static generateEmailContent;
     static sendEmail(options: EmailOptions): Promise<boolean>;
     static sendWelcomeEmail(data: WelcomeEmailData): Promise<boolean>;
     static sendCourseEnrollmentEmail(data: CourseEnrollmentEmailData): Promise<boolean>;
-    static sendLiveSessionReminderEmail(data: LiveSessionEmailData): Promise<boolean>;
+    static sendLiveSessionReminderConfirmationEmail(data: LiveSessionEmailData & {
+        reminderMinutes?: number;
+    }): Promise<boolean>;
+    static sendLiveSessionReminderEmail(data: LiveSessionEmailData & {
+        reminderMinutes?: number;
+    }): Promise<boolean>;
     static sendTestResultsEmail(data: TestResultEmailData): Promise<boolean>;
     static testEmailConfiguration(): Promise<boolean>;
     static sendVoiceSimulationBookingEmail(data: VoiceSimulationBookingEmailData & {
         accessUrl?: string;
         simulationId?: string;
     }): Promise<boolean>;
+    static sendVoiceSimulationReschedulingEmail(data: VoiceSimulationReschedulingEmailData & {
+        accessUrl?: string;
+        simulationId?: string;
+    }): Promise<boolean>;
     static sendVoiceSimulationReminderEmail(data: VoiceSimulationReminderEmailData): Promise<boolean>;
     static sendVoiceSimulationResultsEmail(data: VoiceSimulationResultsEmailData): Promise<boolean>;
     static sendImmigrationSimulationConfirmationEmail(data: ImmigrationSimulationConfirmationEmailData): Promise<boolean>;
+    static sendImmigrationSimulationReschedulingEmail(data: ImmigrationSimulationReschedulingEmailData): Promise<boolean>;
     static sendImmigrationSimulationReminderEmail(data: ImmigrationSimulationReminderEmailData): Promise<boolean>;
     static sendImmigrationSimulationResultsEmail(data: ImmigrationSimulationResultsEmailData): Promise<boolean>;
     static sendOneOnOneSessionEmail(data: OneOnOneSessionEmailData): Promise<boolean>;

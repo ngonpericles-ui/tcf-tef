@@ -119,6 +119,60 @@ router.post('/upload', auth_1.authenticate, upload.single('file'), async (req, r
         next(error);
     }
 });
+const uploadBulk = (0, multer_1.default)({
+    storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 * 1024,
+        files: 20
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'video/mp4',
+            'video/avi',
+            'video/mov',
+            'video/webm'
+        ];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        }
+        else {
+            cb(new errors_1.ValidationError('Invalid file type. Only video files are allowed.'));
+        }
+    }
+});
+router.post('/upload-bulk', auth_1.authenticate, uploadBulk.array('files', 20), async (req, res, next) => {
+    try {
+        const { title, description, level, category, subscriptionTier, availableLevels, availableTiers, tags } = req.body;
+        if (!title || !description || !level || !category || !subscriptionTier) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: title, description, level, category, subscriptionTier'
+            });
+        }
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'At least one file is required'
+            });
+        }
+        const files = req.files;
+        const parsedAvailableLevels = availableLevels ? JSON.parse(availableLevels) : [level];
+        const parsedAvailableTiers = availableTiers ? JSON.parse(availableTiers) : [subscriptionTier];
+        const result = await contentManagementService_1.ContentManagementService.uploadBulkCourseContent(title, description, level, category, subscriptionTier, parsedAvailableLevels, parsedAvailableTiers, files.map(f => ({
+            path: f.path,
+            mimetype: f.mimetype,
+            originalname: f.originalname
+        })), req.user.id, req.user.role, tags ? JSON.parse(tags) : []);
+        res.json({
+            success: true,
+            data: result,
+            message: `Course created successfully with ${result.lessons} lessons`
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
 router.get('/test-cloudinary', auth_1.authenticate, async (req, res) => {
     try {
         const { CloudinaryService } = await Promise.resolve().then(() => __importStar(require('../services/cloudinaryService')));

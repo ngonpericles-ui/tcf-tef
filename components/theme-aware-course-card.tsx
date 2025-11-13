@@ -151,7 +151,11 @@ export function ThemeAwareCourseCard({ course, userTier, canAccess }: CourseCard
         )}
 
         {/* Action button */}
-        <Button className="w-full gap-2" disabled={!canAccess} variant={canAccess ? "default" : "outline"}>
+        <Button 
+          className={`w-full gap-2 ${canAccess ? 'bg-green-600 hover:bg-green-700 text-black font-medium' : ''}`}
+          disabled={!canAccess} 
+          variant={canAccess ? "default" : "outline"}
+        >
           {canAccess ? (
             <>
               <Play className="h-4 w-4" />

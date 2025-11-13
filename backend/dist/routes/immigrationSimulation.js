@@ -41,13 +41,14 @@ const client_1 = require("@prisma/client");
 const auth_1 = require("../middleware/auth");
 const validation_1 = require("../middleware/validation");
 const requestLogger_1 = require("../middleware/requestLogger");
+const temporaryAuth_1 = require("../middleware/temporaryAuth");
 const i18nService_1 = __importDefault(require("../services/i18nService"));
 const router = express_1.default.Router();
 const prisma = new client_1.PrismaClient();
 const ImmigrationSimulationService = require('../services/immigrationSimulationService');
-router.get('/history/user', auth_1.authenticate, async (req, res) => {
+router.get('/history', auth_1.authenticate, async (req, res) => {
     try {
-        const userId = req.user?.userId || req.user?.id;
+        const userId = req.user?.userId || req.user.id;
         if (!userId) {
             console.error('❌ No userId found in token (immigration history):', {
                 user: req.user,
@@ -78,9 +79,9 @@ router.get('/history/user', auth_1.authenticate, async (req, res) => {
         });
     }
 });
-router.get('/monthly-count/user', auth_1.authenticate, async (req, res) => {
+router.get('/monthly-count', auth_1.authenticate, async (req, res) => {
     try {
-        const userId = req.user.id;
+        const userId = req.user?.userId || req.user.id;
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { subscriptionTier: true }
@@ -180,20 +181,17 @@ router.post('/create', requestLogger_1.requestLogger, auth_1.authenticate, (0, v
         });
     }
 });
-router.post('/start/:id', requestLogger_1.requestLogger, auth_1.authenticate, (0, validation_1.validate)({ params: validation_1.immigrationSimulationSchemas.params }), async (req, res) => {
+router.post('/start/:id', requestLogger_1.requestLogger, (0, temporaryAuth_1.temporaryOrRegularAuth)('immigration'), (0, validation_1.validate)({ params: validation_1.immigrationSimulationSchemas.params }), async (req, res) => {
     try {
         const { id } = req.params;
-        const userId = req.user.id;
+        const userId = req.user?.userId || req.user?.id || req.temporaryAuth?.userId;
         const language = i18nService_1.default.getLanguageFromRequest(req);
-        const simulation = await prisma.immigrationSimulation.findFirst({
-            where: { id, userId }
-        });
-        if (!simulation) {
-            return res.status(404).json({
+        if (!userId) {
+            return res.status(401).json({
                 success: false,
                 message: language === 'fr'
-                    ? 'Simulation non trouvée'
-                    : 'Simulation not found'
+                    ? 'Authentification requise'
+                    : 'Authentication required'
             });
         }
         const result = await ImmigrationSimulationService.startSession(id, userId);
@@ -450,6 +448,132 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
         res.status(404).json({
             success: false,
             message: error.message
+        });
+    }
+});
+router.post('/book', auth_1.authenticate, async (req, res) => {
+    try {
+        const userId = req.user?.userId || req.user.id;
+        const { bookingType, preferredDates, country, immigrationType, level, personalInfo, voicePreference } = req.body;
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        const sessionData = {
+            country: country || 'canada',
+            immigrationType: immigrationType || 'skilled_worker',
+            level: level || 'B1',
+            personalInfo: personalInfo || {},
+            voicePreference: voicePreference || 'france_female_1',
+            bookingType: bookingType || 'AUTO',
+            scheduledDate: preferredDates && preferredDates.length > 0 ? new Date(preferredDates[0]) : null,
+            questionsData: {}
+        };
+        const simulation = await ImmigrationSimulationService.createImmigrationSession(userId, sessionData);
+        res.json({
+            success: true,
+            data: simulation,
+            message: language === 'fr'
+                ? 'Simulation d\'immigration créée avec succès'
+                : 'Immigration simulation created successfully'
+        });
+    }
+    catch (error) {
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        console.error('Error booking immigration simulation:', error);
+        res.status(400).json({
+            success: false,
+            message: error.message || (language === 'fr'
+                ? 'Erreur lors de la réservation'
+                : 'Error booking simulation')
+        });
+    }
+});
+router.get('/:id', (0, temporaryAuth_1.temporaryOrRegularAuth)('immigration'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || req.user?.id || req.temporaryAuth?.userId;
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+        const simulation = await prisma.immigrationSimulation.findFirst({
+            where: { id, userId }
+        });
+        if (!simulation) {
+            return res.status(404).json({
+                success: false,
+                message: language === 'fr'
+                    ? 'Simulation non trouvée'
+                    : 'Simulation not found'
+            });
+        }
+        let displayStatus = simulation.status;
+        const scheduledDate = simulation.scheduledDate;
+        if (scheduledDate) {
+            const now = new Date();
+            const scheduledDateObj = new Date(scheduledDate);
+            if (simulation.status === 'SCHEDULED' && scheduledDateObj < now) {
+                displayStatus = 'EXPIRED';
+            }
+            else if (simulation.status === 'EXPIRED' && scheduledDateObj >= now) {
+                displayStatus = 'SCHEDULED';
+            }
+        }
+        res.json({
+            success: true,
+            data: {
+                ...simulation,
+                status: displayStatus
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error getting immigration simulation:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch simulation'
+        });
+    }
+});
+router.delete('/delete/:id', auth_1.authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || req.user.id;
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        const result = await ImmigrationSimulationService.deleteImmigrationSimulation(id, userId, language);
+        res.json({
+            success: true,
+            data: result,
+            message: language === 'fr'
+                ? 'Simulation supprimée avec succès'
+                : 'Simulation deleted successfully'
+        });
+    }
+    catch (error) {
+        const language = i18nService_1.default.getLanguageFromRequest(req);
+        res.status(400).json({
+            success: false,
+            message: error.message || (language === 'fr'
+                ? 'Erreur lors de la suppression'
+                : 'Error deleting simulation')
+        });
+    }
+});
+router.post('/admin/mark-expired', (0, auth_1.requireRole)(['ADMIN', 'SENIOR_MANAGER']), async (req, res) => {
+    try {
+        const result = await ImmigrationSimulationService.markExpiredImmigrationSessions();
+        res.json({
+            success: true,
+            data: result,
+            message: `Marked ${result.scheduled + result.active} expired immigration sessions`
+        });
+    }
+    catch (error) {
+        console.error('Error marking expired immigration sessions:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to mark expired sessions'
         });
     }
 });

@@ -50,9 +50,7 @@ class TestService {
             const result = await connection_1.prisma.$transaction(async (tx) => {
                 const testDataWithFileUrl = testData;
                 const fileUrl = testDataWithFileUrl.fileUrl;
-                const tags = fileUrl
-                    ? [...testData.tags, `fileUrl:${fileUrl}`]
-                    : testData.tags;
+                const tags = testData.tags || [];
                 const test = await tx.test.create({
                     data: {
                         title: testData.title,
@@ -66,6 +64,7 @@ class TestService {
                         difficulty: testData.difficulty,
                         passingScore: testData.passingScore,
                         tags: tags,
+                        ...(fileUrl ? { fileUrl } : {}),
                         aiPowered: testData.aiPowered || false,
                         hasAIFeedback: testData.hasAIFeedback || false,
                         isOfficial: testData.isOfficial || false,
@@ -121,6 +120,11 @@ class TestService {
                             correctAnswer: correctAnswerJson,
                             points: question.points || 1,
                             explanation: question.explanation || null,
+                            passage: question.passage || null,
+                            fileUrl: question.fileUrl || null,
+                            minWords: question.minWords || null,
+                            maxWords: question.maxWords || null,
+                            writingType: question.writingType || null,
                             order: question.order || index + 1,
                             level: level,
                             category: category
@@ -176,6 +180,11 @@ class TestService {
                                     correctAnswer: question.correctAnswer,
                                     points: question.points,
                                     explanation: question.explanation,
+                                    passage: question.passage || null,
+                                    fileUrl: question.fileUrl || null,
+                                    minWords: question.minWords || null,
+                                    maxWords: question.maxWords || null,
+                                    writingType: question.writingType || null,
                                     order: question.order,
                                     level: variant.level,
                                     category: variant.category
@@ -302,7 +311,12 @@ class TestService {
                     allowRewind: true,
                     timeLimit: undefined,
                     points: q.points,
-                    explanation: q.explanation
+                    explanation: q.explanation,
+                    passage: q.passage || null,
+                    fileUrl: q.fileUrl || null,
+                    minWords: q.minWords || null,
+                    maxWords: q.maxWords || null,
+                    writingType: q.writingType || null
                 };
                 let options = q.options;
                 if (typeof options === 'string') {
@@ -341,15 +355,11 @@ class TestService {
                 }
                 return question;
             });
-            let fileUrl = undefined;
-            const fileUrlTag = test.tags.find(tag => tag.startsWith('fileUrl:'));
-            if (fileUrlTag) {
-                fileUrl = fileUrlTag.replace('fileUrl:', '');
-            }
             const testWithDetails = {
                 ...test,
                 questions: transformedQuestions,
-                fileUrl: fileUrl,
+                fileUrl: test.fileUrl || undefined,
+                category: test.category,
                 isFavorited: false,
                 bestScore,
                 attemptsCount

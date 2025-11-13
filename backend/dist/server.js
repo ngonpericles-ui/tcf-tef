@@ -63,6 +63,7 @@ const userActivity_1 = __importDefault(require("./routes/userActivity"));
 const moderation_1 = __importDefault(require("./routes/moderation"));
 const realTimeMessagingService_1 = require("./services/realTimeMessagingService");
 const messageQueueWorker_1 = require("./workers/messageQueueWorker");
+const reminderSchedulerService_1 = require("./services/reminderSchedulerService");
 const monitoringService_1 = require("./services/monitoringService");
 const redis_1 = require("./config/redis");
 const database_1 = require("./config/database");
@@ -198,6 +199,7 @@ app.use(requestLogger_1.errorLogger);
 app.use(errorHandler_1.errorHandler);
 const realTimeMessagingService = new realTimeMessagingService_1.RealTimeMessagingService(server);
 const messageQueueWorker = new messageQueueWorker_1.MessageQueueWorker();
+let reminderSchedulerInterval = null;
 monitoringService_1.monitoringService.start();
 const PORT = environment_1.config.port || 3001;
 server.listen(PORT, async () => {
@@ -221,6 +223,14 @@ server.listen(PORT, async () => {
     catch (error) {
         console.error(`❌ Failed to start message queue worker:`, error);
     }
+    try {
+        reminderSchedulerInterval = reminderSchedulerService_1.ReminderSchedulerService.startScheduler();
+        console.log(`🕐 Reminder scheduler started`);
+        logger_1.logger.info(`🕐 Reminder scheduler started`);
+    }
+    catch (error) {
+        console.error(`❌ Failed to start reminder scheduler:`, error);
+    }
     logger_1.logger.info(`🚀 Server running on port ${PORT}`);
     logger_1.logger.info(`📊 Environment: ${environment_1.config.nodeEnv}`);
     logger_1.logger.info(`🔗 Database: ${dbStatus}`);
@@ -235,13 +245,8 @@ process.on('SIGTERM', async () => {
     if (messageQueueWorker) {
         await messageQueueWorker.stop();
     }
-    monitoringService_1.monitoringService.stop();
-    process.exit(0);
-});
-process.on('SIGINT', async () => {
-    logger_1.logger.info('SIGINT received, shutting down gracefully');
-    if (messageQueueWorker) {
-        await messageQueueWorker.stop();
+    if (reminderSchedulerInterval) {
+        reminderSchedulerService_1.ReminderSchedulerService.stopScheduler(reminderSchedulerInterval);
     }
     monitoringService_1.monitoringService.stop();
     process.exit(0);
@@ -250,6 +255,9 @@ process.on('SIGINT', async () => {
     logger_1.logger.info('SIGINT received, shutting down gracefully');
     if (messageQueueWorker) {
         await messageQueueWorker.stop();
+    }
+    if (reminderSchedulerInterval) {
+        reminderSchedulerService_1.ReminderSchedulerService.stopScheduler(reminderSchedulerInterval);
     }
     monitoringService_1.monitoringService.stop();
     process.exit(0);

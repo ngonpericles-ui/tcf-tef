@@ -13,14 +13,15 @@ AiChatController.sendMessage = (0, errorHandler_1.asyncHandler)(async (req, res)
     try {
         const { message, chatId, context } = req.body;
         const userId = req.user.userId;
-        if (!message || typeof message !== 'string') {
+        if (!message || typeof message !== 'string' || message.trim().length === 0) {
             res.status(400).json({
                 success: false,
-                error: { message: 'Message is required', code: 'INVALID_INPUT' }
+                error: { message: 'Message is required and cannot be empty', code: 'INVALID_INPUT' }
             });
             return;
         }
-        const response = await aiChatService_1.AiChatService.sendMessage(userId, message, chatId, context || {});
+        const safeContext = context && typeof context === 'object' ? context : {};
+        const response = await aiChatService_1.AiChatService.sendMessage(userId, message.trim(), chatId || null, safeContext);
         res.status(200).json({
             success: true,
             data: response,
@@ -28,11 +29,40 @@ AiChatController.sendMessage = (0, errorHandler_1.asyncHandler)(async (req, res)
         });
     }
     catch (error) {
-        logger_1.logger.error('Error sending AI message:', error);
-        res.status(500).json({
-            success: false,
-            error: { message: 'Failed to send message', code: 'INTERNAL_ERROR' }
+        logger_1.logger.error('Error sending AI message:', {
+            error: error?.message || error,
+            stack: error?.stack,
+            userId: req.user?.userId
         });
+        const errorMessage = error?.message || 'Failed to send message';
+        if (errorMessage.includes('QUOTA_EXCEEDED')) {
+            res.status(429).json({
+                success: false,
+                error: {
+                    message: errorMessage.replace('QUOTA_EXCEEDED: ', ''),
+                    code: 'QUOTA_EXCEEDED'
+                }
+            });
+        }
+        else if (errorMessage.includes('AUTH_ERROR')) {
+            res.status(503).json({
+                success: false,
+                error: {
+                    message: errorMessage.replace('AUTH_ERROR: ', ''),
+                    code: 'AUTH_ERROR'
+                }
+            });
+        }
+        else {
+            res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Une erreur est survenue. Veuillez réessayer.',
+                    code: 'INTERNAL_ERROR',
+                    details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+                }
+            });
+        }
     }
 });
 AiChatController.getChatHistory = (0, errorHandler_1.asyncHandler)(async (req, res) => {
