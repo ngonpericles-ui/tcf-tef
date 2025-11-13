@@ -1,36 +1,35 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import PageShell from "@/components/page-shell"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Search,
-  Star,
   MessageCircle,
   Calendar,
   Clock,
-  Users,
-  MapPin,
-  CheckCircle,
-  TrendingUp,
   Filter,
-  UserCheck,
-  Shield,
-  Crown,
-  Loader2,
-  FileText,
-  Send
+  ChevronDown,
+  Loader2
 } from "lucide-react"
 import { useLang } from "@/components/language-provider"
 import { useAuth } from "@/contexts/AuthContext"
 import apiClient from "@/lib/api-client"
-import Link from "next/link"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { getComprehensiveProfilePictureUrl } from "@/lib/utils/profilePicture"
+import SiteHeader from "@/components/site-header"
+import Image from "next/image"
 
 // Type definitions
 interface TutorProfile {
@@ -39,46 +38,21 @@ interface TutorProfile {
   firstName: string
   lastName: string
   specialities: string[]
-  subjects?: string[] // Sujets (Grammaire, Expression Orale, etc.)
+  subjects?: string[]
   location: string | null
   languages: string[]
-  availability: string[] // Working time periods (disponibilité) - e.g., ["Lun-Ven"]
-  workingHours?: string[] // Specific time slots - e.g., ["Lundi: 09:00-12:00", "Mardi: 14:00-17:00"]
+  availability: string[]
+  workingHours?: string[]
   isAvailable: boolean
-  isOnline?: boolean // NEW: Online status
-  availabilityStatus?: string // NEW: Status label ("En ligne" / "Hors ligne")
+  isOnline?: boolean
+  availabilityStatus?: string
   profileImage?: string | null
   bio?: string
-  acceptsMessages?: boolean // Whether tutor accepts messages from students
-}
-
-interface AIFeedback {
-  id: string
-  simulationTitle: string
-  submissionDate: string
-  aiScore: number
-  maxScore: number
-  percentage: number
-  status: string
-  aiConfidence: number
-  feedback: {
-    overall: string
-    strengths: string[]
-    weaknesses: string[]
-    recommendations: string[]
-    detailedAnalysis: any
-  }
-  originalWork: {
-    type: string
-    content: string
-    fileUrl?: string
-  }
-  humanReview?: {
-    tutorName: string
-    tutorFeedback: string
-    reviewDate: string
-    finalScore: number
-  }
+  title?: string
+  phone?: string
+  website?: string
+  acceptsMessages?: boolean
+  status?: 'ONLINE' | 'OFFLINE' | 'ACTIVE'
 }
 
 interface ApiResponse<T = any> {
@@ -99,17 +73,50 @@ export default function MarketplacePage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSpeciality, setSelectedSpeciality] = useState("all")
+  const [selectedLevel, setSelectedLevel] = useState("all")
   const [availableSpecialities, setAvailableSpecialities] = useState<string[]>(["all"])
+  const levels = ["A1", "A2", "B1", "B2", "C1", "C2"]
+  const [showSpecialtyDropdown, setShowSpecialtyDropdown] = useState(false)
+  const [showLevelDropdown, setShowLevelDropdown] = useState(false)
+  const specialtyDropdownRef = useRef<HTMLDivElement>(null)
+  const levelDropdownRef = useRef<HTMLDivElement>(null)
 
-  // Review request state
-  const [showReviewDialog, setShowReviewDialog] = useState(false)
-  const [selectedTutor, setSelectedTutor] = useState<TutorProfile | null>(null)
-  const [reviewMessage, setReviewMessage] = useState("")
-  const [submittingReview, setSubmittingReview] = useState(false)
-  const [userFeedbacks, setUserFeedbacks] = useState<AIFeedback[]>([])
-  const [availabilityFilter, setAvailabilityFilter] = useState("all")
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (specialtyDropdownRef.current && !specialtyDropdownRef.current.contains(event.target as Node)) {
+        setShowSpecialtyDropdown(false)
+      }
+      if (levelDropdownRef.current && !levelDropdownRef.current.contains(event.target as Node)) {
+        setShowLevelDropdown(false)
+      }
+    }
 
-  // Fetch available specialties from backend (TCF, TEF)
+    if (showSpecialtyDropdown || showLevelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showSpecialtyDropdown, showLevelDropdown])
+
+  // Get profile picture
+  const profileImageUrl = user?.profileImage
+    ? (() => {
+        const img = user.profileImage || ''
+        if (img.startsWith('http')) return img
+        return `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}${img.startsWith('/') ? '' : '/'}${img}`
+      })()
+    : user?.email
+      ? getComprehensiveProfilePictureUrl(user.email, '')
+      : ''
+
+  const userInitials = user?.firstName && user?.lastName
+    ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+    : user?.email?.[0]?.toUpperCase() || 'U'
+
+  // Fetch available specialties from backend
   useEffect(() => {
     const fetchSpecialities = async () => {
       if (!isAuthenticated) return
@@ -117,15 +124,12 @@ export default function MarketplacePage() {
       try {
         const response = await apiClient.get('/marketplace/specialties') as ApiResponse<string[]>
         if (response.success && Array.isArray(response.data)) {
-          // Add "Tous" (All) option at the beginning, then TCF, TEF
           setAvailableSpecialities(["all", ...response.data])
         } else {
-          // Fallback to TCF, TEF if API fails
           setAvailableSpecialities(["all", "TCF", "TEF"])
         }
       } catch (err: any) {
         console.error('Error fetching specialties:', err)
-        // Fallback to TCF, TEF if API fails
         setAvailableSpecialities(["all", "TCF", "TEF"])
       }
     }
@@ -133,7 +137,7 @@ export default function MarketplacePage() {
     fetchSpecialities()
   }, [isAuthenticated])
 
-  // Fetch tutors from backend - Simple and direct approach
+  // Fetch tutors from backend
   useEffect(() => {
     if (!isAuthenticated) {
       setInstructors([])
@@ -147,138 +151,111 @@ export default function MarketplacePage() {
         setLoading(true)
         setError(null)
 
-        console.log('🔍 Fetching marketplace tutors...')
         const response = await apiClient.get('/marketplace/tutors') as ApiResponse<any[]>
 
         if (!isMounted) return
 
-        console.log('📋 API Response:', {
-          success: response.success,
-          dataType: typeof response.data,
-          isArray: Array.isArray(response.data),
-          dataLength: Array.isArray(response.data) ? response.data.length : 0
-        })
-
-        // Direct validation - no complex array manipulation
         if (!response.success) {
           throw new Error(response.error?.message || 'Failed to fetch tutors')
         }
 
         if (!response.data) {
-          console.warn('⚠️ No data in response')
           setInstructors([])
           return
         }
 
-        // Simple type check and conversion
         const tutorsData = Array.isArray(response.data) ? response.data : []
         
-        console.log(`📊 Processing ${tutorsData.length} tutors from backend`)
-
-        // DIRECT MAPPING - Match backend response structure EXACTLY
+        console.log('📋 Tutors fetched from API:', {
+          count: tutorsData.length,
+          tutors: tutorsData.map((t: any) => ({
+            id: t.id,
+            name: t.fullName || `${t.firstName} ${t.lastName}`,
+            email: t.email,
+            role: t.role,
+            isActive: t.isActive,
+            status: t.status
+          }))
+        })
+        
         const processedTutors: TutorProfile[] = tutorsData.map((tutor: any) => {
-          // Backend sends: firstName, lastName, fullName, specialties, languages, availability, isActive, status, location, profilePicture, bio
           const fullName = tutor.fullName || `${tutor.firstName || ''} ${tutor.lastName || ''}`.trim() || 'Formateur'
           
-          // Backend sends 'specialties' (not 'specialities') - match exactly
           const specialties = Array.isArray(tutor.specialties) 
             ? tutor.specialties 
             : tutor.specialties 
             ? [tutor.specialties] 
             : []
           
-          // Backend sends languages as array
           const languages = Array.isArray(tutor.languages) 
             ? tutor.languages 
             : tutor.languages 
             ? [tutor.languages] 
             : ['Français']
           
-          // Backend sends availability as array
           const availability = Array.isArray(tutor.availability) 
             ? tutor.availability 
             : tutor.availability 
             ? [tutor.availability] 
             : ['Disponible']
           
-          // Status from backend - backend now sends 'ONLINE' or 'OFFLINE' based on activity
-          // Backend logic: ONLINE if status === 'ONLINE' OR (status === 'ACTIVE' && recently active)
-          // Backend returns status as 'ONLINE' or 'OFFLINE' in the status field
+          // Status logic: ONLY ONLINE means user is currently online
+          // ACTIVE = user has account (not necessarily online)
+          // ONLINE = user is currently logged in/online on platform
+          // OFFLINE = user has account but not online
           const isOnline = tutor.status === 'ONLINE'
-          const availabilityStatus = isOnline ? 'En ligne' : 'Hors ligne'
+          const availabilityStatus = isOnline ? 'Online Now' : (tutor.status === 'ACTIVE' ? 'Active' : 'Offline')
           
-          // Debug log to see what status backend is sending
-          if (tutorsData.indexOf(tutor) === 0) {
-            console.log(`📊 Sample tutor status from backend:`, {
-              id: tutor.id,
-              name: fullName,
-              status: tutor.status,
-              isOnline,
-              location: tutor.location
-            })
-          }
-
-          // Backend sends subjects (sujets)
           const subjects = Array.isArray(tutor.subjects) 
             ? tutor.subjects 
             : tutor.subjects 
             ? [tutor.subjects] 
             : []
 
-          // Backend sends working hours (specific time slots)
           const workingHours = Array.isArray(tutor.workingHours) 
             ? tutor.workingHours 
             : tutor.workingHours 
             ? [tutor.workingHours] 
             : []
 
-          // Return EXACT structure frontend expects
           return {
             id: tutor.id || tutor.userId || '',
             name: fullName,
             firstName: tutor.firstName || '',
             lastName: tutor.lastName || '',
-            specialities: specialties, // Map backend's 'specialties' to frontend's 'specialities'
-            subjects: subjects, // Sujets (Grammaire, Expression Orale, etc.)
+            specialities: specialties,
+            subjects: subjects,
             location: tutor.location || null,
             languages,
-            availability, // Working time periods (disponibilité)
-            workingHours: workingHours, // Specific time slots
+            availability,
+            workingHours: workingHours,
             isAvailable: tutor.isActive === true,
             isOnline,
             availabilityStatus,
-            profileImage: tutor.profilePicture 
+            status: tutor.status || 'OFFLINE', // Include status from backend
+            profileImage: (tutor.profileImage || tutor.profilePicture)
               ? (() => {
-                  if (tutor.profilePicture.startsWith('http')) return tutor.profilePicture
-                  let cleanPath = tutor.profilePicture.replace(/^\/+/, '')
-                  if (cleanPath.startsWith('uploads/')) {
-                    return `http://localhost:3001/${cleanPath}`
+                  const profileImg = tutor.profileImage || tutor.profilePicture || ''
+                  if (profileImg.startsWith('http://') || profileImg.startsWith('https://')) {
+                    return profileImg // Already absolute URL
+                  } else if (profileImg.startsWith('/uploads') || profileImg.startsWith('/')) {
+                    // Relative URL - convert to absolute
+                    const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'
+                    return `${backendUrl}${profileImg.startsWith('/') ? '' : '/'}${profileImg}`
                   } else {
-                    return `http://localhost:3001/uploads/${cleanPath}`
+                    // No leading slash - assume it's a relative path
+                    const backendUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'
+                    return `${backendUrl}/uploads/${profileImg}`
                   }
                 })()
               : null,
             bio: tutor.bio || '',
-            acceptsMessages: tutor.acceptsMessages !== false // Default to true if not set
+            title: tutor.title || undefined,
+            phone: tutor.phone || undefined,
+            website: tutor.website || undefined,
+            acceptsMessages: tutor.acceptsMessages !== false
           }
         })
-
-        console.log(`✅ Processed ${processedTutors.length} tutors successfully`)
-        if (processedTutors.length > 0) {
-          console.log('📋 Sample tutor processed:', {
-            id: processedTutors[0].id,
-            name: processedTutors[0].name,
-            specialities: processedTutors[0].specialities,
-            isActive: processedTutors[0].isAvailable,
-            isOnline: processedTutors[0].isOnline,
-            status: processedTutors[0].availabilityStatus,
-            location: processedTutors[0].location,
-            rawStatus: tutorsData[0]?.status
-          })
-        } else {
-          console.warn('⚠️ No tutors processed - check backend response structure')
-          console.log('📋 Raw response.data sample:', tutorsData[0])
-        }
 
         setInstructors(processedTutors)
       } catch (err: any) {
@@ -307,602 +284,520 @@ export default function MarketplacePage() {
     }
   }, [isAuthenticated])
 
-  // Skip AI feedbacks for marketplace - this is for tutor selection, not feedback review
-  useEffect(() => {
-    const fetchUserFeedbacks = async () => {
-      if (!isAuthenticated) return
-
-      try {
-        console.log('🔍 Marketplace: AI feedbacks not implemented for this page - skipping...')
-        // AI feedbacks are for simulation pages, not marketplace
-        // This marketplace is for students to select tutors for one-on-one sessions
-        setUserFeedbacks([])
-      } catch (err: any) {
-        console.error('❌ Error in fetchUserFeedbacks:', err)
-        setUserFeedbacks([])
-      }
-    }
-
-    fetchUserFeedbacks()
-  }, [isAuthenticated])
-
-  // Handle review request submission
-  const handleSubmitReviewRequest = async (feedbackId: string) => {
-    if (!selectedTutor || !reviewMessage.trim()) {
-      toast.error(t("Veuillez sélectionner un tuteur et ajouter un message", "Please select a tutor and add a message"))
-      return
-    }
-
-    setSubmittingReview(true)
-    try {
-      const response = await apiClient.post(`/ai/feedback/${feedbackId}/submit-for-review`, {
-        selectedTutorId: selectedTutor.id,
-        message: reviewMessage
-      })
-
-      if (response.success) {
-        toast.success(t("Demande de révision envoyée avec succès", "Review request sent successfully"))
-        setShowReviewDialog(false)
-        setReviewMessage("")
-        setSelectedTutor(null)
-
-        // Refresh feedbacks to update status
-        const feedbackResponse = await apiClient.get('/ai/feedbacks') as ApiResponse<AIFeedback[]>
-        if (feedbackResponse.success && feedbackResponse.data) {
-          const reviewableFeedbacks = feedbackResponse.data.filter((feedback: AIFeedback) =>
-            feedback.status === 'ai_completed' &&
-            (feedback.percentage < 80 || (feedback.aiConfidence && feedback.aiConfidence < 0.8))
-          )
-          setUserFeedbacks(reviewableFeedbacks)
-        }
-      } else {
-        toast.error(t("Erreur lors de l'envoi de la demande", "Error sending request"))
-      }
-    } catch (err: any) {
-      console.error('Error submitting review request:', err)
-      toast.error(t("Erreur lors de l'envoi de la demande", "Error sending request"))
-    } finally {
-      setSubmittingReview(false)
-    }
-  }
-
-  // Simple filtering - direct and clear
+  // Filtering logic
   const filteredInstructors = useMemo(() => {
     if (!instructors.length) return []
 
     return instructors.filter(instructor => {
-      // Search filter
       const searchLower = searchQuery.toLowerCase()
       const matchesSearch = !searchQuery || 
         instructor.name?.toLowerCase().includes(searchLower) ||
         instructor.specialities?.some((s: string) => s.toLowerCase().includes(searchLower))
       
-      // Specialty filter - "all" shows all activated profiles, otherwise filter by specialty
       const matchesSpeciality = selectedSpeciality === "all" || 
         (instructor.specialities && Array.isArray(instructor.specialities) && 
          instructor.specialities.includes(selectedSpeciality))
       
-      // Availability filter - NEW: Handle online/offline status
-      let matchesAvailability = true
-      if (availabilityFilter === "online") {
-        matchesAvailability = instructor.isOnline === true
-      } else if (availabilityFilter === "available") {
-        matchesAvailability = instructor.isAvailable === true && 
-          (instructor.availability?.includes("maintenant") || instructor.isOnline === true)
+      const matchesLevel = selectedLevel === "all" || true // Level filtering can be added later if needed
+      
+      return matchesSearch && matchesSpeciality && matchesLevel
+    })
+  }, [instructors, searchQuery, selectedSpeciality, selectedLevel])
+
+  // Handle card click - navigate to profile page
+  const handleCardClick = (instructorId: string) => {
+    router.push(`/marketplace/${instructorId}`)
+  }
+
+  // Handle Submit Expertise Request button click (for AI review submission)
+  const handleSubmitExpertise = async (e: React.MouseEvent, instructor: TutorProfile) => {
+    e.stopPropagation()
+    
+    try {
+      // Try to get the student's latest AI feedback that can be submitted for review
+      let feedbackId: string | undefined = undefined
+      try {
+        const feedbackResponse = await apiClient.get('/ai/feedback')
+        if (feedbackResponse.success && feedbackResponse.data) {
+          const feedbacks = Array.isArray(feedbackResponse.data) 
+            ? feedbackResponse.data 
+            : (feedbackResponse.data as any)?.feedbacks || []
+          // Get the most recent feedback that can be reviewed
+          const latestFeedback = feedbacks.find((f: any) => 
+            f.status === 'COMPLETED' || f.status === 'PENDING' || !f.status
+          ) || feedbacks[0]
+          feedbackId = latestFeedback?.id
+        }
+      } catch (feedbackError) {
+        // If we can't get feedback, continue without it - the request can still be created
+        console.log('Could not fetch feedback, creating request without feedbackId')
       }
       
-      return matchesSearch && matchesSpeciality && matchesAvailability
-    })
-  }, [instructors, searchQuery, selectedSpeciality, availabilityFilter])
+      // Create EXPERTISE request (not SESSION request)
+      const response = await apiClient.post('/marketplace/requests', {
+        tutorId: instructor.id,
+        requestType: 'EXPERTISE',
+        subject: t("Demande d'expertise - Révision AI", "Expertise Request - AI Review"),
+        description: t("Je souhaite soumettre mon feedback AI pour révision par un expert", "I would like to submit my AI feedback for expert review"),
+        urgency: 'MEDIUM',
+        feedbackId: feedbackId // Include feedbackId if available
+      })
+      
+      if (response.success) {
+        toast.success(t("Demande d'expertise envoyée avec succès", "Expertise request sent successfully"))
+      } else {
+        toast.error(response.error?.message || t("Erreur lors de l'envoi", "Error sending request"))
+      }
+    } catch (error: any) {
+      console.error('Error submitting expertise request:', error)
+      toast.error(t("Erreur lors de l'envoi de la demande d'expertise", "Error sending expertise request"))
+    }
+  }
+
+  // Handle Message button click
+  const handleMessage = async (e: React.MouseEvent, instructor: TutorProfile) => {
+    e.stopPropagation()
+    
+    try {
+      const acceptsMessages = instructor.acceptsMessages !== false
+      if (!acceptsMessages) {
+        toast.error(t("Ce tuteur n'accepte pas les messages", "This tutor does not accept messages"))
+        return
+      }
+      
+      const loadingToast = toast.loading(t("Création de la conversation...", "Creating conversation..."))
+      
+      try {
+        const messageResponse = await apiClient.post('/messages', {
+          receiverId: instructor.id,
+          content: t("Bonjour ! Je souhaite commencer une conversation avec vous.", "Hello! I would like to start a conversation with you."),
+          subject: t("Nouvelle conversation", "New conversation")
+        })
+        
+        toast.dismiss(loadingToast)
+        if (messageResponse.success) {
+          toast.success(t("Conversation créée avec succès", "Conversation created successfully"))
+        }
+        router.push(`/messages?contact=${instructor.id}`)
+      } catch (messageError: any) {
+        toast.dismiss(loadingToast)
+        router.push(`/messages?contact=${instructor.id}`)
+      }
+    } catch (error: any) {
+      console.error('Error creating conversation:', error)
+      toast.error(t("Erreur lors de la création de la conversation", "Error creating conversation"))
+    }
+  }
 
   return (
-    <PageShell>
-      <main className="min-h-screen bg-background">
-        {/* Hero Section */}
-        <section className="bg-background py-20">
-          <div className="max-w-7xl mx-auto px-6 text-center">
-            <Badge className="mb-6 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 px-4 py-2 text-sm font-semibold">
-              <Crown className="h-4 w-4 mr-2" />
-              {t("MARKETPLACE PRO+", "PRO+ MARKETPLACE")}
-            </Badge>
-            
-            <h1 className="text-5xl md:text-7xl font-black text-foreground mb-6 leading-tight">
-              {t("Marketplace", "Marketplace")} <br />
-              <span className="text-green-600 dark:text-green-400">Instructeurs</span>
-            </h1>
-            
-            <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed">
-              {t(
-                "Connectez-vous avec nos instructeurs certifiés pour des sessions personnalisées. Disponible uniquement pour les abonnés Pro+.",
-                "Connect with our certified instructors for personalized sessions. Available only for Pro+ subscribers."
-              )}
-            </p>
+    <div className="min-h-screen relative overflow-x-hidden bg-background-light dark:bg-background-dark">
+      {/* Site Header */}
+      <SiteHeader />
+      
 
-            {/* Features */}
-            <div className="max-w-4xl mx-auto mb-16">
-              <h3 className="text-2xl font-bold text-foreground mb-8">Fonctionnalités :</h3>
-              <div className="text-left space-y-6">
-                <div>
-                  <h4 className="text-lg font-semibold text-foreground mb-2">1. Sessions 1-on-1</h4>
-                  <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                    Planifiez des sessions individuelles avec nos instructeurs certifiés. 
-                    Choisissez votre instructeur, réservez votre créneau, et progressez à votre rythme.
-                  </p>
-                </div>
-                
-                <div>
-                  <h4 className="text-lg font-semibold text-foreground mb-2">2. Instructeurs Non Payés</h4>
-                  <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                    Nos instructeurs participent volontairement au marketplace. Ils ne sont pas rémunérés 
-                    mais partagent leur expertise pour aider les étudiants Pro+.
-                  </p>
-                </div>
-                
-                <div>
-                  <h4 className="text-lg font-semibold text-foreground mb-2">3. Accès Pro+ Exclusif</h4>
-                  <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                    Cette fonctionnalité est réservée aux abonnés Pro+. Connectez-vous avec des experts 
-                    pour un accompagnement personnalisé dans votre apprentissage.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+      <div className="relative z-10 layout-container flex h-full grow flex-col">
+        <div className="px-4 sm:px-8 md:px-16 lg:px-24 xl:px-40 flex flex-1 justify-center py-5 pt-24">
+          <div className="layout-content-container flex flex-col w-full max-w-[1200px] flex-1">
 
-        {/* Search and Filters */}
-        <section className="py-16 bg-gray-50 dark:bg-gray-900">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="bg-card rounded-3xl p-8 shadow-sm border border-gray-200 dark:border-gray-800/50">
-              <div className="flex flex-col lg:flex-row gap-6 items-center">
-                {/* Search */}
-                <div className="relative flex-1 w-full">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <Input
-                    placeholder={t("Rechercher un instructeur...", "Search for an instructor...")}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-800/50 rounded-lg dark:bg-gray-800 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 dark:focus:border-green-400 dark:focus:ring-green-400/20"
-                  />
-                </div>
-                
-                {/* Speciality Filter */}
-                <div className="w-full lg:w-auto">
-                  <select 
-                    value={selectedSpeciality}
-                    onChange={(e) => setSelectedSpeciality(e.target.value)}
-                    className="w-full lg:w-auto px-4 py-3 border border-gray-200 dark:border-gray-800/50 rounded-lg dark:bg-gray-800 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 dark:focus:border-green-400 dark:focus:ring-green-400/20"
-                  >
-                    <option value="all">{t("Tous", "All")}</option>
-                    {availableSpecialities.slice(1).map(speciality => (
-                      <option key={speciality} value={speciality}>{speciality}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                
-                {/* Availability Filter */}
-                <div className="w-full lg:w-auto">
-                  <select 
-                    value={availabilityFilter}
-                    onChange={(e) => setAvailabilityFilter(e.target.value)}
-                    className="w-full lg:w-auto px-4 py-3 border border-gray-200 dark:border-gray-800/50 rounded-lg dark:bg-gray-800 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 dark:focus:border-green-400 dark:focus:ring-green-400/20"
-                  >
-                    <option value="all">{t("Toutes disponibilités", "All availability")}</option>
-                    <option value="online">{t("En ligne", "Online")}</option>
-                    <option value="available">{t("Disponible maintenant", "Available now")}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Instructors Section */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-black text-foreground mb-6">
-                {t("Instructeurs Disponibles", "Available Instructors")}
-              </h2>
-              <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-                {t(
-                  "Découvrez nos instructeurs certifiés et planifiez vos sessions personnalisées",
-                  "Discover our certified instructors and schedule your personalized sessions"
-                )}
-              </p>
-            </div>
-
-            {/* Review Request Section */}
-            {userFeedbacks.length > 0 && !loading && (
-              <div className="mb-8 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
-                <div className="flex items-center gap-3 mb-4">
-                  <FileText className="h-6 w-6 text-blue-600" />
-                  <h2 className="text-xl font-bold text-foreground">
-                    {t("Demandes de révision IA", "AI Review Requests")}
-                  </h2>
-                </div>
-                <p className="text-muted-foreground mb-4">
-                  {t(
-                    "Vous avez des feedbacks IA qui nécessitent une révision humaine. Sélectionnez un expert pour une analyse approfondie.",
-                    "You have AI feedbacks that need human review. Select an expert for in-depth analysis."
-                  )}
-                </p>
-                <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                      <FileText className="h-4 w-4 mr-2" />
-                      {t("Soumettre pour révision", "Submit for Review")} ({userFeedbacks.length})
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {t("Demander une révision humaine", "Request Human Review")}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      {/* Feedback Selection */}
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">
-                          {t("Sélectionner le feedback à réviser", "Select feedback to review")}
-                        </label>
-                        <div className="space-y-2 max-h-40 overflow-y-auto">
-                          {userFeedbacks.map((feedback) => (
-                            <div key={feedback.id} className="p-3 border rounded-lg">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <p className="font-medium">{feedback.simulationTitle}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    Score: {feedback.percentage}% | Confiance IA: {Math.round((feedback.aiConfidence || 0) * 100)}%
-                                  </p>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSubmitReviewRequest(feedback.id)}
-                                  disabled={submittingReview || !selectedTutor}
-                                >
-                                  {submittingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+            {/* Hero Section */}
+            <div className="text-center py-16 md:py-24 px-4">
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="text-text-light dark:text-text-dark text-4xl sm:text-5xl md:text-6xl font-black leading-tight tracking-tighter"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              >
+                Marketplace <span className="text-[#2ECC71]">Premium</span> Instructeurs
+              </motion.h1>
+              <motion.h2
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="mt-4 max-w-2xl mx-auto text-text-muted-light dark:text-text-muted-dark text-base sm:text-lg font-normal leading-normal"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              >
+                Accédez à des sessions personnalisées en tête-à-tête avec nos instructeurs certifiés de premier plan. Exclusivement pour les abonnés Pro+.
+              </motion.h2>
                       </div>
 
-                      {/* Tutor Selection */}
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">
-                          {t("Sélectionner un expert", "Select an expert")}
-                        </label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                          {instructors.map((instructor) => (
-                            <div
-                              key={instructor.id}
-                              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                                selectedTutor?.id === instructor.id
-                                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                                  : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                              }`}
-                              onClick={() => setSelectedTutor(instructor)}
-                            >
-                              <p className="font-medium">{instructor.name}</p>
-                              <p className="text-sm text-muted-foreground">{instructor.specialities?.join(', ')}</p>
-                            </div>
-                          ))}
+            {/* Search/Filter Bar - Sticky Glass Card */}
+            <section className="px-4 sm:px-6 lg:px-8 -mt-16 relative z-20 mb-12">
+              <div className="mx-auto max-w-5xl">
+                <div className="glass-card rounded-2xl p-4 shadow-xl border border-white/30 dark:border-white/10">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Search Input */}
+                    <label className="flex flex-col w-full">
+                      <div className="flex w-full flex-1 items-stretch rounded-xl h-12">
+                        <div className="text-black dark:text-white flex bg-black/5 dark:bg-white/5 items-center justify-center pl-4 rounded-l-xl">
+                          <Search className="w-5 h-5" />
                         </div>
-                      </div>
-
-                      {/* Message */}
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">
-                          {t("Message pour l'expert", "Message for the expert")}
-                        </label>
-                        <Textarea
-                          value={reviewMessage}
-                          onChange={(e) => setReviewMessage(e.target.value)}
-                          placeholder={t(
-                            "Décrivez pourquoi vous souhaitez une révision humaine...",
-                            "Describe why you want a human review..."
-                          )}
-                          rows={3}
+                        <Input
+                          className="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-xl text-black dark:text-white focus:outline-0 focus:ring-2 focus:ring-[#2ECC71] border-none bg-black/5 dark:bg-white/5 h-full placeholder:text-[#5f8c6e] dark:placeholder:text-gray-400 px-4 text-base font-normal leading-normal"
+                          placeholder={t("Rechercher par nom d'instructeur...", "Search by instructor name...")}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          style={{ fontFamily: 'Inter, sans-serif' }}
                         />
                       </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            )}
+                    </label>
 
-            {loading ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-green-500" />
-                <span className="ml-3 text-lg text-gray-600 dark:text-gray-300">
-                  {t("Chargement des instructeurs...", "Loading instructors...")}
-                </span>
-              </div>
-            ) : error ? (
-              <div className="text-center py-20">
-                <div className="text-red-500 mb-4">
-                  <Shield className="w-16 h-16 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">
-                    {t("Erreur de chargement", "Loading Error")}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">{error}</p>
-                </div>
-              </div>
-            ) : instructors.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredInstructors.map((instructor) => (
-                  <div
-                    key={instructor.id}
-                    className="bg-card rounded-2xl border border-gray-200 dark:border-gray-800/30 overflow-hidden hover:shadow-xl transition-all duration-300 group hover:-translate-y-1"
-                  >
-                    {/* Instructor Header */}
-                    <div className="p-6 pb-4">
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="relative">
-                          {instructor.profileImage ? (
-                            <img 
-                              src={instructor.profileImage} 
-                              alt={instructor.name}
-                              className="h-16 w-16 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
-                              onError={(e) => {
-                                // If image fails to load, show fallback
-                                const target = e.target as HTMLImageElement
-                                target.style.display = 'none'
-                                const fallback = target.nextElementSibling as HTMLElement
-                                if (fallback) fallback.style.display = 'flex'
-                              }}
-                            />
-                          ) : null}
-                          <div 
-                            className={`h-16 w-16 rounded-full bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center text-white font-bold text-xl ${instructor.profileImage ? 'hidden' : ''}`}
-                          >
-                              {instructor.name?.charAt(0) || "?"}
-                            </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-bold text-lg text-foreground truncate">
-                              {instructor.name || "Instructeur"}
-                            </h3>
-                            <CheckCircle className="h-4 w-4 text-blue-500" />
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap mb-2">
-                            {/* Availability Status Badge */}
-                            <Badge 
-                              variant={instructor.isOnline ? "default" : "secondary"} 
-                              className={`text-xs ${
-                                instructor.isOnline 
-                                  ? "bg-green-500 hover:bg-green-600 text-white" 
-                                  : "bg-gray-400 hover:bg-gray-500 text-white"
-                              }`}
-                            >
-                              <div className="flex items-center gap-1">
-                                <div className={`w-2 h-2 rounded-full ${
-                                  instructor.isOnline ? "bg-white animate-pulse" : "bg-white"
-                                }`} />
-                                {instructor.availabilityStatus || (instructor.isOnline ? "En ligne" : "Hors ligne")}
-                              </div>
-                            </Badge>
-                            {instructor.location && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <MapPin className="h-3 w-3" />
-                                <span className="truncate">{instructor.location}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Specialities and Subjects */}
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {instructor.specialities?.slice(0, 2).map((speciality: string, index: number) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {speciality}
-                          </Badge>
-                        ))}
-                        {instructor.subjects && instructor.subjects.length > 0 && instructor.subjects.slice(0, 3).map((subject: string, index: number) => (
-                          <Badge key={`subject-${index}`} variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">
-                            {subject}
-                          </Badge>
-                        ))}
-                        {instructor.specialities?.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{instructor.specialities.length - 2}
-                          </Badge>
-                        )}
-                      </div>
+                    {/* Filter by Specialty */}
+                    <div className="relative" ref={specialtyDropdownRef}>
+                      <button
+                        onClick={() => setShowSpecialtyDropdown(!showSpecialtyDropdown)}
+                        className="flex h-12 w-full items-center justify-between gap-x-2 rounded-xl bg-black/5 dark:bg-white/5 px-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-white/30 dark:border-white/10"
+                      >
+                        <p className="text-black dark:text-white text-base font-medium leading-normal" style={{ fontFamily: 'Inter, sans-serif' }}>
+                          {selectedSpeciality === "all" ? t("Spécialité", "Specialty") : selectedSpeciality}
+                        </p>
+                        <ChevronDown className={`w-5 h-5 text-black dark:text-white transition-transform ${showSpecialtyDropdown ? 'rotate-180' : ''}`} />
+                      </button>
                       
-                      {/* Working time (disponibilité) */}
-                      {instructor.availability && instructor.availability.length > 0 && (
-                        <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          <span className="font-medium">{t("Périodes", "Periods")}:</span>
-                          <div className="flex flex-wrap gap-1">
-                            {instructor.availability.slice(0, 2).map((avail: string, index: number) => (
-                              <span key={index} className="bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
-                                {avail}
-                              </span>
+                      {/* Specialty Dropdown */}
+                      {showSpecialtyDropdown && (
+                        <div className="absolute top-full left-0 mt-2 w-full bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl rounded-xl border border-[#2ECC71]/18 dark:border-[#2ECC71]/12 shadow-xl z-50">
+                          <div className="p-2">
+                            <button
+                              onClick={() => {
+                                setSelectedSpeciality("all")
+                                setShowSpecialtyDropdown(false)
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                selectedSpeciality === "all"
+                                  ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                  : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                              }`}
+                              style={{ fontFamily: 'Inter, sans-serif' }}
+                            >
+                              {t("Toutes", "All")}
+                            </button>
+                            {availableSpecialities.slice(1).map((speciality) => (
+                              <button
+                                key={speciality}
+                                onClick={() => {
+                                  setSelectedSpeciality(speciality)
+                                  setShowSpecialtyDropdown(false)
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                  selectedSpeciality === speciality
+                                    ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                    : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                                }`}
+                                style={{ fontFamily: 'Inter, sans-serif' }}
+                              >
+                                {speciality}
+                              </button>
                             ))}
-                            {instructor.availability.length > 2 && (
-                              <span className="text-muted-foreground">
-                                +{instructor.availability.length - 2}
-                              </span>
-                            )}
                           </div>
                         </div>
                       )}
+                    </div>
+                    
+                    {/* Filter by Level */}
+                    <div className="relative" ref={levelDropdownRef}>
+                      <button
+                        onClick={() => setShowLevelDropdown(!showLevelDropdown)}
+                        className="flex h-12 w-full items-center justify-between gap-x-2 rounded-xl bg-black/5 dark:bg-white/5 px-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-white/30 dark:border-white/10"
+                      >
+                        <p className="text-black dark:text-white text-base font-medium leading-normal" style={{ fontFamily: 'Inter, sans-serif' }}>
+                          {selectedLevel === "all" ? t("Niveau", "Level") : selectedLevel}
+                        </p>
+                        <ChevronDown className={`w-5 h-5 text-black dark:text-white transition-transform ${showLevelDropdown ? 'rotate-180' : ''}`} />
+                      </button>
                       
-                      {/* Working hours (specific time slots) */}
-                      {instructor.workingHours && instructor.workingHours.length > 0 && (
-                        <div className="flex items-start gap-2 mb-4 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3 mt-0.5" />
-                          <div className="flex-1">
-                            <span className="font-medium mb-1 block">{t("Horaires", "Hours")}:</span>
-                            <div className="flex flex-wrap gap-1">
-                              {instructor.workingHours.slice(0, 3).map((hours: string, index: number) => (
-                                <span key={index} className="bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
-                                  {hours}
-                                </span>
-                              ))}
-                              {instructor.workingHours.length > 3 && (
-                                <span className="text-muted-foreground">
-                                  +{instructor.workingHours.length - 3}
-                                </span>
+                      {/* Level Dropdown */}
+                      {showLevelDropdown && (
+                        <div className="absolute top-full left-0 mt-2 w-full bg-white/90 dark:bg-background-dark/90 backdrop-blur-xl rounded-xl border border-[#2ECC71]/18 dark:border-[#2ECC71]/12 shadow-xl z-50">
+                          <div className="p-2">
+                            <button
+                              onClick={() => {
+                                setSelectedLevel("all")
+                                setShowLevelDropdown(false)
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                selectedLevel === "all"
+                                  ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                  : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                              }`}
+                              style={{ fontFamily: 'Inter, sans-serif' }}
+                            >
+                              {t("Tous", "All")}
+                            </button>
+                            {levels.map((level) => (
+                              <button
+                                key={level}
+                                onClick={() => {
+                                  setSelectedLevel(level)
+                                  setShowLevelDropdown(false)
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                                  selectedLevel === level
+                                    ? 'bg-[#2ECC71]/20 text-[#2ECC71] font-medium'
+                                    : 'text-black dark:text-white hover:bg-[#2ECC71]/10'
+                                }`}
+                                style={{ fontFamily: 'Inter, sans-serif' }}
+                              >
+                                {level}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Action Panel - Feedback Section */}
+            <div className="p-4 mb-8">
+              <div className="flex flex-1 flex-col items-start justify-between gap-4 rounded-2xl p-5 sm:flex-row sm:items-center glassmorphism bg-white/20 dark:bg-white/5 backdrop-blur-xl border border-[#2ECC71]/18 dark:border-[#2ECC71]/12 shadow-lg">
+                <div className="flex items-center gap-4">
+                  <div className="hidden sm:flex items-center justify-center size-10 bg-[#2ECC71]/20 rounded-full text-[#2ECC71] border border-[#2ECC71]/30">
+                    <MessageCircle className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-text-light dark:text-text-dark text-base font-bold leading-tight" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                      {t("Vous avez des commentaires sur une évaluation IA ?", "Have feedback on an AI review?")}
+                    </p>
+                    <p className="text-text-muted-light dark:text-text-muted-dark text-sm sm:text-base font-normal leading-normal" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                      {t("Aidez-nous à améliorer en la soumettant pour analyse humaine.", "Help us improve by submitting it for human analysis.")}
+                    </p>
+                  </div>
+                </div>
+                <Button className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-10 px-4 bg-[#2ECC71] text-white text-sm font-medium leading-normal hover:opacity-90 transition-opacity border border-[#2ECC71]/60">
+                  <span className="truncate">{t("Soumettre un commentaire", "Submit Feedback")}</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Instructor Grid */}
+            <div className="p-4">
+              <h3 className="text-2xl font-bold tracking-tight text-text-light dark:text-text-dark mb-6" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                {t("Instructeurs Disponibles", "Available Instructors")}
+              </h3>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#2ECC71]" />
+                  <span className="ml-3 text-lg text-text-muted-light dark:text-text-muted-dark">
+                    {t("Chargement des instructeurs...", "Loading instructors...")}
+                  </span>
+                </div>
+              ) : error ? (
+                <div className="text-center py-20">
+                  <p className="text-red-500">{error}</p>
+                </div>
+              ) : filteredInstructors.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {filteredInstructors.map((instructor) => {
+                    const instructorInitials = `${instructor.firstName?.[0] || ''}${instructor.lastName?.[0] || ''}`
+                    const profileImageUrl = instructor.profileImage || getComprehensiveProfilePictureUrl(instructor.name, '')
+                    
+                    return (
+                      <div
+                        key={instructor.id}
+                        onClick={() => handleCardClick(instructor.id)}
+                        className="glass-card rounded-xl p-6 flex flex-col gap-4 hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 cursor-pointer"
+                      >
+                        {/* Instructor & Status */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              {profileImageUrl ? (
+                                <Image
+                                  src={profileImageUrl}
+                                  alt={instructor.name}
+                                  width={40}
+                                  height={40}
+                                  className="rounded-full border-2 border-[#06f957]/30 object-cover"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement
+                                    target.style.display = 'none'
+                                    const parent = target.parentElement
+                                    if (parent) {
+                                      parent.innerHTML = `<div class="w-10 h-10 rounded-full border-2 border-[#06f957]/30 bg-[#06f957]/20 flex items-center justify-center text-[#06f957] font-bold text-sm">${instructorInitials}</div>`
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-[#06f957]/30 bg-[#06f957]/20 flex items-center justify-center">
+                                  <span className="text-[#06f957] font-bold text-sm">{instructorInitials}</span>
+                                </div>
+                              )}
+                              {/* Online indicator - only show for ONLINE status */}
+                              {instructor.status === 'ONLINE' && (
+                                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#06f957] rounded-full border-2 border-white dark:border-gray-900">
+                                  <span className="absolute inline-flex h-full w-full rounded-full bg-[#06f957] opacity-75 animate-ping" />
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-bold text-sm text-[#1A1A1A] dark:text-[#E0E0E0]">{instructor.name}</p>
+                              {instructor.title && (
+                                <p className="text-xs text-[#555555] dark:text-[#AAAAAA]">{instructor.title}</p>
+                              )}
+                              {!instructor.title && (
+                                <p className="text-xs text-[#555555] dark:text-[#AAAAAA]">{t("Expert", "Expert")}</p>
                               )}
                             </div>
                           </div>
+                          {/* Status Badge - Show correct status based on user.status */}
+                          {instructor.status === 'ONLINE' && (
+                            <div className="flex items-center gap-1.5 bg-[#06f957]/20 text-[#06f957] text-black dark:text-white font-bold text-xs py-1 px-3 rounded-full">
+                              <span className="w-2 h-2 bg-[#06f957] rounded-full animate-pulse" />
+                              <span>{t("En ligne", "Online")}</span>
+                            </div>
+                          )}
+                          {instructor.status === 'ACTIVE' && !instructor.isOnline && (
+                            <div className="flex items-center gap-1.5 bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold text-xs py-1 px-3 rounded-full">
+                              <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                              <span>{t("Actif", "Active")}</span>
+                            </div>
+                          )}
+                          {instructor.status === 'OFFLINE' && (
+                            <div className="flex items-center gap-1.5 bg-gray-500/20 text-gray-600 dark:text-gray-400 font-bold text-xs py-1 px-3 rounded-full">
+                              <span className="w-2 h-2 bg-gray-500 rounded-full" />
+                              <span>{t("Hors ligne", "Offline")}</span>
+                            </div>
+                          )}
                         </div>
-                      )}
 
-                    </div>
+                        {/* Bio */}
+                        {instructor.bio && (
+                          <p className="text-sm text-[#555555] dark:text-[#AAAAAA] line-clamp-2">{instructor.bio}</p>
+                        )}
 
-                    {/* Instructor Footer */}
-                    <div className="px-6 pb-6">
+                        {/* Availability */}
+                        {instructor.availability && instructor.availability.length > 0 && (
+                          <div className="flex items-center gap-2 text-sm text-[#06f957] font-medium">
+                            <Calendar className="h-4 w-4" />
+                            <p>{instructor.availability[0]}</p>
+                          </div>
+                        )}
 
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          className="flex-1 gap-2 hover:bg-blue-50 dark:hover:bg-blue-950/20"
-                          onClick={async () => {
-                            try {
-                              // Check if tutor accepts messages
-                              const acceptsMessages = instructor.acceptsMessages !== false
-                              if (!acceptsMessages) {
-                                toast.error(t("Ce tuteur n'accepte pas les messages", "This tutor does not accept messages"))
-                                return
-                              }
-                              
-                              // Show loading state
-                              const loadingToast = toast.loading(t("Création de la conversation...", "Creating conversation..."))
-                              
-                              // Fetch tutor profile to ensure they exist and accept messages
-                              // Use marketplace tutors endpoint which is public and returns tutor info
-                              const tutorsResponse = await apiClient.get('/marketplace/tutors')
-                              if (!tutorsResponse.success || !tutorsResponse.data) {
-                                toast.dismiss(loadingToast)
-                                toast.error(t("Impossible de récupérer les informations du tuteur", "Unable to fetch tutor information"))
-                                return
-                              }
-                              
-                              const tutors = Array.isArray(tutorsResponse.data) ? tutorsResponse.data : []
-                              const tutor = tutors.find((t: any) => t.id === instructor.id)
-                              
-                              if (!tutor) {
-                                toast.dismiss(loadingToast)
-                                toast.error(t("Tuteur introuvable", "Tutor not found"))
-                                return
-                              }
-                              
-                              // Verify tutor accepts messages
-                              const tutorAcceptsMessages = tutor.acceptsMessages !== false
-                              if (!tutorAcceptsMessages) {
-                                toast.dismiss(loadingToast)
-                                toast.error(t("Ce tuteur n'accepte pas les messages", "This tutor does not accept messages"))
-                                return
-                              }
-                              
-                              // Send an initial greeting message to create the conversation properly
-                              try {
-                                const messageResponse = await apiClient.post('/messages', {
-                                  receiverId: instructor.id,
-                                  content: t("Bonjour ! Je souhaite commencer une conversation avec vous.", "Hello! I would like to start a conversation with you."),
-                                  subject: t("Nouvelle conversation", "New conversation")
-                                })
-                                
-                                if (messageResponse.success) {
-                                  toast.dismiss(loadingToast)
-                                  toast.success(t("Conversation créée avec succès", "Conversation created successfully"))
-                                  // Redirect to messages page with tutor ID
-                                  router.push(`/messages?contact=${instructor.id}`)
-                                } else {
-                                  // Even if message fails, redirect anyway - the conversation can be created when student sends first message
-                                  toast.dismiss(loadingToast)
-                                  console.warn('Initial message failed, but redirecting anyway:', messageResponse.error)
-                                  router.push(`/messages?contact=${instructor.id}`)
-                                }
-                              } catch (messageError: any) {
-                                // If sending message fails, still redirect - conversation will be created on first message
-                                toast.dismiss(loadingToast)
-                                console.warn('Error sending initial message, but redirecting anyway:', messageError)
-                                router.push(`/messages?contact=${instructor.id}`)
-                              }
-                            } catch (error: any) {
-                              console.error('Error creating conversation:', error)
-                              toast.error(t("Erreur lors de la création de la conversation", "Error creating conversation"))
-                            }
-                          }}
-                          disabled={instructor.acceptsMessages === false}
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                          {instructor.acceptsMessages === false 
-                            ? t("Messages désactivés", "Messages disabled")
-                            : t("Message", "Message")
-                          }
-                        </Button>
-                        <Button 
-                          className="flex-1 gap-2 bg-[#2ECC71] hover:bg-[#2ECC71]/90 text-black"
-                          onClick={async () => {
-                            // Submit session request
-                            try {
-                              const response = await apiClient.post('/marketplace/requests', {
-                                tutorId: instructor.id,
-                                requestType: 'SESSION',
-                                subject: t("Demande de session 1-on-1", "One-on-one session request"),
-                                description: t("Demande de session individuelle avec {name}", `Individual session request with ${instructor.name}`),
-                                urgency: 'MEDIUM'
-                              })
-                              
-                              if (response.success) {
-                                toast.success(t("Demande envoyée avec succès", "Request sent successfully"))
-                              } else {
-                                toast.error(response.error?.message || t("Erreur lors de l'envoi", "Error sending request"))
-                              }
-                            } catch (error: any) {
-                              toast.error(t("Erreur lors de l'envoi de la demande", "Error sending request"))
-                            }
-                          }}
-                        >
-                          <Calendar className="h-4 w-4" />
-                          {t("Soumettre", "Submit")}
-                        </Button>
+                        {/* Working Hours */}
+                        {instructor.workingHours && instructor.workingHours.length > 0 && (
+                          <div className="flex items-center gap-2 text-sm text-[#555555] dark:text-[#AAAAAA]">
+                            <Clock className="h-4 w-4" />
+                            <p>{instructor.workingHours[0]}</p>
+                          </div>
+                        )}
+
+                        {/* Location */}
+                        {instructor.location && (
+                          <p className="text-xs text-[#555555] dark:text-[#AAAAAA]">{instructor.location}</p>
+                        )}
+
+                        {/* Tags/Specialties */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {instructor.specialities?.slice(0, 3).map((speciality: string, index: number) => (
+                            <span
+                              key={index}
+                              className="glass-chip text-xs font-medium py-1 px-3 rounded-full text-[#1A1A1A] dark:text-[#E0E0E0]"
+                            >
+                              {speciality}
+                            </span>
+                          ))}
+                          {instructor.subjects && instructor.subjects.length > 0 && instructor.subjects.slice(0, 2).map((subject: string, index: number) => (
+                            <span
+                              key={`subject-${index}`}
+                              className="glass-chip text-xs font-medium py-1 px-3 rounded-full text-[#1A1A1A] dark:text-[#E0E0E0]"
+                            >
+                              {subject}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Languages */}
+                        {instructor.languages && instructor.languages.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs text-[#555555] dark:text-[#AAAAAA]">{t("Langues", "Languages")}:</span>
+                            {instructor.languages.slice(0, 3).map((lang: string, index: number) => (
+                              <span key={index} className="text-xs text-[#06f957]">{lang}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="mt-2 flex items-center gap-3">
+                          <Button
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleMessage(e, instructor)
+                            }}
+                            disabled={instructor.acceptsMessages === false}
+                            className="flex-1 flex max-w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 bg-white/50 dark:bg-black/30 text-black dark:text-white gap-2 text-sm font-bold tracking-wide hover:bg-white/70 dark:hover:bg-black/50 transition-colors border border-white/30 dark:border-white/10"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            {t("Message", "Message")}
+                          </Button>
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSubmitExpertise(e, instructor)
+                            }}
+                            className="flex-1 flex max-w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 bg-[#06f957] text-black gap-2 text-sm font-bold tracking-wide transition-transform hover:scale-105"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            {t("Soumettre", "Submit")}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
-                  <UserCheck className="w-8 h-8 text-muted-foreground" />
+                    )
+                  })}
                 </div>
-                <h3 className="text-lg font-semibold mb-2 text-foreground">
-                  {t("Aucun instructeur disponible", "No instructors available")}
-                </h3>
-                <p className="text-muted-foreground">
-                  {t("Les instructeurs seront bientôt disponibles", "Instructors will be available soon")}
-                </p>
-              </div>
-            )}
-
-            {filteredInstructors.length === 0 && instructors.length > 0 && (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
-                  <Search className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2 text-foreground">
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-text-muted-light dark:text-text-muted-dark">
                   {t("Aucun instructeur trouvé", "No instructors found")}
-                </h3>
-                <p className="text-muted-foreground">
-                  {t("Essayez de modifier vos critères de recherche", "Try adjusting your search criteria")}
                 </p>
               </div>
             )}
           </div>
-        </section>
-      </main>
-    </PageShell>
+          </div>
+        </div>
+      </div>
+
+      {/* Global Styles */}
+      <style jsx global>{`
+        .glassmorphism {
+          background: rgba(255, 255, 255, 0.2);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(46, 204, 113, 0.18);
+        }
+        .dark .glassmorphism {
+          background: rgba(15, 35, 22, 0.2);
+          border: 1px solid rgba(46, 204, 113, 0.12);
+        }
+        .animate-pulse-green {
+          animation: pulse-green 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-green {
+          0%, 100% {
+            opacity: 1;
+            box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7);
+          }
+          50% {
+            opacity: 1;
+            box-shadow: 0 0 0 8px rgba(46, 204, 113, 0);
+          }
+        }
+        :root {
+          --primary: #2ECC71;
+          --background-light: #f5f8f6;
+          --background-dark: #0f2316;
+          --content-light: #ffffff;
+          --content-dark: #1a2b20;
+          --text-light: #111813;
+          --text-dark: #e1e8e3;
+          --text-muted-light: #5f8c6e;
+          --text-muted-dark: #9cb4a4;
+        }
+      `}</style>
+    </div>
   )
 }

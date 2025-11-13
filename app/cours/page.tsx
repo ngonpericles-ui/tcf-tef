@@ -15,6 +15,7 @@ import { apiClient } from "@/lib/api-client"
 import { getCourseImage, getImageAltText } from "@/lib/imageUtils"
 import { toast } from "sonner"
 import Image from "next/image"
+import { useAuth } from "@/contexts/AuthContext"
 // import ProfessionalMediaPlayer from "@/components/professional-media-player"
 
 const courseTypeIcons = {
@@ -69,10 +70,15 @@ const getCourseImageByCourseType = (type: CourseType) => {
 
 export default function CoursesPage() {
   const { lang } = useLang()
+  const { user } = useAuth()
   const [selectedType, setSelectedType] = useState<CourseType | "all">("all")
-  const [userTier] = useState<SubscriptionTier>("free") // Mock user subscription
+  // Get real user subscription tier (convert from backend format: FREE -> free)
+  const userTier: SubscriptionTier = user?.subscriptionTier 
+    ? (user.subscriptionTier.toLowerCase() as SubscriptionTier)
+    : "free"
   const [selectedLevel, setSelectedLevel] = useState<string>("all")
   const [courses, setCourses] = useState<Course[]>([])
+  const [allCourses, setAllCourses] = useState<Course[]>([]) // Store all courses before filtering
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null)
@@ -122,6 +128,71 @@ export default function CoursesPage() {
             const mappedType = mapCategoryToType(course.category)
             // Backend returns subscriptionTier in uppercase (FREE, ESSENTIAL, etc)
             const tierValue = (course.subscriptionTier || 'FREE').toLowerCase() as SubscriptionTier
+            
+            // Get lessons_data - check multiple possible locations
+            const lessonsData = course.lessons_data || course.lessonsData || []
+            
+            // ALWAYS calculate duration from lessons_data - NEVER use stored course.duration
+            let totalMinutes = 0
+            if (lessonsData && Array.isArray(lessonsData) && lessonsData.length > 0) {
+              // Calculate from lessons_data - sum all lesson durations
+              totalMinutes = lessonsData.reduce((sum: number, lesson: any) => {
+                const lessonDuration = lesson.duration || 0
+                return sum + lessonDuration
+              }, 0)
+            }
+            
+            // Debug: Log if duration seems wrong
+            if (course.duration && course.duration > 100 && totalMinutes === 0) {
+              console.warn('⚠️ Course duration mismatch:', {
+                courseId: course.id,
+                title: course.title,
+                storedDuration: course.duration,
+                calculatedDuration: totalMinutes,
+                lessonsCount: lessonsData.length,
+                lessonsData: lessonsData
+              })
+            }
+            
+            const hasVideoContent = lessonsData && lessonsData.some((lesson: any) => lesson.videoUrl)
+            const isPDFContent = course.contentType === 'NOTE' || (!hasVideoContent && lessonsData && lessonsData.some((lesson: any) => lesson.content && !lesson.videoUrl))
+            
+            // Get video thumbnail from first lesson (YouTube-style)
+            let courseImage = getCourseImageByCourseType(mappedType);
+            if (hasVideoContent && lessonsData && lessonsData.length > 0) {
+              // Find first video lesson with thumbnail or videoUrl
+              const firstVideoLesson = lessonsData.find((lesson: any) => lesson.videoUrl);
+              if (firstVideoLesson) {
+                // Use Cloudinary thumbnail if available (stored in course.thumbnail)
+                if (course.thumbnail) {
+                  courseImage = course.thumbnail;
+                } else if (firstVideoLesson.videoUrl) {
+                  // Generate Cloudinary thumbnail URL from video public_id (YouTube-style)
+                  // Extract public_id from Cloudinary URL
+                  const cloudinaryUrl = firstVideoLesson.videoUrl;
+                  // Cloudinary URL format: https://res.cloudinary.com/cloud_name/video/upload/v1234567/folder/file.mp4
+                  const publicIdMatch = cloudinaryUrl.match(/\/video\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/);
+                  if (publicIdMatch) {
+                    const publicId = publicIdMatch[1];
+                    // Generate thumbnail URL using Cloudinary transformation (like YouTube)
+                    // w_400: width, h_300: height, c_fill: crop fill, g_auto: gravity auto, so_10: start offset 10%
+                    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dk5x9flh0';
+                    courseImage = `https://res.cloudinary.com/${cloudName}/video/upload/w_400,h_300,c_fill,g_auto,so_10/${publicId}.jpg`;
+                  }
+                }
+              }
+            }
+            
+            // Get available levels and subscriptions from course (for filtering and access control)
+            const availableLevels = (course as any).availableLevels && Array.isArray((course as any).availableLevels) && (course as any).availableLevels.length > 0
+              ? (course as any).availableLevels
+              : [course.level];
+            
+            // Get available subscriptions (convert from backend format: FREE -> free)
+            const availableSubscriptions = (course as any).availableSubscriptions && Array.isArray((course as any).availableSubscriptions) && (course as any).availableSubscriptions.length > 0
+              ? (course as any).availableSubscriptions.map((tier: string) => tier.toLowerCase() as SubscriptionTier)
+              : [tierValue];
+            
             return {
               id: course.id,
               title: course.title,
@@ -129,27 +200,20 @@ export default function CoursesPage() {
               description: course.description,
               descriptionEn: course.descriptionEn || course.description,
               level: course.level,
+              availableLevels: availableLevels, // Add for filtering
+              availableSubscriptions: availableSubscriptions, // Add for access control
               requiredTier: tierValue,
               type: mappedType,
               duration: (() => {
-                // Smart duration logic: check if it's video content or PDF
-                const hasVideoContent = course.lessons_data && course.lessons_data.some((lesson: any) => lesson.videoUrl)
-                const isPDFContent = course.contentType === 'NOTE' || (!hasVideoContent && course.lessons_data && course.lessons_data.some((lesson: any) => lesson.content && !lesson.videoUrl))
-                
-                if (hasVideoContent) {
-                  // Video content: show actual duration
-                  return `${course.duration} min`
-                } else if (isPDFContent) {
-                  // PDF content: show "PDF" instead of duration
+                if (isPDFContent) {
                   return 'PDF'
-                } else {
-                  // Default: show duration
-                  return `${course.duration} min`
                 }
+                // Return actual calculated duration in minutes (from lessons_data only)
+                return totalMinutes > 0 ? `${totalMinutes} min` : '0 min'
               })(),
               lessons: course.lessons || 1,
               progress: 0,
-              image: getCourseImageByCourseType(mappedType),
+              image: courseImage, // Use video thumbnail or fallback
               authorName: course.createdBy?.firstName + ' ' + course.createdBy?.lastName || 'Instructeur',
               tags: course.tags || [],
               createdBy: course.createdBy?.role === 'ADMIN' ? 'admin' : 'manager',
@@ -157,10 +221,11 @@ export default function CoursesPage() {
               rating: course.rating || 0,
               enrolledCount: course.enrolledCount || 0, // Use actual number, not string
               difficulty: course.level === 'A1' ? 1 : course.level === 'A2' ? 2 : course.level === 'B1' ? 3 : course.level === 'B2' ? 4 : 5,
-              lessonsData: course.lessons_data || []
+              lessonsData: lessonsData
             }
           })
           setCourses(transformedCourses)
+          setAllCourses(transformedCourses) // Store all courses for access check
         } else {
           console.error('❌ API response not successful or no content:', response)
           setCourses([])
@@ -201,16 +266,34 @@ export default function CoursesPage() {
       filtered = filtered.filter(course => course.type === selectedType)
     }
 
-    // Filter by level
+    // Filter by level - check availableLevels array (new system) or single level (old system)
     if (selectedLevel !== "all") {
       if (selectedLevel === "free") {
         filtered = filtered.filter(course => course.requiredTier === "free")
       } else if (selectedLevel === "beginner") {
-        filtered = filtered.filter(course => course.level === "A1" || course.level === "A2")
+        // Check if course has A1 or A2 in availableLevels array
+        filtered = filtered.filter(course => {
+          const availableLevels = (course as any).availableLevels && Array.isArray((course as any).availableLevels) && (course as any).availableLevels.length > 0
+            ? (course as any).availableLevels
+            : [course.level];
+          return availableLevels.some((level: string) => level === "A1" || level === "A2");
+        });
       } else if (selectedLevel === "intermediate") {
-        filtered = filtered.filter(course => course.level === "B1" || course.level === "B2")
+        // Check if course has B1 or B2 in availableLevels array
+        filtered = filtered.filter(course => {
+          const availableLevels = (course as any).availableLevels && Array.isArray((course as any).availableLevels) && (course as any).availableLevels.length > 0
+            ? (course as any).availableLevels
+            : [course.level];
+          return availableLevels.some((level: string) => level === "B1" || level === "B2");
+        });
       } else if (selectedLevel === "advanced") {
-        filtered = filtered.filter(course => course.level === "C1" || course.level === "C2")
+        // Check if course has C1 or C2 in availableLevels array
+        filtered = filtered.filter(course => {
+          const availableLevels = (course as any).availableLevels && Array.isArray((course as any).availableLevels) && (course as any).availableLevels.length > 0
+            ? (course as any).availableLevels
+            : [course.level];
+          return availableLevels.some((level: string) => level === "C1" || level === "C2");
+        });
       }
     }
 
@@ -223,15 +306,16 @@ export default function CoursesPage() {
       )
     }
 
-    // Filter by user tier access
-    const tierHierarchy: Record<SubscriptionTier, SubscriptionTier[]> = {
-      free: ["free"],
-      essential: ["free", "essential"],
-      premium: ["free", "essential", "premium"],
-      pro: ["free", "essential", "premium", "pro"],
-    }
-    const allowedTiers = tierHierarchy[userTier] || ["free"]
-    filtered = filtered.filter(course => allowedTiers.includes(course.requiredTier))
+    // Filter by user subscription tier access - check availableSubscriptions array
+    // A course is accessible if user's tier is in the course's availableSubscriptions array
+    filtered = filtered.filter(course => {
+      const courseSubscriptions = (course as any).availableSubscriptions && Array.isArray((course as any).availableSubscriptions) && (course as any).availableSubscriptions.length > 0
+        ? (course as any).availableSubscriptions
+        : [course.requiredTier];
+      
+      // Check if user's subscription tier is in course's available subscriptions
+      return courseSubscriptions.includes(userTier);
+    })
 
     return filtered
   }, [courses, selectedType, selectedLevel, searchTerm, userTier])
@@ -420,16 +504,17 @@ export default function CoursesPage() {
             </TabsList>
 
             <TabsContent value="all" className="mt-6">
-              <CourseGrid courses={filteredCourses} userTier={userTier} onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse} />
+              <CourseGrid courses={filteredCourses} allCourses={allCourses} userTier={userTier} onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse} />
             </TabsContent>
 
             <TabsContent value="free" className="mt-6">
-              <CourseGrid courses={filteredCourses.filter((c) => c.requiredTier === "free")} userTier={userTier} onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse} />
+              <CourseGrid courses={filteredCourses.filter((c) => c.requiredTier === "free")} allCourses={allCourses} userTier={userTier} onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse} />
             </TabsContent>
 
             <TabsContent value="beginner" className="mt-6">
               <CourseGrid
                 courses={filteredCourses.filter((c) => c.level === "A1" || c.level === "A2")}
+                allCourses={allCourses}
                 userTier={userTier}
                 onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
               />
@@ -438,18 +523,20 @@ export default function CoursesPage() {
             <TabsContent value="intermediate" className="mt-6">
               <CourseGrid
                 courses={filteredCourses.filter((c) => c.level === "B1" || c.level === "B2")}
+                allCourses={allCourses}
                 userTier={userTier}
                 onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
               />
             </TabsContent>
 
             <TabsContent value="advanced" className="mt-6">
-            <CourseGrid
-              courses={filteredCourses.filter((c) => c.level === "C1" || c.level === "C2")}
-              userTier={userTier}
-              onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
-            />
-          </TabsContent>
+              <CourseGrid
+                courses={filteredCourses.filter((c) => c.level === "C1" || c.level === "C2")}
+                allCourses={allCourses}
+                userTier={userTier}
+                onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
+              />
+            </TabsContent>
         </Tabs>
         
         {/* Pagination Controls */}
@@ -545,7 +632,7 @@ export default function CoursesPage() {
   )
 }
 
-function CourseGrid({ courses, userTier, onCourseSelect, loadingCourse }: { courses: any[]; userTier: SubscriptionTier; onCourseSelect?: (course: Course) => void; loadingCourse?: string | null }) {
+function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCourse }: { courses: any[]; allCourses: any[]; userTier: SubscriptionTier; onCourseSelect?: (course: Course) => void; loadingCourse?: string | null }) {
   const { lang } = useLang()
   const t = useCallback((fr: string, en: string) => (lang === "fr" ? fr : en), [lang])
   const [enrolling, setEnrolling] = useState<string | null>(null)
@@ -642,9 +729,14 @@ function CourseGrid({ courses, userTier, onCourseSelect, loadingCourse }: { cour
     pro: ["free", "essential", "premium", "pro"],
   }), [])
 
-  const canAccess = useCallback((courseRequiredTier: SubscriptionTier) => {
-    return tierHierarchy[userTier].includes(courseRequiredTier)
-  }, [tierHierarchy, userTier])
+  const canAccess = useCallback((course: any) => {
+    // Check if user's subscription tier is in course's availableSubscriptions array
+    const courseSubscriptions = course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.length > 0
+      ? course.availableSubscriptions
+      : [course.requiredTier];
+    
+    return courseSubscriptions.includes(userTier);
+  }, [userTier])
 
   const getTierBadgeColor = useCallback((tier: SubscriptionTier) => {
     switch (tier) {
@@ -661,18 +753,55 @@ function CourseGrid({ courses, userTier, onCourseSelect, loadingCourse }: { cour
     }
   }, [])
 
+  // Check if there are courses in database but user doesn't have access (subscription issue)
+  // This happens when filteredCourses is empty but allCourses has courses that require higher subscription
+  const hasCoursesButNoAccess = useMemo(() => {
+    if (allCourses.length === 0) return false; // No courses in database
+    
+    // Check if any course in allCourses requires a subscription tier higher than user's
+    const hasInaccessibleCourses = allCourses.some((course: any) => {
+      const courseSubscriptions = course.availableSubscriptions && Array.isArray(course.availableSubscriptions) && course.availableSubscriptions.length > 0
+        ? course.availableSubscriptions
+        : [course.requiredTier];
+      
+      // Course is inaccessible if user's tier is not in course's available subscriptions
+      return !courseSubscriptions.includes(userTier);
+    });
+    
+    return hasInaccessibleCourses && courses.length === 0;
+  }, [allCourses, courses, userTier]);
+  
   if (courses.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
           <BookOpen className="w-8 h-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold mb-2 text-foreground">
-          {t("Aucun cours disponible", "No courses available")}
-        </h3>
-        <p className="text-muted-foreground">
-          {t("Les cours seront bientôt disponibles", "Courses will be available soon")}
-        </p>
+        {hasCoursesButNoAccess ? (
+          <>
+            <h3 className="text-lg font-semibold mb-2 text-foreground">
+              {t("Votre abonnement ne vous permet pas d'avoir accès à ce contenu", "Your subscription does not allow you to access this content")}
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              {t("Mettez à niveau votre abonnement pour accéder à plus de cours", "Upgrade your subscription to access more courses")}
+            </p>
+            <Button
+              onClick={() => window.location.href = '/abonnement'}
+              className="bg-green-600 hover:bg-green-700 text-black font-medium"
+            >
+              {t("Changer de plan", "Change plan")}
+            </Button>
+          </>
+        ) : (
+          <>
+            <h3 className="text-lg font-semibold mb-2 text-foreground">
+              {t("Aucun cours disponible", "No courses available")}
+            </h3>
+            <p className="text-muted-foreground">
+              {t("Les cours seront bientôt disponibles", "Courses will be available soon")}
+            </p>
+          </>
+        )}
       </div>
     )
   }
@@ -680,12 +809,12 @@ function CourseGrid({ courses, userTier, onCourseSelect, loadingCourse }: { cour
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {courses.map((course) => {
-        const hasAccess = canAccess(course.requiredTier)
+        const hasAccess = canAccess(course)
 
         return (
           <div
             key={course.id}
-            className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-card overflow-hidden transition-shadow duration-200 hover:shadow-md"
+            className="group rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-primary dark:hover:border-primary"
           >
             <div className="relative aspect-video overflow-hidden">
               <Image
@@ -783,7 +912,7 @@ function CourseGrid({ courses, userTier, onCourseSelect, loadingCourse }: { cour
               )}
 
               <Button
-                className="w-full gap-2"
+                className={`w-full gap-2 ${hasAccess ? 'bg-green-600 hover:bg-green-700 text-black font-medium' : ''}`}
                 disabled={!hasAccess || enrolling === course.id || loadingCourse === course.id}
                 variant={hasAccess ? "default" : "outline"}
                 onClick={() => hasAccess && handleEnrollAndSelect(course)}
