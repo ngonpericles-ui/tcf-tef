@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Trash2, Save, Eye, ArrowLeft, BookOpen, CheckCircle, Sparkles, Loader, Upload, X, AlertTriangle } from "lucide-react"
+import { Plus, Trash2, Save, Eye, ArrowLeft, BookOpen, CheckCircle, Sparkles, Loader, Upload, X, AlertTriangle, FileText } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api-client"
 
@@ -21,6 +21,11 @@ interface Question {
   options: string[]
   correctAnswer: number | string
   explanation: string
+  passage?: string | null // Reading passage or context (separate from question text)
+  fileUrl?: string | null // PDF URL for question-level documents
+  minWords?: number | null // Minimum word count for Expression Écrite
+  maxWords?: number | null // Maximum word count for Expression Écrite
+  writingType?: string | null // Writing type: "article", "essay", "letter"
   points: number
 }
 
@@ -51,8 +56,13 @@ export default function QuestionnaireCreator() {
   const [extractedPdfContent, setExtractedPdfContent] = useState<string>("") // Store PDF content for AI generation
   const [uploadedAudio, setUploadedAudio] = useState<File | null>(null)
   const [audioPreview, setAudioPreview] = useState<string | null>(null)
+  const [uploadedVideo, setUploadedVideo] = useState<File | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null) // Cloudinary URL after upload
+  const [videoUrl, setVideoUrl] = useState<string | null>(null) // Cloudinary URL after upload
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   // Expression Orale specific state
   const [expressionOralePdf, setExpressionOralePdf] = useState<File | null>(null)
@@ -60,6 +70,11 @@ export default function QuestionnaireCreator() {
   const [voiceSelection, setVoiceSelection] = useState<"random" | "male" | "female">("random")
   const [maxDuration, setMaxDuration] = useState(3) // in minutes
   const [extractedSujets, setExtractedSujets] = useState<string[]>([])
+
+  // Expression Écrite specific state (Vocabulaire + Grammaire)
+  const [minWords, setMinWords] = useState<number>(150)
+  const [maxWords, setMaxWords] = useState<number>(300)
+  const [writingType, setWritingType] = useState<"article" | "essay" | "letter">("essay")
 
   // Available options
   const availableLevels = ["A1", "A2", "B1", "B2", "C1", "C2"]
@@ -96,13 +111,12 @@ export default function QuestionnaireCreator() {
   // Mapping function for category names (frontend to backend enum)
   const mapCategoryToBackend = (category: string): string => {
     const categoryMap: Record<string, string> = {
-      "grammar": "GRAMMAR",
+      "expression_ecrite": "WRITING",  // Expression Écrite = Vocabulaire + Grammaire (combined)
       "listening": "LISTENING", 
       "reading": "READING",
-      "vocabulary": "VOCABULARY",
       "oral": "ORAL"
     }
-    return categoryMap[category] || "GRAMMAR"
+    return categoryMap[category] || "WRITING"
   }
 
   const selectAllLevels = () => {
@@ -122,13 +136,18 @@ export default function QuestionnaireCreator() {
   }
 
   const addQuestion = (type: string) => {
-    const newQuestion = {
+    const newQuestion: Question = {
       id: Date.now(),
       type,
       question: "",
       options: type === "multiple-choice" ? ["", "", "", ""] : [],
       correctAnswer: type === "multiple-choice" ? 0 as number | string : "" as number | string,
       explanation: "",
+      passage: null,
+      fileUrl: null,
+      minWords: null,
+      maxWords: null,
+      writingType: null,
       points: 1,
     }
     setQuestions([...questions, newQuestion])
@@ -290,8 +309,24 @@ export default function QuestionnaireCreator() {
         })
       }
 
+      // For Expression Orale, convert sujets to questions if no questions exist
+      let finalQuestions = questions;
+      if (questionnaire.category === "oral" && selectedSujets.length > 0 && questions.length === 0) {
+        // Convert sujets to questions for Expression Orale
+        finalQuestions = selectedSujets.map((sujet, index) => ({
+          id: index + 1,
+          question: sujet,
+          type: "oral",
+          options: [],
+          correctAnswer: "",
+          points: 10,
+          explanation: "",
+          passage: null
+        }));
+      }
+
       // Prepare questions data with media URLs stored in options JSON
-      const questionsData = questions.map((q, index) => {
+      const questionsData = finalQuestions.map((q, index) => {
         // Validate question text
         if (!q.question || q.question.trim().length < 5) {
           throw new Error(`Question ${index + 1} doit contenir au moins 5 caractères`)
@@ -352,6 +387,10 @@ export default function QuestionnaireCreator() {
           correctAnswer: correctAnswer,
           points: points,
           explanation: (q.explanation || "").substring(0, 1000) || null, // Max 1000 chars, null if empty
+          passage: (q.passage || "").substring(0, 10000) || null, // Include passage field (can be long for reading comprehension - max 10000 chars)
+          minWords: questionnaire.category === "expression_ecrite" ? (q.minWords || minWords) : null,
+          maxWords: questionnaire.category === "expression_ecrite" ? (q.maxWords || maxWords) : null,
+          writingType: questionnaire.category === "expression_ecrite" ? (q.writingType || writingType) : null,
         order: index + 1,
           level: level,
           category: category
@@ -496,10 +535,24 @@ export default function QuestionnaireCreator() {
         return
       }
 
-      // Check if we have PDF content (ONLY file-based generation)
-      if (!extractedPdfContent?.trim()) {
-        toast.error("Veuillez télécharger un fichier PDF pour générer les questions avec l'IA")
-        return
+      // For listening comprehension, check for audio/video
+      if (questionnaire.category === "listening") {
+        if (!audioUrl && !videoUrl) {
+          toast.error("Veuillez uploader un fichier audio ou vidéo pour générer les questions de compréhension orale")
+          return
+        }
+      } else if (questionnaire.category === "reading" || questionnaire.category === "expression_ecrite") {
+        // For reading, grammar, and vocabulary, check if we have PDF content
+        if (!extractedPdfContent?.trim()) {
+          toast.error("Veuillez télécharger un fichier PDF pour générer les questions avec l'IA")
+          return
+        }
+      } else {
+        // For other categories, check if we have PDF content
+        if (!extractedPdfContent?.trim()) {
+          toast.error("Veuillez télécharger un fichier PDF pour générer les questions avec l'IA")
+          return
+        }
       }
       
       // If questionCount is 0, ask user for the number of questions
@@ -511,35 +564,71 @@ export default function QuestionnaireCreator() {
 
       setIsGeneratingQuestions(true)
 
-      // Use ONLY PDF content for AI generation
-      const contentToUse = extractedPdfContent;
-      const contentSource = "PDF content";
+      let response: any;
+      
+      // For listening comprehension, generate from audio/video
+      if (questionnaire.category === "listening" && (audioUrl || videoUrl)) {
+        console.log('🎧 Generating questions from audio/video for listening comprehension:', {
+          audioUrl,
+          videoUrl,
+          lessonTitle: questionnaire.title,
+          courseTitle: questionnaire.description,
+          level: selectedLevels[0],
+          difficulty: difficultyLevel,
+          questionCount: questionCount
+        })
 
-      console.log('🤖 Generating questions with AI:', {
-        content: contentToUse.substring(0, 100),
-        contentSource: contentSource,
-        contentLength: contentToUse.length,
-        lessonTitle: questionnaire.title,
-        courseTitle: questionnaire.description,
-        level: selectedLevels[0],
-        category: questionnaire.category,
-        difficulty: difficultyLevel,
-        questionCount: questionCount
-      })
+        // Call AI API to generate questions from audio/video
+        response = await apiClient.post('/ai/generate-questions-from-media', {
+          audioUrl: audioUrl || null,
+          videoUrl: videoUrl || null,
+          lessonTitle: questionnaire.title,
+          courseTitle: questionnaire.description,
+          level: selectedLevels[0],
+          category: questionnaire.category,
+          difficulty: difficultyLevel,
+          questionCount: questionCount,
+          questionTypes: ["multiple-choice", "true-false"]
+        })
+      } else {
+        // Use PDF content for reading, grammar, vocabulary, and other categories
+        const contentToUse = extractedPdfContent;
+        const contentSource = "PDF content";
 
-      // Call AI API to generate questions using PDF content if available
-      const response = await apiClient.post('/ai/generate-questions', {
-        content: contentToUse,
-        lessonTitle: questionnaire.title,
-        courseTitle: questionnaire.description,
-        level: selectedLevels[0],
-        category: questionnaire.category,
-        difficulty: difficultyLevel,
-        questionCount: questionCount,
-        questionTypes: questionnaire.category === "listening" 
-          ? ["multiple-choice", "true-false"] 
-          : ["multiple-choice", "true-false", "short-answer"]
-      })
+        console.log('🤖 Generating questions with AI:', {
+          content: contentToUse.substring(0, 100),
+          contentSource: contentSource,
+          contentLength: contentToUse.length,
+          lessonTitle: questionnaire.title,
+          courseTitle: questionnaire.description,
+          level: selectedLevels[0],
+          category: questionnaire.category,
+          difficulty: difficultyLevel,
+          questionCount: questionCount
+        })
+
+        // Call AI API to generate questions using PDF content
+        response = await apiClient.post('/ai/generate-questions', {
+          content: contentToUse,
+          lessonTitle: questionnaire.title,
+          courseTitle: questionnaire.description,
+          level: selectedLevels[0],
+          category: questionnaire.category,
+          difficulty: difficultyLevel,
+          questionCount: questionCount,
+          questionTypes: questionnaire.category === "reading"
+            ? ["multiple-choice", "true-false", "short-answer"]
+            : questionnaire.category === "expression_ecrite"
+            ? ["essay"] // Expression Écrite uses essay type
+            : ["multiple-choice", "true-false", "short-answer"],
+          // Expression Écrite specific parameters
+          ...(questionnaire.category === "expression_ecrite" && {
+            minWords,
+            maxWords,
+            writingType
+          })
+        })
+      }
 
       console.log('📥 AI Response received:', JSON.stringify(response, null, 2))
 
@@ -598,11 +687,15 @@ export default function QuestionnaireCreator() {
         
         return {
         id: Date.now() + index,
-        type: q.type || "multiple-choice",
+        type: q.type || (questionnaire.category === "expression_ecrite" ? "essay" : "multiple-choice"),
         question: q.questionText || q.question || "",
           options: options,
           correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "multiple-choice" ? 0 : ""),
         explanation: q.explanation || "",
+        passage: q.passage || null, // Include passage field (can be long for reading, or context for expression écrite)
+        minWords: questionnaire.category === "expression_ecrite" ? minWords : undefined,
+        maxWords: questionnaire.category === "expression_ecrite" ? maxWords : undefined,
+        writingType: questionnaire.category === "expression_ecrite" ? writingType : undefined,
         points: q.points || 1,
         }
       })
@@ -754,6 +847,7 @@ export default function QuestionnaireCreator() {
           options: options,
           correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (q.type === "multiple-choice" ? 0 : ""),
         explanation: q.explanation || "",
+        passage: q.passage || null, // Include passage field for vocabulary/grammar
         points: q.points || 1,
         }
       })
@@ -794,14 +888,88 @@ export default function QuestionnaireCreator() {
       }
 
       // Create audio preview URL
-      const audioUrl = URL.createObjectURL(file)
-      setAudioPreview(audioUrl)
+      const previewUrl = URL.createObjectURL(file)
+      setAudioPreview(previewUrl)
       setUploadedAudio(file)
 
-      toast.success("Fichier audio uploadé avec succès!")
+      // Upload to Cloudinary
+      setIsProcessingFile(true)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'TEST')
+      formData.append('title', questionnaire.title || 'Audio Test')
+      
+      const uploadResponse = await apiClient.post('/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      
+      if (uploadResponse.success && (uploadResponse.data as any)?.url) {
+        const cloudinaryUrl = (uploadResponse.data as any).url
+        setAudioUrl(cloudinaryUrl)
+        toast.success('Fichier audio uploadé sur Cloudinary avec succès!')
+      } else {
+        toast.error('Erreur lors de l\'upload sur Cloudinary')
+      }
     } catch (error: any) {
       console.error("Error uploading audio:", error)
       toast.error(`Erreur lors de l'upload audio: ${error.message || 'Erreur inconnue'}`)
+    } finally {
+      setIsProcessingFile(false)
+    }
+  }
+
+  const handleVideoUpload = async (file: File) => {
+    try {
+      if (!file) {
+        toast.error("Veuillez sélectionner un fichier vidéo")
+        return
+      }
+
+      // Validate video file type
+      const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']
+      if (!allowedTypes.includes(file.type)) {
+        toast.error("Format de fichier vidéo non supporté. Veuillez utiliser MP4, WebM, OGG ou MOV")
+        return
+      }
+
+      // Validate file size (max 100MB for video)
+      if (file.size > 100 * 1024 * 1024) {
+        toast.error("Le fichier vidéo est trop volumineux. Taille maximale: 100MB")
+        return
+      }
+
+      // Create video preview URL
+      const previewUrl = URL.createObjectURL(file)
+      setVideoPreview(previewUrl)
+      setUploadedVideo(file)
+
+      // Upload to Cloudinary
+      setIsProcessingFile(true)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('category', 'TEST')
+      formData.append('title', questionnaire.title || 'Video Test')
+      
+      const uploadResponse = await apiClient.post('/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      
+      if (uploadResponse.success && (uploadResponse.data as any)?.url) {
+        const cloudinaryUrl = (uploadResponse.data as any).url
+        setVideoUrl(cloudinaryUrl)
+        toast.success('Fichier vidéo uploadé sur Cloudinary avec succès!')
+      } else {
+        toast.error('Erreur lors de l\'upload sur Cloudinary')
+      }
+    } catch (error: any) {
+      console.error("Error uploading video:", error)
+      toast.error(`Erreur lors de l'upload vidéo: ${error.message || 'Erreur inconnue'}`)
+    } finally {
+      setIsProcessingFile(false)
     }
   }
 
@@ -1073,10 +1241,9 @@ export default function QuestionnaireCreator() {
                         <SelectValue placeholder="Sélectionner une catégorie" />
                       </SelectTrigger>
                       <SelectContent className="bg-popover border-border">
-                        <SelectItem value="grammar">Grammaire</SelectItem>
+                        <SelectItem value="expression_ecrite">Expression écrite (Vocabulaire + Grammaire)</SelectItem>
                         <SelectItem value="listening">Compréhension orale</SelectItem>
                         <SelectItem value="reading">Compréhension écrite</SelectItem>
-                        <SelectItem value="vocabulary">Vocabulaire</SelectItem>
                         <SelectItem value="oral">Expression orale</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1371,8 +1538,8 @@ export default function QuestionnaireCreator() {
 
           <TabsContent value="ai-generate">
             <div className="space-y-6">
-              {/* File Upload Section - Only for Grammar and Vocabulary */}
-              {(questionnaire.category === "grammar" || questionnaire.category === "vocabulary") && (
+              {/* File Upload Section - For Expression Écrite and Reading Comprehension */}
+              {(questionnaire.category === "expression_ecrite" || questionnaire.category === "reading") && (
                 <Card className="bg-card border-border">
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2 text-foreground">
@@ -1380,7 +1547,10 @@ export default function QuestionnaireCreator() {
                       <span>Télécharger un Fichier PDF</span>
                     </CardTitle>
                     <p className="text-sm text-muted-foreground mt-2">
-                      Téléchargez un fichier PDF contenant des règles de grammaire ou du vocabulaire pour générer automatiquement des questions
+                      {questionnaire.category === "reading"
+                        ? "Téléchargez un fichier PDF contenant un texte, article, ou passage pour générer des questions de compréhension écrite (passages longs ou document entier)"
+                        : "Téléchargez un fichier PDF contenant un texte, article, ou document pour générer des questions d'expression écrite (articles, essais, lettres)"
+                      }
                     </p>
                   </CardHeader>
                 <CardContent className="space-y-4">
@@ -1447,6 +1617,86 @@ export default function QuestionnaireCreator() {
                   )}
                 </CardContent>
               </Card>
+              )}
+
+              {/* Expression Écrite Settings - Word Count and Writing Type */}
+              {questionnaire.category === "expression_ecrite" && (
+                <Card className="bg-card border-border">
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2 text-foreground">
+                      <FileText className="w-5 h-5 text-green-500" />
+                      <span>Paramètres Expression Écrite</span>
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Configurez les limites de mots et le type d'écriture pour les questions d'expression écrite
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="min-words" className="text-foreground">
+                          Nombre minimum de mots
+                        </Label>
+                        <Input
+                          id="min-words"
+                          type="number"
+                          min="50"
+                          max="1000"
+                          value={minWords}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || 50
+                            setMinWords(Math.min(1000, Math.max(50, value)))
+                          }}
+                          className="bg-background border-input text-foreground"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Minimum: 50 mots
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="max-words" className="text-foreground">
+                          Nombre maximum de mots
+                        </Label>
+                        <Input
+                          id="max-words"
+                          type="number"
+                          min={minWords}
+                          max="2000"
+                          value={maxWords}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || minWords
+                            setMaxWords(Math.min(2000, Math.max(minWords, value)))
+                          }}
+                          className="bg-background border-input text-foreground"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Maximum: 2000 mots (doit être ≥ minimum)
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-foreground">
+                        Type d'écriture
+                      </Label>
+                      <Select
+                        value={writingType}
+                        onValueChange={(value: "article" | "essay" | "letter") => setWritingType(value)}
+                      >
+                        <SelectTrigger className="bg-background border-input text-foreground">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover border-border">
+                          <SelectItem value="article">Article</SelectItem>
+                          <SelectItem value="essay">Essai</SelectItem>
+                          <SelectItem value="letter">Lettre</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Le type d'écriture détermine le format du prompt généré par l'IA
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
               {/* Audio Upload Section - Only for Listening Comprehension */}
@@ -1679,8 +1929,8 @@ export default function QuestionnaireCreator() {
                 </Card>
               )}
 
-              {/* Text Prompt Section - Category-specific (NOT for Expression Orale) */}
-              {questionnaire.category !== "oral" && (
+              {/* Text Prompt Section - Category-specific (NOT for Expression Orale and Listening) */}
+              {questionnaire.category !== "oral" && questionnaire.category !== "listening" && (
               <Card className="bg-card border-border">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2 text-foreground">
@@ -1688,12 +1938,10 @@ export default function QuestionnaireCreator() {
                     <span>Générer des Questions avec l'IA</span>
                   </CardTitle>
                   <p className="text-sm text-muted-foreground mt-2">
-                    {questionnaire.category === "listening" 
-                      ? "Décrivez le contenu audio pour générer des questions de compréhension orale"
-                      : questionnaire.category === "grammar"
-                      ? "Décrivez les règles de grammaire pour générer des questions d'exercice"
-                      : questionnaire.category === "vocabulary"
-                      ? "Décrivez le vocabulaire thématique pour générer des questions de vocabulaire"
+                    {questionnaire.category === "reading"
+                      ? "L'IA génère des questions de compréhension écrite à partir du texte PDF uploadé (passages longs ou document entier)"
+                      : questionnaire.category === "expression_ecrite"
+                      ? "L'IA génère des prompts d'expression écrite (articles, essais, lettres) basés sur le PDF uploadé pour tester vocabulaire et grammaire"
                       : "Utilisez l'intelligence artificielle pour générer automatiquement des questions basées sur votre description"
                     }
                   </p>
@@ -1707,7 +1955,10 @@ export default function QuestionnaireCreator() {
                         L'IA génère uniquement à partir des fichiers PDF uploadés
                       </p>
                       <p className="text-gray-500 dark:text-gray-500 text-sm mt-2">
-                        Uploadez un fichier PDF pour commencer la génération automatique de questions
+                        {questionnaire.category === "reading"
+                          ? "Uploadez un fichier PDF avec un texte pour générer des questions de compréhension écrite"
+                          : "Uploadez un fichier PDF pour commencer la génération automatique de questions"
+                        }
                       </p>
                     </div>
                   </div>
@@ -1769,7 +2020,11 @@ export default function QuestionnaireCreator() {
 
                 <Button
                   onClick={handleGenerateQuestionsWithAI}
-                    disabled={isGeneratingQuestions || !extractedPdfContent?.trim() || selectedLevels.length === 0}
+                    disabled={isGeneratingQuestions || 
+                      (questionnaire.category === "listening" && !audioUrl && !videoUrl) ||
+                      ((questionnaire.category === "reading" || questionnaire.category === "expression_ecrite") && !extractedPdfContent?.trim()) ||
+                      (questionnaire.category !== "listening" && questionnaire.category !== "reading" && questionnaire.category !== "expression_ecrite" && !extractedPdfContent?.trim()) ||
+                      selectedLevels.length === 0}
                   className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white"
                 >
                   {isGeneratingQuestions ? (

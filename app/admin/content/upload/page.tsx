@@ -303,7 +303,23 @@ function AdminBulkUploadPageContent() {
       return
     }
 
+    // Validate that title is provided for bulk upload
+    if (!bulkSettings.title || bulkSettings.title.trim() === '') {
+      toast.error(t("Veuillez fournir un titre pour le cours", "Please provide a course title"))
+      return
+    }
+
     setUploading(true)
+    
+    // Check if this is a bulk video upload (multiple videos for a single course)
+    const isVideoContent = contentType === 'video'
+    const isBulkUpload = isVideoContent && uploadedFiles.length > 1
+    
+    // If bulk upload, use the bulk endpoint
+    if (isBulkUpload) {
+      await handleBulkUpload()
+      return
+    }
 
     // Reset all progresses to pending
     setUploadProgresses((prev) => {
@@ -437,6 +453,126 @@ function AdminBulkUploadPageContent() {
     }
 
       setUploading(false)
+    }
+
+  // Handle bulk upload (multiple videos as lessons in a single course)
+  const handleBulkUpload = async () => {
+    if (uploadedFiles.length === 0 || !user || !bulkSettings.title) return
+
+    try {
+      const apiUrl = typeof window !== 'undefined'
+        ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
+
+      const token = localStorage.getItem('access_token') || 
+                    localStorage.getItem('tcf_tef_admin_session') ||
+                    localStorage.getItem('tcf_tef_session')
+
+      const formData = new FormData()
+      
+      // Append all files
+      uploadedFiles.forEach((file) => {
+        formData.append('files', file.file)
+      })
+
+      // Append course metadata
+      formData.append('title', bulkSettings.title.trim())
+      formData.append('description', `Cours avec ${uploadedFiles.length} leçons vidéo`)
+      formData.append('level', bulkSettings.levels[0])
+      formData.append('category', mapCategory(bulkSettings.category || "Grammaire"))
+      formData.append('subscriptionTier', mapSubscriptionTier(bulkSettings.subscriptions[0]))
+      formData.append('availableLevels', JSON.stringify(bulkSettings.levels))
+      formData.append('availableTiers', JSON.stringify(bulkSettings.subscriptions.map(s => mapSubscriptionTier(s))))
+      formData.append('tags', JSON.stringify([]))
+
+      // Update all files to uploading status
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        uploadedFiles.forEach((file) => {
+          newMap.set(file.id, {
+            fileId: file.id,
+            progress: 0,
+            status: 'uploading'
+          })
+        })
+        return newMap
+      })
+
+      // Upload with progress tracking
+      const response = await axios.post(`${apiUrl}/content-management/upload-bulk`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        timeout: 0,
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && progressEvent.total > 0) {
+            const loaded = progressEvent.loaded || 0
+            const total = progressEvent.total || 1
+            const progress = Math.min(Math.max(0, Math.round((loaded / total) * 100)), 99)
+            
+            // Update progress for all files
+            setUploadProgresses((prev) => {
+              const newMap = new Map(prev)
+              uploadedFiles.forEach((file) => {
+                newMap.set(file.id, {
+                  fileId: file.id,
+                  progress,
+                  status: 'uploading'
+                })
+              })
+              return newMap
+            })
+          }
+        }
+      })
+
+      if (response.data.success) {
+        // Mark all files as completed
+        setUploadProgresses((prev) => {
+          const newMap = new Map(prev)
+          uploadedFiles.forEach((file) => {
+            newMap.set(file.id, {
+              fileId: file.id,
+              progress: 100,
+              status: 'completed',
+              result: response.data.data,
+              contentId: response.data.data?.content?.id
+            })
+          })
+          return newMap
+        })
+
+        toast.success(t(`Cours créé avec succès avec ${response.data.data?.lessons || uploadedFiles.length} leçons!`, `Course created successfully with ${response.data.data?.lessons || uploadedFiles.length} lessons!`))
+        
+        // Redirect after a delay
+        setTimeout(() => {
+          router.push("/admin/content")
+        }, 2000)
+      } else {
+        throw new Error(response.data.message || 'Upload failed')
+      }
+    } catch (error: any) {
+      console.error('Bulk upload error:', error)
+      
+      // Mark all files as error
+      setUploadProgresses((prev) => {
+        const newMap = new Map(prev)
+        uploadedFiles.forEach((file) => {
+          newMap.set(file.id, {
+            fileId: file.id,
+            progress: 0,
+            status: 'error',
+            error: error.response?.data?.error?.message || error.message || t("Erreur lors du téléchargement", "Upload error")
+          })
+        })
+        return newMap
+      })
+
+      toast.error(t("Erreur lors de la création du cours", "Error creating course"))
+    } finally {
+      setUploading(false)
+    }
     }
 
   // Handle pause upload

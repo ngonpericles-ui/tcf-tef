@@ -42,6 +42,12 @@ export default function ManagerContentPage() {
   const [content, setContent] = useState<any[]>([])
   const [viewingContent, setViewingContent] = useState<any | null>(null)
   const [databaseError, setDatabaseError] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Prevent hydration mismatch by only rendering tabs after mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const basePath = pathname?.startsWith("/admin") ? "/admin" : "/manager"
 
@@ -290,7 +296,8 @@ export default function ManagerContentPage() {
       </div>
 
       {/* Content Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      {mounted && (
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6" defaultValue="courses">
         <div className="flex items-center justify-between">
           <TabsList className="bg-card border border-gray-200 dark:border-gray-700">
             <TabsTrigger value="courses" className="data-[state=active]:bg-muted text-foreground">
@@ -643,6 +650,7 @@ export default function ManagerContentPage() {
           )}
         </TabsContent>
       </Tabs>
+      )}
 
       {/* Content Viewer Modal */}
       {viewingContent && (

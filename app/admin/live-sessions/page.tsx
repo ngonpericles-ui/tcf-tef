@@ -650,7 +650,7 @@ export default function AdminSessionsPage({ role: propRole }: ManagerSessionsPag
     const matchesSearch = (session.title || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = filterCategory === "all" || session.category === filterCategory
     const matchesLevel = filterLevel === "all" || (session.level && session.level === filterLevel)
-    const matchesStatus = filterStatus === "all" || (session.status && session.status.toLowerCase() === filterStatus)
+    const matchesStatus = filterStatus === "all" || (session.status && typeof session.status === 'string' && session.status.toLowerCase() === filterStatus)
 
     return matchesSearch && matchesCategory && matchesLevel && matchesStatus
   })
