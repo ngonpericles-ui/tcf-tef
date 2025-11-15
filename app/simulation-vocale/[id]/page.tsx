@@ -365,27 +365,23 @@ function SimulationRoomContent() {
 
       toast.loading(t_('Démarrage de la simulation...', 'Starting simulation...'));
 
-      // Step 1: Start simulation on backend
+      // Step 1: Start simulation on backend using apiClient for proper auth
       const startUrl = token
-        ? `/api/voice-simulation/start/${simulationId}?token=${token}`
-        : `/api/voice-simulation/start/${simulationId}`;
+        ? `/voice-simulation/start/${simulationId}?token=${token}`
+        : `/voice-simulation/start/${simulationId}`;
       
-      const response = await fetch(startUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? {} : { 'Authorization': `Bearer ${localStorage.getItem('token')}` })
-        }
-      });
+      console.log('🚀 Starting simulation on backend:', startUrl);
+      const response = await apiClient.post(startUrl, {});
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      if (!response.success) {
         toast.dismiss();
-        toast.error(errorData.message || t_('Erreur lors du démarrage', 'Failed to start simulation'));
+        const errorMessage = response.error?.message || response.message || t_('Erreur lors du démarrage', 'Failed to start simulation');
+        console.error('❌ Failed to start simulation on backend:', response);
+        toast.error(errorMessage);
         return;
       }
 
-      const startData = await response.json();
+      const startData = response;
       const assistantId = startData.data?.assistant?.id || startData.data?.assistantId || simulation?.assistantId;
 
       if (!assistantId) {
@@ -397,16 +393,22 @@ function SimulationRoomContent() {
       // Step 2: Start VAPI call with assistant
       try {
         console.log('🎤 Starting VAPI call with assistant:', assistantId);
+        console.log('🎤 VAPI client status:', {
+          isInitialized: !!vapiRef.current,
+          config: vapiConfig
+        });
+        
         await vapiRef.current.start({
           assistantId: assistantId
         });
         
         toast.dismiss();
+        toast.success(t_('Simulation démarrée! L\'IA va commencer à parler...', 'Simulation started! AI will begin speaking...'));
         setIsCallActive(true);
         if (simulation) {
           setSimulation({ ...simulation, status: 'ACTIVE' });
         }
-        console.log('✅ VAPI call started successfully');
+        console.log('✅ VAPI call started successfully - AI should now be talking!');
       } catch (vapiError: any) {
         console.error('❌ VAPI call start error:', vapiError);
         toast.dismiss();
