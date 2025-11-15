@@ -39,6 +39,13 @@ class ApiClient {
               ? (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
               : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 
+    // Warn if using localhost in production
+    if (typeof window !== 'undefined' && apiUrl.includes('localhost') && window.location.hostname !== 'localhost') {
+      console.error('⚠️ CRITICAL: NEXT_PUBLIC_API_URL is not set in Vercel environment variables!')
+      console.error('⚠️ API calls will fail. Please set NEXT_PUBLIC_API_URL in Vercel dashboard.')
+      console.error('⚠️ Expected format: https://your-backend.onrender.com/api')
+    }
+
     console.log('🔧 API Client initialized with baseURL:', apiUrl)
 
     this.client = axios.create({

@@ -48,11 +48,12 @@ const nextConfig = {
       fs: false,
     };
     
-    // Fix for "exports is not defined" error
+    // Ensure proper module resolution for CommonJS packages
     if (!isServer) {
       config.resolve.alias = {
         ...config.resolve.alias,
       };
+      
       config.optimization = {
         ...config.optimization,
         minimize: true,

@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { apiClient } from "@/lib/api-client"
 import { toast } from "sonner"
-import confetti from "canvas-confetti"
 
 interface LevelAssessment {
   currentLevel: string
@@ -240,25 +239,30 @@ export default function TestNiveauPage() {
     router.push('/immigration-simulations')
   }
 
-  // Confetti function
-  const triggerConfetti = () => {
-    const duration = 3 * 1000
-    const animationEnd = Date.now() + duration
-    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 }
+  // Confetti function - using dynamic import to avoid CommonJS issues
+  const triggerConfetti = async () => {
+    try {
+      const confetti = (await import('canvas-confetti')).default
+      const duration = 3 * 1000
+      const animationEnd = Date.now() + duration
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 }
 
-    function randomInRange(min: number, max: number) {
-      return Math.random() * (max - min) + min
-    }
-
-    const interval = setInterval(() => {
-      const timeLeft = animationEnd - Date.now()
-      if (timeLeft <= 0) {
-        return clearInterval(interval)
+      function randomInRange(min: number, max: number) {
+        return Math.random() * (max - min) + min
       }
-      const particleCount = 50 * (timeLeft / duration)
-      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }, colors: ['#06f957', '#FFFFFF', '#0A0A0A'] })
-      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }, colors: ['#06f957', '#FFFFFF', '#0A0A0A'] })
-    }, 250)
+
+      const interval = setInterval(() => {
+        const timeLeft = animationEnd - Date.now()
+        if (timeLeft <= 0) {
+          return clearInterval(interval)
+        }
+        const particleCount = 50 * (timeLeft / duration)
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }, colors: ['#06f957', '#FFFFFF', '#0A0A0A'] })
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }, colors: ['#06f957', '#FFFFFF', '#0A0A0A'] })
+      }, 250)
+    } catch (error) {
+      console.error('Failed to load confetti:', error)
+    }
   }
 
   useEffect(() => {
