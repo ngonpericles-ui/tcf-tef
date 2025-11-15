@@ -348,6 +348,7 @@ function SimulationRoomContent() {
   }, [isCallActive, simulation?.duration]);
 
   const handleStartCall = async () => {
+    console.log('🔥 CRITICAL: handleStartCall function CALLED! Button click detected!');
     try {
       // Check if VAPI is initialized
       if (!vapiRef.current) {
