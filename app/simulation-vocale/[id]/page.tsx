@@ -122,6 +122,15 @@ function SimulationRoomContent() {
             }
           });
 
+          vapiRef.current.on('assistant-speech-start', () => {
+            console.log('🎙️ AI assistant started speaking');
+            // AI is now talking - this confirms the greeting/flow is working
+          });
+
+          vapiRef.current.on('assistant-speech-end', () => {
+            console.log('🎙️ AI assistant finished speaking');
+          });
+
           vapiRef.current.on('error', (error: any) => {
             console.error('❌ VAPI error:', error);
             toast.error(t_('Erreur de connexion vocale', 'Voice connection error'));
@@ -271,20 +280,19 @@ function SimulationRoomContent() {
     }
   }, [simulationId, token, t_, router]);
 
-  // Request microphone and camera access with proper error handling
+  // Request microphone and camera access (OPTIONAL - not required for simulation to work)
   useEffect(() => {
     const requestMediaAccess = async () => {
       // Check if browser supports getUserMedia
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setMicPermissionError(t_(
-          'Votre navigateur ne supporte pas l\'accès au microphone/caméra. Veuillez utiliser un navigateur moderne (Chrome, Firefox, Edge).',
-          'Your browser does not support microphone/camera access. Please use a modern browser (Chrome, Firefox, Edge).'
-        ));
+        console.warn('⚠️ Browser does not support getUserMedia - simulation will still work');
+        setMicPermissionGranted(false);
+        setMicPermissionError(null); // Don't show error, just continue
         return;
       }
 
       try {
-        console.log('🎤 Requesting microphone and camera access...');
+        console.log('🎤 Attempting to request microphone and camera access (optional)...');
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             width: { ideal: 1280 },
@@ -308,34 +316,26 @@ function SimulationRoomContent() {
           streamRef.current = stream;
         }
       } catch (error: any) {
-        console.error('❌ Error accessing media:', error);
+        console.warn('⚠️ Could not access microphone/camera - simulation will still work:', error);
         setMicPermissionGranted(false);
         
-        let errorMessage = t_('Impossible d\'accéder au microphone/caméra', 'Cannot access microphone/camera');
-        
+        // Don't show error toast - just log it
+        // The simulation can work without camera/mic (VAPI handles audio internally)
         if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          errorMessage = t_(
-            'Permission refusée. Veuillez autoriser l\'accès au microphone et à la caméra dans les paramètres de votre navigateur.',
-            'Permission denied. Please allow microphone and camera access in your browser settings.'
-          );
+          console.log('ℹ️ Microphone/camera permission denied - continuing without them');
         } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-          errorMessage = t_(
-            'Aucun microphone ou caméra détecté. Veuillez connecter un microphone et une caméra.',
-            'No microphone or camera detected. Please connect a microphone and camera.'
-          );
+          console.log('ℹ️ No microphone/camera detected - continuing without them');
         } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-          errorMessage = t_(
-            'Le microphone ou la caméra est utilisé par une autre application. Veuillez fermer les autres applications qui utilisent ces périphériques.',
-            'Microphone or camera is being used by another application. Please close other applications using these devices.'
-          );
+          console.log('ℹ️ Microphone/camera in use - continuing without them');
         }
         
-        setMicPermissionError(errorMessage);
-        toast.error(errorMessage);
+        // Don't set error message - allow simulation to proceed
+        setMicPermissionError(null);
       }
     };
 
     // Only request access if we have simulation data and can start
+    // But don't block if it fails - simulation can work without it
     if (simulation && !loading) {
       requestMediaAccess();
     }
@@ -377,15 +377,6 @@ function SimulationRoomContent() {
 
   const handleStartCall = async () => {
     try {
-      // Check microphone permission first
-      if (!micPermissionGranted) {
-        toast.error(t_(
-          'Veuillez autoriser l\'accès au microphone pour démarrer la simulation.',
-          'Please allow microphone access to start the simulation.'
-        ));
-        return;
-      }
-
       // Check if VAPI is initialized
       if (!vapiRef.current) {
         toast.error(t_(
@@ -393,6 +384,12 @@ function SimulationRoomContent() {
           'Voice service is not yet initialized. Please wait...'
         ));
         return;
+      }
+
+      // Note: Microphone/camera are optional - VAPI will handle audio internally
+      // Even if browser mic/cam are not available, the simulation can still work
+      if (!micPermissionGranted) {
+        console.log('ℹ️ Starting simulation without browser microphone/camera - VAPI will handle audio');
       }
 
       // Check if simulation is already ACTIVE
