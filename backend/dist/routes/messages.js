@@ -112,7 +112,7 @@ router.get('/', auth_1.authenticate, async (req, res, next) => {
                     }
                 }
             },
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
             take: parseInt(limit),
             skip: (parseInt(page) - 1) * parseInt(limit)
         });
@@ -478,8 +478,33 @@ router.get('/:id', auth_1.authenticate, async (req, res, next) => {
         if (message.receiverId === userId && !message.isRead) {
             await prisma.message.update({
                 where: { id },
-                data: { isRead: true }
+                data: {
+                    isRead: true,
+                    readAt: new Date()
+                }
             });
+            try {
+                await prisma.userNotification.updateMany({
+                    where: {
+                        userId: userId,
+                        notification: {
+                            data: {
+                                path: ['messageId'],
+                                equals: id
+                            }
+                        },
+                        status: 'UNREAD'
+                    },
+                    data: {
+                        status: 'READ',
+                        readAt: new Date()
+                    }
+                });
+                console.log('✅ Message and related notifications marked as read:', { messageId: id, userId });
+            }
+            catch (notifError) {
+                console.error('Failed to mark notifications as read:', notifError);
+            }
         }
         res.json({
             success: true,
@@ -563,7 +588,8 @@ router.put('/:id/read', auth_1.authenticate, async (req, res, next) => {
                 receiverId: userId
             },
             data: {
-                isRead: true
+                isRead: true,
+                readAt: new Date()
             }
         });
         if (message.count === 0) {
@@ -571,6 +597,32 @@ router.put('/:id/read', auth_1.authenticate, async (req, res, next) => {
                 success: false,
                 error: { message: 'Message not found' }
             });
+        }
+        try {
+            const updatedNotifications = await prisma.userNotification.updateMany({
+                where: {
+                    userId: userId,
+                    notification: {
+                        data: {
+                            path: ['messageId'],
+                            equals: id
+                        }
+                    },
+                    status: 'UNREAD'
+                },
+                data: {
+                    status: 'READ',
+                    readAt: new Date()
+                }
+            });
+            console.log('✅ Message and notifications marked as read:', {
+                messageId: id,
+                userId,
+                notificationsUpdated: updatedNotifications.count
+            });
+        }
+        catch (notifError) {
+            console.error('Failed to mark notifications as read:', notifError);
         }
         const messageDetails = await prisma.message.findUnique({
             where: { id },
@@ -1541,13 +1593,36 @@ router.get('/validate-secure-session/:token', async (req, res, next) => {
                 error: 'Session has expired'
             });
         }
+        const student = await prisma.user.findUnique({
+            where: { id: tokenValidation.studentId },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                profileImage: true,
+                role: true
+            }
+        });
         res.json({
             success: true,
             data: {
                 sessionId: session.id,
                 title: session.title,
                 description: session.description,
-                instructor: session.createdBy,
+                instructor: {
+                    id: session.createdBy.id,
+                    firstName: session.createdBy.firstName,
+                    lastName: session.createdBy.lastName,
+                    profileImage: session.createdBy.profileImage,
+                    role: 'INSTRUCTOR'
+                },
+                student: student ? {
+                    id: student.id,
+                    firstName: student.firstName,
+                    lastName: student.lastName,
+                    profileImage: student.profileImage,
+                    role: student.role
+                } : undefined,
                 duration: session.duration,
                 status: session.status,
                 secureToken: sanitizedToken

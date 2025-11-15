@@ -225,6 +225,10 @@ export default function SimulationResultsPage() {
             "Votre niveau a été évalué par notre IA ! Consultez les détails ci-dessous.",
             "Your level has been assessed by our AI! Check the details below."
           ))
+          // Dispatch testCompleted event for confetti
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('testCompleted'))
+          }
         } else {
           console.warn('⚠️ Level assessment completed but with warnings:', assessmentResponse)
         }

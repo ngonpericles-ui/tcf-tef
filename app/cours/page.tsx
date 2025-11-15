@@ -550,13 +550,13 @@ export default function CoursesPage() {
             </TabsContent>
 
             <TabsContent value="advanced" className="mt-6">
-              <CourseGrid
-                courses={filteredCourses.filter((c) => c.level === "C1" || c.level === "C2")}
+            <CourseGrid
+              courses={filteredCourses.filter((c) => c.level === "C1" || c.level === "C2")}
                 allCourses={allCourses}
-                userTier={userTier}
-                onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
-              />
-            </TabsContent>
+              userTier={userTier}
+              onCourseSelect={handleCourseSelect} loadingCourse={loadingCourse}
+            />
+          </TabsContent>
         </Tabs>
         
         {/* Pagination Controls */}
@@ -842,12 +842,12 @@ function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCour
           </>
         ) : (
           <>
-            <h3 className="text-lg font-semibold mb-2 text-foreground">
-              {t("Aucun cours disponible", "No courses available")}
-            </h3>
-            <p className="text-muted-foreground">
-              {t("Les cours seront bientôt disponibles", "Courses will be available soon")}
-            </p>
+        <h3 className="text-lg font-semibold mb-2 text-foreground">
+          {t("Aucun cours disponible", "No courses available")}
+        </h3>
+        <p className="text-muted-foreground">
+          {t("Les cours seront bientôt disponibles", "Courses will be available soon")}
+        </p>
           </>
         )}
       </div>
@@ -862,7 +862,7 @@ function CourseGrid({ courses, allCourses, userTier, onCourseSelect, loadingCour
         return (
           <div
             key={course.id}
-            className="group rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-primary dark:hover:border-primary"
+            className="group rounded-xl border border-gray-200/50 dark:border-white/5 bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:border-primary/50 dark:hover:border-primary/30"
           >
             <div className="relative aspect-video overflow-hidden">
               <Image

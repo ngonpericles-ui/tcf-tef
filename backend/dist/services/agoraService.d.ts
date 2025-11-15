@@ -9,7 +9,8 @@ export interface AgoraTokenResponse {
     token: string;
     appId: string;
     channelName: string;
-    uid: string | number;
+    uid: number;
+    originalUid?: string | number;
     role: string;
     expiry: number;
     timestamp: number;

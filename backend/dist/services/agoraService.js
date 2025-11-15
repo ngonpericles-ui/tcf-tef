@@ -24,10 +24,24 @@ class AgoraService {
             const agoraRole = role === 'publisher' ? agora_token_1.RtcRole.PUBLISHER : agora_token_1.RtcRole.SUBSCRIBER;
             const currentTime = Math.floor(Date.now() / 1000);
             const privilegeExpiredTs = currentTime + expiry;
-            const token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(this.appId, this.appCertificate, channelName, typeof uid === 'string' ? 0 : uid, agoraRole, privilegeExpiredTs, privilegeExpiredTs);
+            let numericUid;
+            if (typeof uid === 'string') {
+                let hash = 0;
+                for (let i = 0; i < uid.length; i++) {
+                    const char = uid.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash;
+                }
+                numericUid = Math.abs(hash) % 2147483647;
+            }
+            else {
+                numericUid = uid;
+            }
+            const token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(this.appId, this.appCertificate, channelName, numericUid, agoraRole, privilegeExpiredTs, privilegeExpiredTs);
             logger_1.logger.info('RTC token generated successfully', {
                 channelName,
-                uid,
+                originalUid: uid,
+                numericUid: numericUid,
                 role,
                 expiry: privilegeExpiredTs
             });
@@ -35,7 +49,8 @@ class AgoraService {
                 token,
                 appId: this.appId,
                 channelName,
-                uid,
+                uid: numericUid,
+                originalUid: uid,
                 role,
                 expiry: privilegeExpiredTs,
                 timestamp: currentTime

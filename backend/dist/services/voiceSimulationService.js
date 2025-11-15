@@ -36,12 +36,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const prisma_1 = require("../lib/prisma");
+const prisma_1 = require("@/lib/prisma");
 const vapiService_1 = __importDefault(require("./vapiService"));
 const emailService_1 = require("./emailService");
 const i18nService_1 = __importDefault(require("./i18nService"));
 const node_cron_1 = __importDefault(require("node-cron"));
-const axios_1 = __importDefault(require("axios"));
+const mistralApiManager = require('../utils/mistralApiManager');
 class VoiceSimulationService {
     constructor() {
         this.activeSessions = new Map();
@@ -127,19 +127,58 @@ class VoiceSimulationService {
             });
             if (user) {
                 try {
+                    console.log('📧 Attempting to send booking confirmation email...', {
+                        simulationId: simulation.id,
+                        userEmail: user.email,
+                        userName: `${user.firstName} ${user.lastName}`
+                    });
                     await this.sendBookingConfirmation({ ...simulation, user });
-                    console.log('✅ Booking confirmation email sent successfully');
-                }
-                catch (emailError) {
-                    console.error('❌ Error sending booking confirmation email:', {
-                        error: emailError?.message,
+                    console.log('✅ Booking confirmation email sent successfully', {
                         simulationId: simulation.id,
                         userEmail: user.email
                     });
                 }
+                catch (emailError) {
+                    console.error('❌ CRITICAL: Error sending booking confirmation email:', {
+                        error: emailError?.message,
+                        stack: emailError?.stack,
+                        simulationId: simulation.id,
+                        userEmail: user.email,
+                        errorName: emailError?.name,
+                        errorCode: emailError?.code
+                    });
+                    try {
+                        console.log('🔄 Attempting fallback email send...');
+                        const { EmailService } = await Promise.resolve().then(() => __importStar(require('./emailService')));
+                        const fallbackSent = await EmailService.sendEmail({
+                            to: user.email,
+                            subject: 'Confirmation de votre simulation vocale TCF/TEF',
+                            html: `
+                <h2>Confirmation de réservation</h2>
+                <p>Bonjour ${user.firstName},</p>
+                <p>Votre simulation vocale a été réservée avec succès.</p>
+                <p><strong>Date:</strong> ${new Date(simulation.scheduledDate).toLocaleString('fr-FR')}</p>
+                <p><strong>ID Simulation:</strong> ${simulation.id}</p>
+                <p>Vous recevrez un rappel 30 minutes avant votre simulation.</p>
+              `
+                        });
+                        if (fallbackSent) {
+                            console.log('✅ Fallback email sent successfully');
+                        }
+                        else {
+                            console.error('❌ Fallback email also failed');
+                        }
+                    }
+                    catch (fallbackError) {
+                        console.error('❌ Fallback email also failed:', fallbackError?.message);
+                    }
+                }
             }
             else {
-                console.warn('⚠️ User not found, cannot send booking confirmation email');
+                console.warn('⚠️ User not found, cannot send booking confirmation email', {
+                    simulationId: simulation.id,
+                    userId: simulation.userId
+                });
             }
             return {
                 booking,
@@ -501,31 +540,48 @@ class VoiceSimulationService {
         try {
             console.log('📧 Preparing to send booking confirmation email...', {
                 simulationId: simulation.id,
-                userEmail: simulation.user?.email
+                userEmail: simulation.user?.email,
+                hasUser: !!simulation.user
             });
-            const { default: TemporaryTokenService } = await Promise.resolve().then(() => __importStar(require('./temporaryTokenService')));
-            const scheduledDate = new Date(simulation.scheduledDate);
-            const durationInSeconds = simulation.duration || 300;
-            const estimatedEndTime = new Date(scheduledDate.getTime() + durationInSeconds * 1000);
-            const now = new Date();
-            const hoursUntilEstimatedEnd = Math.max(1, (estimatedEndTime.getTime() - now.getTime()) / (1000 * 60 * 60) + (2 / 60));
-            const temporaryToken = await TemporaryTokenService.generateToken(simulation.userId, simulation.id, 'voice', hoursUntilEstimatedEnd);
-            const simulationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/simulation-vocale/${simulation.id}?token=${temporaryToken}`;
+            if (!simulation.user || !simulation.user.email) {
+                throw new Error('User email is missing - cannot send confirmation email');
+            }
+            let simulationUrl;
+            try {
+                const { default: TemporaryTokenService } = await Promise.resolve().then(() => __importStar(require('./temporaryTokenService')));
+                const scheduledDate = new Date(simulation.scheduledDate);
+                const durationInSeconds = simulation.duration || 300;
+                const estimatedEndTime = new Date(scheduledDate.getTime() + durationInSeconds * 1000);
+                const now = new Date();
+                const hoursUntilEstimatedEnd = Math.max(1, (estimatedEndTime.getTime() - now.getTime()) / (1000 * 60 * 60) + (2 / 60));
+                const temporaryToken = await TemporaryTokenService.generateToken(simulation.userId, simulation.id, 'voice', hoursUntilEstimatedEnd);
+                simulationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/simulation-vocale/${simulation.id}?token=${temporaryToken}`;
+                console.log('✅ Temporary token generated for simulation access');
+            }
+            catch (tokenError) {
+                console.warn('⚠️ Could not generate temporary token, using simple URL:', tokenError?.message);
+                simulationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/simulation-vocale/${simulation.id}`;
+            }
             let voiceDisplayName = simulation.voicePreference === 'MALE' ? 'Voix masculine' : 'Voix féminine';
             if (simulation.questionsData && typeof simulation.questionsData === 'object') {
                 const questionsData = simulation.questionsData;
                 const voiceId = questionsData.voiceId;
                 if (voiceId) {
-                    const { default: vapiService } = await Promise.resolve().then(() => __importStar(require('./vapiService')));
-                    const availableVoices = vapiService.getVoiceOptions();
-                    const voice = availableVoices.find(v => v.id === voiceId);
-                    if (voice) {
-                        voiceDisplayName = voice.name;
+                    try {
+                        const { default: vapiService } = await Promise.resolve().then(() => __importStar(require('./vapiService')));
+                        const availableVoices = vapiService.getVoiceOptions();
+                        const voice = availableVoices.find((v) => v.id === voiceId);
+                        if (voice) {
+                            voiceDisplayName = voice.name;
+                        }
+                    }
+                    catch (voiceError) {
+                        console.warn('⚠️ Could not get voice name, using default:', voiceError);
                     }
                 }
             }
             const emailData = {
-                firstName: simulation.user.firstName,
+                firstName: simulation.user.firstName || 'Utilisateur',
                 email: simulation.user.email,
                 scheduledDate: new Date(simulation.scheduledDate),
                 voicePreference: voiceDisplayName,
@@ -534,13 +590,23 @@ class VoiceSimulationService {
                 accessUrl: simulationUrl
             };
             console.log('📧 Sending booking confirmation email to:', emailData.email);
+            console.log('📧 Email data prepared:', {
+                email: emailData.email,
+                firstName: emailData.firstName,
+                scheduledDate: emailData.scheduledDate.toISOString(),
+                simulationId: emailData.simulationId,
+                hasAccessUrl: !!emailData.accessUrl,
+                voicePreference: emailData.voicePreference
+            });
             const emailSent = await emailService_1.EmailService.sendVoiceSimulationBookingEmail(emailData);
             if (emailSent) {
                 console.log('✅ Booking confirmation email sent successfully to:', emailData.email);
+                console.log('✅ Email sent with message ID (check logs for details)');
             }
             else {
-                console.error('❌ Failed to send booking confirmation email to:', emailData.email);
-                throw new Error('Email service returned false');
+                console.error('❌ CRITICAL: Email service returned false - email was NOT sent!');
+                console.error('❌ Email data that failed:', JSON.stringify(emailData, null, 2));
+                throw new Error('Email service returned false - email was not sent');
             }
         }
         catch (error) {
@@ -548,7 +614,9 @@ class VoiceSimulationService {
                 error: error?.message,
                 stack: error?.stack,
                 simulationId: simulation.id,
-                userEmail: simulation.user?.email
+                userEmail: simulation.user?.email,
+                errorName: error?.name,
+                errorCode: error?.code
             });
             throw error;
         }
@@ -925,11 +993,8 @@ class VoiceSimulationService {
         }
     }
     async analyzeResponseRealTime(studentResponse, questionLevel, conversationContext) {
-        const openaiApiKey = process.env.OPENAI_API_KEY;
-        if (!openaiApiKey) {
-            throw new Error('OpenAI API key not configured');
-        }
         try {
+            const systemPrompt = 'Tu es un expert en évaluation de français pour les tests TCF/TEF/FLS/FLE. Analyse les réponses en temps réel et fournis des évaluations précises et constructives. Réponds UNIQUEMENT avec un JSON valide, sans texte supplémentaire.';
             const analysisPrompt = `
 Analysez cette réponse d'un candidat à une question de niveau ${questionLevel} en français et fournissez une évaluation détaillée en temps réel.
 
@@ -964,32 +1029,43 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
   "recommendations": ["recommandation 1", "recommandation 2", "recommandation 3"],
   "feedback": "Commentaire constructif et encourageant en français"
 }`;
-            const response = await axios_1.default.post('https://api.openai.com/v1/chat/completions', {
-                model: 'gpt-4',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'Tu es un expert en évaluation de français pour les tests TCF/TEF/FLS/FLE. Analyse les réponses en temps réel et fournis des évaluations précises et constructives.'
-                    },
-                    {
-                        role: 'user',
-                        content: analysisPrompt
-                    }
-                ],
+            console.log('🤖 Using Mistral AI for voice simulation analysis...');
+            const analysisText = await mistralApiManager.generateContent(analysisPrompt, {
+                systemPrompt: systemPrompt,
+                model: 'mistral-small-latest',
                 temperature: 0.3,
-                max_tokens: 800
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${openaiApiKey}`,
-                    'Content-Type': 'application/json'
-                }
+                maxTokens: 800
             });
-            const analysisText = response.data.choices[0].message.content;
-            const analysis = JSON.parse(analysisText);
+            let cleanedText = analysisText.trim();
+            if (cleanedText.startsWith('```json')) {
+                cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+            }
+            else if (cleanedText.startsWith('```')) {
+                cleanedText = cleanedText.replace(/```\n?/g, '');
+            }
+            const analysis = JSON.parse(cleanedText);
+            if (!analysis.overallScore || !analysis.fluencyScore || !analysis.grammarScore ||
+                !analysis.vocabularyScore || !analysis.pronunciationScore || !analysis.coherenceScore) {
+                throw new Error('Invalid analysis response structure from Mistral AI');
+            }
+            console.log('✅ Mistral AI analysis completed successfully');
             return analysis;
         }
         catch (error) {
-            console.error('Error in real-time analysis:', error);
+            console.error('❌ Error in real-time analysis with Mistral AI:', error);
+            if (error.message && error.message.includes('JSON')) {
+                try {
+                    const jsonMatch = error.message.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const analysis = JSON.parse(jsonMatch[0]);
+                        console.log('✅ Extracted JSON from error response');
+                        return analysis;
+                    }
+                }
+                catch (parseError) {
+                    console.warn('⚠️ Could not parse JSON from error response');
+                }
+            }
             return {
                 overallScore: 50,
                 fluencyScore: 50,
@@ -997,10 +1073,10 @@ RÉPONDEZ UNIQUEMENT avec un JSON dans ce format exact:
                 vocabularyScore: 50,
                 pronunciationScore: 50,
                 coherenceScore: 50,
-                strengths: [],
-                weaknesses: [],
-                recommendations: [],
-                feedback: 'Analyse en cours...'
+                strengths: ['Analyse en cours...'],
+                weaknesses: ['Analyse en cours...'],
+                recommendations: ['Analyse en cours...'],
+                feedback: 'Analyse en cours de traitement...'
             };
         }
     }

@@ -30,7 +30,8 @@ import {
   Mic,
   Image,
   File,
-  X
+  X,
+  PhoneOff
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,6 +65,8 @@ export default function StudentMessagesPage() {
   const [localTypingUsers, setLocalTypingUsers] = useState<Set<string>>(new Set())
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [editingMessage, setEditingMessage] = useState<string | null>(null)
+  
+  // Note: Incoming call notifications are now handled globally by GlobalCallNotification component
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean;
     messageId: string;
@@ -438,6 +441,9 @@ export default function StudentMessagesPage() {
         }
       })
       
+      // Note: video-call-incoming events are now handled by GlobalCallNotification component
+      // This listener is kept for backward compatibility but the global component handles it
+      
       // Log subscription errors
       privateChannel.bind('pusher:subscription_error', (error: any) => {
         console.error('❌ Private channel subscription error:', error)
@@ -454,7 +460,7 @@ export default function StudentMessagesPage() {
         }
       }
     }
-  }, [isConnected, pusher, subscribeToPresence, user?.id, selectedContact?.id, scrollToBottom])
+  }, [isConnected, pusher, subscribeToPresence, user?.id, selectedContact?.id, scrollToBottom, contacts])
 
   // Fetch student's conversations (WhatsApp-style: only actual conversations)
   const fetchContacts = useCallback(async () => {
@@ -640,6 +646,8 @@ export default function StudentMessagesPage() {
     }
   }, [newMessage, selectedContact, user?.id, isSending, replyingTo, scrollToBottom, t])
 
+  // Note: Incoming call handlers are now in GlobalCallNotification component
+
   // Handle contact selection with smooth transition
   const handleContactSelect = useCallback((contact: Contact) => {
     if (selectedContact?.id === contact.id) return // Already selected
@@ -764,9 +772,11 @@ export default function StudentMessagesPage() {
   }, [searchParams?.get('contact')])
 
   // Load contacts on mount
+  // Fetch contacts on mount only - prevent infinite loop
   useEffect(() => {
     fetchContacts()
-  }, [fetchContacts])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount
 
   // Auto-scroll when messages change
   useEffect(() => {
@@ -1375,6 +1385,8 @@ export default function StudentMessagesPage() {
           )}
         </div>
       )}
+      
+      {/* Note: Incoming call notifications are now handled globally by GlobalCallNotification component */}
     </div>
   )
 }

@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CourseService = void 0;
-const connection_1 = require("../database/connection");
-const errorHandler_1 = require("../middleware/errorHandler");
+const connection_1 = require("@/database/connection");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class CourseService {
     static async createCourse(courseData, createdById, creatorRole) {
         try {
@@ -198,23 +198,112 @@ class CourseService {
                 orderBy: { [sortBy]: sortOrder }
             });
             let userSubscriptionTier = client_1.SubscriptionTier.FREE;
+            logger_1.logger.info('🔍 Getting user subscription tier', { userId, hasUserId: !!userId });
             if (userId) {
                 const user = await connection_1.prisma.user.findUnique({
                     where: { id: userId },
-                    select: { subscriptionTier: true }
+                    select: { subscriptionTier: true, email: true }
                 });
-                if (user?.subscriptionTier) {
-                    userSubscriptionTier = user.subscriptionTier;
+                if (user) {
+                    if (user.subscriptionTier) {
+                        userSubscriptionTier = user.subscriptionTier;
+                        logger_1.logger.info('✅ User subscription tier fetched', {
+                            userId,
+                            email: user.email,
+                            subscriptionTier: userSubscriptionTier
+                        });
+                    }
+                    else {
+                        logger_1.logger.warn('⚠️ User found but no subscription tier', { userId, email: user.email });
+                    }
                 }
+                else {
+                    logger_1.logger.warn('⚠️ User not found in database', { userId });
+                }
+            }
+            else {
+                logger_1.logger.warn('⚠️ No userId provided, defaulting to FREE tier - THIS IS THE PROBLEM!');
             }
             const courseMap = new Map();
             for (const course of allCourses) {
-                const availableSubs = course.availableSubscriptions && course.availableSubscriptions.length > 0
-                    ? course.availableSubscriptions
-                    : [course.requiredTier];
-                const hasAccess = availableSubs.includes(userSubscriptionTier);
-                if (!hasAccess)
-                    continue;
+                let availableSubs = [];
+                const subsField = course.availableSubscriptions;
+                if (subsField != null && subsField !== 'null' && subsField !== '') {
+                    try {
+                        if (typeof subsField === 'string') {
+                            if (subsField.trim().startsWith('[') || subsField.trim().startsWith('{')) {
+                                availableSubs = JSON.parse(subsField);
+                            }
+                            else {
+                                availableSubs = [subsField];
+                            }
+                        }
+                        else if (Array.isArray(subsField)) {
+                            availableSubs = subsField;
+                        }
+                        else if (typeof subsField === 'object') {
+                            availableSubs = [];
+                        }
+                    }
+                    catch (e) {
+                        availableSubs = [];
+                    }
+                }
+                if (availableSubs.length === 0) {
+                    availableSubs = [course.requiredTier];
+                }
+                const isFreeCourse = course.requiredTier === client_1.SubscriptionTier.FREE || availableSubs.includes(client_1.SubscriptionTier.FREE);
+                let hasAccess = false;
+                let requiredTierForAccess = course.requiredTier;
+                if (isFreeCourse) {
+                    hasAccess = true;
+                    requiredTierForAccess = client_1.SubscriptionTier.FREE;
+                    logger_1.logger.debug('FREE course - granting access', { courseId: course.id, title: course.title });
+                }
+                else {
+                    logger_1.logger.debug('Checking paid course access', {
+                        courseId: course.id,
+                        title: course.title,
+                        userSubscriptionTier,
+                        availableSubs,
+                        requiredTier: course.requiredTier
+                    });
+                    for (const tier of availableSubs) {
+                        const canAccess = this.hasAccessToTier(userSubscriptionTier, tier);
+                        logger_1.logger.debug('Access check', {
+                            userTier: userSubscriptionTier,
+                            courseTier: tier,
+                            canAccess,
+                            courseTitle: course.title
+                        });
+                        if (canAccess) {
+                            hasAccess = true;
+                            requiredTierForAccess = tier;
+                            break;
+                        }
+                    }
+                    if (!hasAccess) {
+                        const tierHierarchy = {
+                            [client_1.SubscriptionTier.FREE]: 0,
+                            [client_1.SubscriptionTier.ESSENTIAL]: 1,
+                            [client_1.SubscriptionTier.PREMIUM]: 2,
+                            [client_1.SubscriptionTier.PRO]: 3
+                        };
+                        const userTierLevel = tierHierarchy[userSubscriptionTier];
+                        const requiredTiers = availableSubs.map(t => ({
+                            tier: t,
+                            level: tierHierarchy[t]
+                        })).filter(t => t.level > userTierLevel);
+                        if (requiredTiers.length > 0) {
+                            requiredTierForAccess = requiredTiers.sort((a, b) => a.level - b.level)[0].tier;
+                        }
+                        else {
+                            requiredTierForAccess = availableSubs[0] || course.requiredTier;
+                        }
+                    }
+                }
+                course.hasAccess = hasAccess;
+                course.requiredTierForAccess = requiredTierForAccess;
                 const normalizedTitle = course.title.trim().toLowerCase();
                 if (!courseMap.has(normalizedTitle)) {
                     courseMap.set(normalizedTitle, course);
@@ -240,16 +329,54 @@ class CourseService {
                         return total + lessonDuration;
                     }, 0)
                     : 0;
+                let availableLevels = [];
+                if (course.availableLevels) {
+                    try {
+                        const levels = course.availableLevels;
+                        if (typeof levels === 'string') {
+                            availableLevels = JSON.parse(levels);
+                        }
+                        else if (Array.isArray(levels)) {
+                            availableLevels = levels;
+                        }
+                    }
+                    catch (e) {
+                        availableLevels = [course.level];
+                    }
+                }
+                if (availableLevels.length === 0) {
+                    availableLevels = [course.level];
+                }
+                let availableSubscriptions = [];
+                if (course.availableSubscriptions) {
+                    try {
+                        const subs = course.availableSubscriptions;
+                        if (typeof subs === 'string') {
+                            availableSubscriptions = JSON.parse(subs);
+                        }
+                        else if (Array.isArray(subs)) {
+                            availableSubscriptions = subs;
+                        }
+                    }
+                    catch (e) {
+                        availableSubscriptions = [course.requiredTier];
+                    }
+                }
+                if (availableSubscriptions.length === 0) {
+                    availableSubscriptions = [course.requiredTier];
+                }
                 return {
                     ...course,
                     duration: realDuration,
                     lessons_data: course.lessons_data,
-                    availableLevels: course.availableLevels || [course.level],
-                    availableSubscriptions: course.availableSubscriptions || [course.requiredTier],
+                    availableLevels: availableLevels,
+                    availableSubscriptions: availableSubscriptions,
                     thumbnail: course.thumbnail,
                     userProgress: course.progress?.[0],
                     isFavorited: false,
                     isEnrolled: course.enrollments.length > 0,
+                    hasAccess: course.hasAccess ?? true,
+                    requiredTierForAccess: course.requiredTierForAccess ?? course.requiredTier,
                     progress: course.progress?.[0] ? {
                         completedLessons: 0,
                         totalLessons: course._count.lessons_data,

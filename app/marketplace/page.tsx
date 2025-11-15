@@ -174,7 +174,12 @@ export default function MarketplacePage() {
             email: t.email,
             role: t.role,
             isActive: t.isActive,
-            status: t.status
+            status: t.status,
+            location: t.location,
+            subjects: t.subjects,
+            workingHours: t.workingHours,
+            availability: t.availability,
+            title: t.title
           }))
         })
         
@@ -199,12 +204,13 @@ export default function MarketplacePage() {
             ? [tutor.availability] 
             : ['Disponible']
           
-          // Status logic: ONLY ONLINE means user is currently online
-          // ACTIVE = user has account (not necessarily online)
-          // ONLINE = user is currently logged in/online on platform
-          // OFFLINE = user has account but not online
-          const isOnline = tutor.status === 'ONLINE'
-          const availabilityStatus = isOnline ? 'Online Now' : (tutor.status === 'ACTIVE' ? 'Active' : 'Offline')
+          // Status logic: For managers/admins, ACTIVE or ONLINE = online
+          // For students: ONLY ONLINE = online
+          const isManagerOrAdmin = tutor.role === 'ADMIN' || tutor.role === 'SENIOR_MANAGER' || tutor.role === 'JUNIOR_MANAGER'
+          const isOnline = isManagerOrAdmin 
+            ? (tutor.status === 'ONLINE' || tutor.status === 'ACTIVE')
+            : (tutor.status === 'ONLINE')
+          const availabilityStatus = isOnline ? 'Online Now' : (tutor.status === 'ACTIVE' && isManagerOrAdmin ? 'Active' : 'Offline')
           
           const subjects = Array.isArray(tutor.subjects) 
             ? tutor.subjects 
@@ -233,6 +239,7 @@ export default function MarketplacePage() {
             isOnline,
             availabilityStatus,
             status: tutor.status || 'OFFLINE', // Include status from backend
+            role: tutor.role || 'TEACHER', // Include role for status checks
             profileImage: (tutor.profileImage || tutor.profilePicture)
               ? (() => {
                   const profileImg = tutor.profileImage || tutor.profilePicture || ''

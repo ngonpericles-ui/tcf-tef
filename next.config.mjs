@@ -41,12 +41,24 @@ const nextConfig = {
   // Force Webpack instead of Turbopack to handle native modules properly
   // Add empty turbopack config to silence the warning about webpack config
   turbopack: {},
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     // Any webpack config forces Next.js to use Webpack instead of Turbopack
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
     };
+    
+    // Fix for "exports is not defined" error
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+      };
+      config.optimization = {
+        ...config.optimization,
+        minimize: true,
+      };
+    }
+    
     return config;
   },
   // Modern routing configuration

@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContentManagementService = void 0;
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const cloudinaryService_1 = require("./cloudinaryService");
@@ -906,13 +906,21 @@ class ContentManagementService {
             const realDuration = primaryCourse.lessons_data.reduce((total, lesson) => total + (lesson.duration || 0), 0);
             const videoLessons = primaryCourse.lessons_data.filter(lesson => lesson.videoUrl);
             const totalVideoCount = videoLessons.length;
+            const hasFree = backendSubscriptions.includes('FREE');
+            const tierHierarchy = { 'FREE': 0, 'ESSENTIAL': 1, 'PREMIUM': 2, 'PRO': 3 };
+            const sortedSubscriptions = [...backendSubscriptions].sort((a, b) => {
+                const aLevel = tierHierarchy[a] ?? 999;
+                const bLevel = tierHierarchy[b] ?? 999;
+                return aLevel - bLevel;
+            });
+            const requiredTier = hasFree ? 'FREE' : sortedSubscriptions[0];
             const updatedCourse = await connection_1.prisma.course.update({
                 where: { id: primaryCourse.id },
                 data: {
                     availableLevels: backendLevels,
                     availableSubscriptions: backendSubscriptions,
                     level: backendLevels[0],
-                    requiredTier: backendSubscriptions[0],
+                    requiredTier: requiredTier,
                 },
                 include: {
                     lessons_data: true,

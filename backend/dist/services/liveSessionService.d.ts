@@ -1,5 +1,5 @@
 import { UserRole, LiveSessionStatus } from '@prisma/client';
-import { CreateLiveSessionRequest, LiveSessionWithDetails, PaginationParams, FilterParams } from '../types';
+import { CreateLiveSessionRequest, LiveSessionWithDetails, PaginationParams, FilterParams } from '@/types';
 export declare class LiveSessionService {
     static createLiveSession(sessionData: CreateLiveSessionRequest, createdById: string, creatorRole: UserRole): Promise<LiveSessionWithDetails>;
     static getLiveSessionById(sessionId: string, userId?: string): Promise<LiveSessionWithDetails>;
@@ -27,5 +27,6 @@ export declare class LiveSessionService {
     static updateLiveSession(sessionId: string, userId: string, userRole: UserRole | undefined, updateData: any): Promise<LiveSessionWithDetails>;
     static deleteLiveSession(sessionId: string, userId: string, userRole: UserRole | undefined): Promise<void>;
     private static hasAccessToTier;
+    static initializeCronJobs(): void;
 }
 //# sourceMappingURL=liveSessionService.d.ts.map

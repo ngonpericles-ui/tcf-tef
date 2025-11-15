@@ -39,10 +39,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.managerRoutes = void 0;
 const express_1 = require("express");
 const client_1 = require("@prisma/client");
-const managerController_1 = require("../controllers/managerController");
-const settingsService_1 = require("../services/settingsService");
-const validation_1 = require("../middleware/validation");
-const auth_1 = require("../middleware/auth");
+const managerController_1 = require("@/controllers/managerController");
+const settingsService_1 = require("@/services/settingsService");
+const validation_1 = require("@/middleware/validation");
+const auth_1 = require("@/middleware/auth");
 const joi_1 = __importDefault(require("joi"));
 const prisma = new client_1.PrismaClient();
 const router = (0, express_1.Router)();
@@ -121,51 +121,26 @@ router.put('/settings', auth_1.authenticate, auth_1.requireManager, async (req, 
 router.get('/marketplace/profile', auth_1.authenticate, auth_1.requireManager, async (req, res, next) => {
     try {
         const userId = req.user.userId;
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                role: true,
-                subscriptionTier: true,
-                profilePicture: true,
-                createdAt: true,
-                lastActivityAt: true
-            }
-        });
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                error: { message: 'User not found' }
-            });
+        console.log('📋 Manager marketplace profile GET request for userId:', userId);
+        const { MarketplaceService } = await Promise.resolve().then(() => __importStar(require('../services/marketplaceService')));
+        const result = await MarketplaceService.getTutorProfile(userId);
+        if (!result.success) {
+            console.error('❌ Failed to get tutor profile:', result.error);
+            return res.status(result.error?.statusCode || 500).json(result);
         }
-        const completedReviews = 0;
-        const pendingReviews = 0;
-        const profile = {
-            id: user.id,
-            name: `${user.firstName} ${user.lastName}`,
-            email: user.email,
-            role: user.role,
-            subscriptionTier: user.subscriptionTier || 'FREE',
-            profilePicture: user.profilePicture,
-            memberSince: user.createdAt,
-            lastActive: user.lastActivityAt,
-            isTutor: true,
-            isActive: true,
-            tutorStats: {
-                completedReviews,
-                pendingReviews,
-                totalReviews: completedReviews + pendingReviews
-            }
-        };
-        res.json({
-            success: true,
-            data: profile
+        console.log('✅ Manager marketplace profile loaded successfully:', {
+            userId,
+            hasProfile: !!result.data,
+            bio: result.data?.bio?.substring(0, 50),
+            location: result.data?.location,
+            title: result.data?.title,
+            phone: result.data?.phone,
+            website: result.data?.website
         });
+        res.json(result);
     }
     catch (error) {
+        console.error('❌ Error in manager marketplace profile GET:', error);
         next(error);
     }
 });

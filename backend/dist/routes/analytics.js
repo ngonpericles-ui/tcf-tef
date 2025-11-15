@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.analyticsRoutes = void 0;
 const express_1 = require("express");
-const analyticsService_1 = require("../services/analyticsService");
-const auth_1 = require("../middleware/auth");
-const errorHandler_1 = require("../middleware/errorHandler");
+const analyticsService_1 = require("@/services/analyticsService");
+const auth_1 = require("@/middleware/auth");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const router = (0, express_1.Router)();
 exports.analyticsRoutes = router;
 router.get('/dashboard', auth_1.authenticate, auth_1.requireManager, (0, errorHandler_1.asyncHandler)(async (req, res) => {

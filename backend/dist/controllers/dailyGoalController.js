@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DailyGoalController = void 0;
-const errorHandler_1 = require("../middleware/errorHandler");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const dailyGoalService_1 = require("../services/dailyGoalService");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class DailyGoalController {
 }
 exports.DailyGoalController = DailyGoalController;

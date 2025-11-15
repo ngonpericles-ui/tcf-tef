@@ -444,7 +444,7 @@ export default function TakeTestPage() {
                       </button>
                     </div>
                     <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-                      <iframe
+                    <iframe
                         src={`${test.fileUrl}#toolbar=1`}
                         className="w-full h-[600px]"
                         title="Reading comprehension document"
@@ -471,7 +471,7 @@ export default function TakeTestPage() {
                         className="w-full h-[400px]"
                         title="Writing reference document"
                         style={{ border: 'none' }}
-                      />
+                    />
                     </div>
                   </div>
                 )}
@@ -598,9 +598,9 @@ export default function TakeTestPage() {
                       
                       {/* Question Text - Only if different from passage */}
                       {!currentQuestion.passage && (currentQuestion.text || currentQuestion.questionText) ? (
-                        <p className="text-base leading-relaxed whitespace-pre-wrap">
+                      <p className="text-base leading-relaxed whitespace-pre-wrap">
                           {currentQuestion.text || currentQuestion.questionText}
-                        </p>
+                      </p>
                       ) : null}
                     </div>
                     </div>

@@ -54,7 +54,19 @@ export function middleware(req: NextRequest) {
   const role = req.cookies.get('role')?.value
   const userId = req.cookies.get('user_id')?.value
 
-  // Determine route type
+  // 🎥 LIVE SESSION ROUTES - Check FIRST (before route type determination)
+  // This prevents /live-session/ from being incorrectly classified as a student route
+  if (url.pathname.startsWith('/live-session/') || url.pathname.startsWith('/session/')) {
+    // Allow all authenticated users to access live sessions
+    if (isAuth) {
+      return NextResponse.next()
+    }
+    // Unauthenticated users should login
+    url.pathname = '/connexion'
+    return NextResponse.redirect(url)
+  }
+
+  // Determine route type (EXCLUDE live-session routes from this check)
   const isAdminRoute = ADMIN_ROUTES.some(route => url.pathname.startsWith(route))
   const isManagerRoute = MANAGER_ROUTES.some(route => url.pathname.startsWith(route))
   const isStudentRoute = STUDENT_ROUTES.some(route => url.pathname.startsWith(route))
@@ -155,6 +167,7 @@ export function middleware(req: NextRequest) {
   }
 
   // 🔐 AUTHENTICATED USERS - ROLE-BASED ACCESS
+  // Note: Live session routes are already handled above (before route type determination)
 
   // 📨 MESSAGING ROUTES - Strict role-based access
   const isMessagingRoute = url.pathname.startsWith('/messages') || 
@@ -238,7 +251,8 @@ export function middleware(req: NextRequest) {
   }
 
   // STUDENT SECTION - Only STUDENTS can access (NOT ADMIN, NOT MANAGER)
-  if (isStudentRoute) {
+  // BUT exclude live-session routes (already handled above)
+  if (isStudentRoute && !url.pathname.startsWith('/live-session/') && !url.pathname.startsWith('/session/')) {
     const isStudent = role === ROLES.STUDENT
     
     if (!isStudent) {

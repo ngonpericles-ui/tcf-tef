@@ -225,30 +225,120 @@ export function VideoGrid({ role, participants, screenShareStream, isScreenShari
   // Use provided participants or show empty state
   const participantsToRender = participants || []
 
-  // Debug logging
-  console.log("VideoGrid - participants:", participants)
-  console.log("VideoGrid - participantsToRender:", participantsToRender)
-
-  // Determine if we should show the main camera view (like Google Meet)
+  // Determine if we should show the main camera view
   const hasMainVideo = (localVideoStream && isVideoOn) || (isVideoOn && hasCamera === false)
   const hasRemoteParticipants = participantsToRender.length > 0
-  
-  // If there are remote participants, show them in the main area (like Google Meet)
-  // Only show local video in main area if no remote participants
-  const shouldShowMainVideo = hasMainVideo && !hasRemoteParticipants
 
-  console.log("VideoGrid - hasMainVideo:", hasMainVideo)
-  console.log("VideoGrid - hasRemoteParticipants:", hasRemoteParticipants)
+  // TUTOR LAYOUT: Big local preview on left, students in corners on right
+  if (role === "tutor") {
+    return (
+      <div className="flex-1 overflow-hidden bg-black relative">
+        {/* Screen Share Preview - Full Screen (Priority) */}
+        {isScreenSharing && screenShareStream && (
+          <div className="h-full flex items-center justify-center p-4">
+            <div className="w-full max-w-6xl aspect-video">
+              <ScreenSharePreview stream={screenShareStream} />
+            </div>
+          </div>
+        )}
 
+        {/* Main Layout: Local Preview (Left) + Students (Right Corners) */}
+        {!isScreenSharing && (
+          <div className="h-full flex gap-4 p-4">
+            {/* Left: Big Local Video Preview */}
+            <div className="flex-1 min-w-0">
+              {hasMainVideo ? (
+                <div className="h-full bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border-2 border-green-400 ring-4 ring-green-400/30 shadow-2xl shadow-green-400/20">
+                  <div className="bg-gradient-to-r from-green-500/30 to-green-600/30 px-6 py-3 border-b border-green-400/30">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                        <Video className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-green-400 font-bold text-lg">Your Camera</span>
+                        <p className="text-green-300 text-sm">Live video feed</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="h-[calc(100%-80px)] bg-black relative">
+                    {localVideoStream && isVideoOn ? (
+                      <video
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                        ref={(video) => {
+                          if (video && localVideoStream) {
+                            video.srcObject = localVideoStream
+                            video.play().catch(console.error)
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <VideoOff className="w-10 h-10 text-red-400" />
+                          </div>
+                          <p className="text-red-400 text-lg">{cameraError || "Camera off"}</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold animate-pulse">
+                      LIVE
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center bg-slate-900 rounded-2xl border-2 border-slate-700">
+                  <div className="text-center">
+                    <div className="w-32 h-32 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-8">
+                      <User className="w-16 h-16 text-white/60" />
+                    </div>
+                    <h3 className="text-2xl font-semibold text-white mb-4">Your Camera</h3>
+                    <p className="text-white/60 text-lg">Turn on your camera to start</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Students in corners */}
+            {hasRemoteParticipants && (
+              <div className="w-80 flex flex-col gap-4">
+                <div className="grid grid-cols-2 gap-4 flex-1">
+                  {participantsToRender.map((participant, index) => (
+                    <div key={participant.id} className="aspect-video bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl overflow-hidden border border-white/20 shadow-lg">
+                      <ParticipantCard participant={participant} role={role} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // STUDENT LAYOUT: Big local preview, instructor/others in smaller view
   return (
     <div className="flex-1 overflow-hidden bg-black">
-      {/* Main Video Area - Big and Centered like Google Meet */}
-      {shouldShowMainVideo && (
+      {/* Screen Share Preview - Full Screen */}
+      {isScreenSharing && screenShareStream && (
         <div className="h-full flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl aspect-video">
-            {/* Local Video Preview - Main View */}
-            {localVideoStream && isVideoOn && (
-              <div className="w-full h-full bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border-2 border-green-400 ring-4 ring-green-400/30 shadow-2xl shadow-green-400/20">
+          <div className="w-full max-w-6xl aspect-video">
+            <ScreenSharePreview stream={screenShareStream} />
+          </div>
+        </div>
+      )}
+
+      {/* Main Layout: Big Local Preview + Remote Participants */}
+      {!isScreenSharing && (
+        <div className="h-full flex flex-col gap-4 p-4">
+          {/* Top: Big Local Video Preview */}
+          {hasMainVideo && (
+            <div className="flex-1 min-h-0">
+              <div className="h-full bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border-2 border-green-400 ring-4 ring-green-400/30 shadow-2xl shadow-green-400/20">
                 <div className="bg-gradient-to-r from-green-500/30 to-green-600/30 px-6 py-3 border-b border-green-400/30">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
@@ -260,98 +350,63 @@ export function VideoGrid({ role, participants, screenShareStream, isScreenShari
                     </div>
                   </div>
                 </div>
-                <div className="aspect-video bg-black relative">
-                  <video
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover"
-                    ref={(video) => {
-                      if (video && localVideoStream) {
-                        video.srcObject = localVideoStream
-                        video.play().catch(console.error)
-                      }
-                    }}
-                  />
-                  {/* Status indicator */}
+                <div className="h-[calc(100%-80px)] bg-black relative">
+                  {localVideoStream && isVideoOn ? (
+                    <video
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                      ref={(video) => {
+                        if (video && localVideoStream) {
+                          video.srcObject = localVideoStream
+                          video.play().catch(console.error)
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <VideoOff className="w-10 h-10 text-red-400" />
+                        </div>
+                        <p className="text-red-400 text-lg">{cameraError || "Camera off"}</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold animate-pulse">
                     LIVE
                   </div>
                 </div>
               </div>
-            )}
-            
-            {/* Camera Error Display - Main View */}
-            {isVideoOn && hasCamera === false && (
-              <div className="w-full h-full bg-gradient-to-br from-red-900/50 to-red-800/50 rounded-2xl overflow-hidden border-2 border-red-500 ring-4 ring-red-500/30 shadow-2xl shadow-red-500/20">
-                <div className="bg-gradient-to-r from-red-500/30 to-red-600/30 px-6 py-3 border-b border-red-500/30">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                      <VideoOff className="w-4 h-4 text-white" />
-                    </div>
-                    <div>
-                      <span className="text-red-400 font-bold text-lg">Camera Error</span>
-                      <p className="text-red-300 text-sm">Device not available</p>
-                    </div>
+            </div>
+          )}
+
+          {/* Bottom: Remote Participants (Instructor/Others) */}
+          {hasRemoteParticipants && (
+            <div className="h-48">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 h-full">
+                {participantsToRender.map((participant) => (
+                  <div key={participant.id} className="aspect-video bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl overflow-hidden border border-white/20 shadow-lg">
+                    <ParticipantCard participant={participant} role={role} />
                   </div>
-                </div>
-                <div className="aspect-video bg-black relative flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <VideoOff className="w-10 h-10 text-red-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-red-300 mb-2">Camera Not Available</h3>
-                    <p className="text-red-400 text-lg font-medium">{cameraError || "No camera found"}</p>
-                  </div>
-                </div>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Screen Share Preview - Full Screen */}
-      {isScreenSharing && screenShareStream && (
-        <div className="h-full flex items-center justify-center p-4">
-          <div className="w-full max-w-6xl aspect-video">
-            <ScreenSharePreview stream={screenShareStream} />
-          </div>
-        </div>
-      )}
-
-      {/* Participants Grid - Main video area like Google Meet */}
-      {hasRemoteParticipants && (
-        <div className="h-full flex items-center justify-center p-4">
-          <div className="w-full max-w-6xl">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {/* Local video if on */}
-              {hasMainVideo && (
-                <div className="aspect-video bg-gradient-to-br from-green-900 to-green-800 rounded-xl overflow-hidden border-2 border-green-400 shadow-lg">
-                  <LocalVideoPreview stream={localVideoStream || null} isVideoOn={isVideoOn} />
-                </div>
-              )}
-              
-              {/* Remote participants */}
-              {participantsToRender.map((participant) => (
-                <div key={participant.id} className="aspect-video bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl overflow-hidden border border-white/20 shadow-lg">
-                  <ParticipantCard participant={participant} role={role} />
-                </div>
-              ))}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Waiting for participants - Only show when no main video and no participants */}
-      {!shouldShowMainVideo && !hasRemoteParticipants && (
-        <div className="h-full flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-32 h-32 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-8 backdrop-blur-sm border border-white/20">
-              <User className="w-16 h-16 text-white/60" />
+          {/* Waiting state */}
+          {!hasMainVideo && !hasRemoteParticipants && (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-32 h-32 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-8">
+                  <User className="w-16 h-16 text-white/60" />
+                </div>
+                <h3 className="text-2xl font-semibold text-white mb-4">Waiting for participants</h3>
+                <p className="text-white/60 text-lg">Turn on your camera or wait for others to join</p>
+              </div>
             </div>
-            <h3 className="text-2xl font-semibold text-white mb-4">Waiting for participants</h3>
-            <p className="text-white/60 text-lg">Participants will appear here when they join the session</p>
-          </div>
+          )}
         </div>
       )}
     </div>

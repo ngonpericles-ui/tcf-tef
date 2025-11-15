@@ -643,6 +643,19 @@ export default function AdminSimulationBuilderPage() {
                           }}
                           className="hidden"
                         />
+                        
+                        {/* Audio Player for uploaded audio files */}
+                        {section.uploadedFile && section.uploadType === "audio" && (
+                          <div className="mt-4">
+                            <audio
+                              controls
+                              className="w-full max-w-md mx-auto"
+                              src={URL.createObjectURL(section.uploadedFile)}
+                            >
+                              {t("Votre navigateur ne supporte pas la lecture audio.", "Your browser does not support audio playback.")}
+                            </audio>
+                          </div>
+                        )}
                       </div>
 
                       {/* Generate Button */}

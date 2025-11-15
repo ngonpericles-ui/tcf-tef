@@ -1,4 +1,4 @@
-import { AnalyticsData } from '../types';
+import { AnalyticsData } from '@/types';
 import { UserRole } from '@prisma/client';
 export declare class AnalyticsService {
     static getDashboardAnalytics(userRole: UserRole): Promise<AnalyticsData>;

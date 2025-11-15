@@ -42,5 +42,8 @@ export declare class AIService {
         transcription: string;
     }>;
     static extractSujetsFromText(text: string): Promise<string[]>;
+    private static getRandomCorrectAnswer;
+    private static generateContentBasedFallback;
+    private static extractKeywords;
 }
 //# sourceMappingURL=aiService.d.ts.map

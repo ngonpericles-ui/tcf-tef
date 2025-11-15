@@ -383,7 +383,27 @@ export default function UnifiedMessagingPage({
       if (response.success && response.data) {
         // Ensure data is always an array
         const messagesData = Array.isArray(response.data) ? response.data : []
-        setMessages(messagesData)
+        
+        // ALWAYS sort messages ascending (oldest first, newest at bottom - WhatsApp style)
+        // This ensures newest messages appear at the bottom for both admin and students
+        const sortedMessages = messagesData.sort((a, b) => {
+          const timeA = new Date(a.createdAt || a.timestamp || 0).getTime()
+          const timeB = new Date(b.createdAt || b.timestamp || 0).getTime()
+          return timeA - timeB // Ascending: oldest first, newest at bottom
+        })
+        
+        console.log('📨 Messages sorted for', userRole, ':', {
+          total: sortedMessages.length,
+          firstMessage: sortedMessages[0]?.createdAt,
+          lastMessage: sortedMessages[sortedMessages.length - 1]?.createdAt
+        })
+        
+        setMessages(sortedMessages)
+        
+        // Mark messages as read when viewing conversation
+        if (messagesData.length > 0) {
+          markMessagesAsRead(contactId)
+        }
       } else {
         setMessages([])
       }
@@ -391,7 +411,7 @@ export default function UnifiedMessagingPage({
       console.error('Failed to fetch messages:', error)
       setMessages([])
     }
-  }, [])
+  }, [userRole])
 
   // Send message
   const sendMessage = useCallback(async () => {
@@ -666,15 +686,18 @@ export default function UnifiedMessagingPage({
         data: { deleteForEveryone }
       })
 
-      if (response.data?.success) {
+      const responseData = response.data as any
+      if (responseData?.success) {
         // Update local state
         setMessages(prev => prev.map(m => 
           m.id === messageId 
-            ? { ...m, content: response.data.data.content, isDeleted: true }
+            ? { ...m, content: responseData?.data?.content || m.content, isDeleted: true }
             : m
         ))
       } else {
-        console.error('Failed to delete message:', response.data?.error)
+        const errorMsg = responseData?.error
+        const errorString = typeof errorMsg === 'string' ? errorMsg : errorMsg?.message || 'Unknown error'
+        console.error('Failed to delete message:', errorString)
       }
     } catch (error: any) {
       console.error('Failed to delete message:', error?.response?.data?.error || error?.message || error)
@@ -916,6 +939,37 @@ export default function UnifiedMessagingPage({
       }
     }
   }, [selectedContact, fetchMessages, subscribeToUser, messages])
+
+  // Mark messages as read when viewing conversation
+  const markMessagesAsRead = useCallback(async (contactId: string) => {
+    if (!user?.id) return
+    
+    try {
+      // Mark all unread messages from this contact as read
+      const unreadMessages = messages.filter(msg => 
+        msg.senderId === contactId && 
+        msg.receiverId === user.id && 
+        !msg.isRead
+      )
+      
+      for (const message of unreadMessages) {
+        await apiClient.put(`/messages/${message.id}/read`)
+      }
+      
+      if (unreadMessages.length > 0) {
+        console.log('✅ Marked', unreadMessages.length, 'messages as read from', contactId)
+        
+        // Update local state
+        setMessages(prev => prev.map(msg => 
+          msg.senderId === contactId && msg.receiverId === user.id 
+            ? { ...msg, isRead: true, readAt: new Date().toISOString() }
+            : msg
+        ))
+      }
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error)
+    }
+  }, [messages, user?.id])
 
   // Listen for incoming calls via Pusher
   useEffect(() => {

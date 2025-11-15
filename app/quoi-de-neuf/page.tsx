@@ -121,7 +121,12 @@ export default function QuoiDeNeufPage() {
     if (url.startsWith('data:')) return url
     
     // Use environment variable for API URL, fallback to localhost for dev
-    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'
+    // Check for production API URL from environment
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL 
+      ? process.env.NEXT_PUBLIC_API_URL.replace('/api', '')
+      : typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+        ? `https://${window.location.hostname}`
+        : 'http://localhost:3001'
     
     if (url.startsWith('/uploads')) return `${apiBaseUrl}${url}`
     if (url.startsWith('/')) return `${apiBaseUrl}${url}`

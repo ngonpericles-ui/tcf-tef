@@ -2,10 +2,10 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CourseController = void 0;
-const courseService_1 = require("../services/courseService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const courseService_1 = require("@/services/courseService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class CourseController {
 }
 exports.CourseController = CourseController;
@@ -42,7 +42,7 @@ CourseController.getCourseById = (0, errorHandler_1.asyncHandler)(async (req, re
     res.status(200).json(response);
 });
 CourseController.getAllCourses = (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?.id;
     const userRole = req.user?.role;
     const pagination = {
         page: parseInt(req.query.page) || 1,

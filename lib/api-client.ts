@@ -199,11 +199,16 @@ class ApiClient {
           }
         }
 
-        // Handle other errors
+        // Handle other errors (but suppress 403 for /users endpoints - it's expected for privacy)
         if (error.response?.status >= 500) {
           console.error('🚨 Server error:', error.response.status, error.response.data)
         } else if (error.response?.status === 403) {
-          console.error('🚫 Access forbidden:', error.response.data?.message)
+          // Don't log 403 errors for /users endpoints - it's expected (privacy/access control)
+          const url = error.response.config?.url || ''
+          if (!url.includes('/users/')) {
+            console.error('🚫 Access forbidden:', error.response.data?.message)
+          }
+          // Silently handle 403 for user lookups
         } else if (error.response?.status === 404) {
           console.error('🔍 Resource not found:', error.response.config?.url)
         }

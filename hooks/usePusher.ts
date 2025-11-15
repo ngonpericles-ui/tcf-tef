@@ -41,9 +41,17 @@ export const usePusher = () => {
       return;
     }
 
-    // Initialize Pusher
-    const pusherClient = new Pusher('110ed53534004e19ee0c', {
-      cluster: 'eu',
+    // Initialize Pusher - use environment variable or fallback to backend key
+    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY || '3a9d16611366abb065ad'
+    const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'eu'
+    
+    if (!pusherKey || pusherKey === 'your_pusher_key_here') {
+      console.warn('⚠️ Pusher key not configured. Please set NEXT_PUBLIC_PUSHER_KEY in .env.local')
+      return
+    }
+    
+    const pusherClient = new Pusher(pusherKey, {
+      cluster: pusherCluster,
       authEndpoint: 'http://localhost:3001/api/pusher/auth',
       auth: {
         headers: {
@@ -68,12 +76,27 @@ export const usePusher = () => {
     });
 
     pusherClient.connection.bind('error', (error: any) => {
-      console.error('Pusher connection error:', error);
+      // Log detailed error information
+      const errorDetails = {
+        type: error?.type || 'unknown',
+        error: error?.error || error,
+        data: error?.data || null,
+        message: error?.message || error?.error?.message || 'Unknown Pusher error',
+        code: error?.code || error?.error?.code || null
+      };
+      
+      // Only log as warning if it's a non-critical error (like auth failure)
+      if (error?.type === 'AuthError' || error?.error?.type === 'AuthError') {
+        console.warn('⚠️ Pusher authentication failed (non-critical):', errorDetails);
+      } else {
+        console.warn('⚠️ Pusher connection error (non-critical, app will continue):', errorDetails);
+      }
+      
       setIsConnected(false);
     });
 
     pusherClient.connection.bind('unavailable', () => {
-      console.error('❌ Pusher unavailable');
+      console.warn('⚠️ Pusher unavailable (non-critical, app will continue without real-time features)');
       setIsConnected(false);
     });
 
@@ -194,9 +217,10 @@ export const usePusher = () => {
         });
     });
 
-      // Handle subscription error
+      // Handle subscription error - gracefully handle without console.error
       channel.bind('pusher:subscription_error', (error: any) => {
-        console.error('❌ Failed to subscribe to presence channel:', error);
+        // Only log as warning, don't throw error - Pusher is optional
+        console.warn('⚠️ Pusher presence subscription error (non-critical):', error?.error || error?.message || 'Unknown error');
         // Reset online users on error
         setOnlineUsers(new Set());
       });
@@ -204,7 +228,8 @@ export const usePusher = () => {
       console.log('✅ Presence channel subscription initiated');
       return channel;
     } catch (error: any) {
-      console.error('❌ Error subscribing to presence channel:', error?.message || error);
+      // Only log as warning - Pusher is optional, don't show error to user
+      console.warn('⚠️ Error subscribing to presence channel (non-critical):', error?.message || error);
       return null;
     }
   }, [pusher]);

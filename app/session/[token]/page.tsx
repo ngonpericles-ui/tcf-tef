@@ -19,6 +19,14 @@ interface SessionData {
     firstName: string;
     lastName: string;
     profileImage?: string;
+    role?: string;
+  };
+  student?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    profileImage?: string;
+    role?: string;
   };
   duration: number;
   status: string;
@@ -62,10 +70,28 @@ export default function SecureSessionPage() {
       setLoading(true);
       const response = await apiClient.get(`/messages/validate-secure-session/${encodeURIComponent(tokenToValidate)}`);
       
-      if (response.success) {
-        setSessionData(response.data);
+      if (response.success && response.data) {
+        const session = response.data as SessionData;
+        setSessionData(session);
+        
+        // Auto-start session when coming from notification card (direct call)
+        // Check if there's a pending session ID in localStorage (from notification)
+        const pendingSessionId = localStorage.getItem('pendingSessionId');
+        if (pendingSessionId === session.sessionId) {
+          // This is a direct call from notification - auto-start session immediately
+          // No need to show "rejoindre la session" card
+          console.log('✅ Auto-starting session from notification card (direct call)');
+          localStorage.removeItem('pendingSessionId');
+          localStorage.removeItem('pendingSessionLink');
+          setIsVideoCallActive(true);
+        }
+        // If no pendingSessionId, show the "rejoindre la session" card (user clicked link directly)
       } else {
-        setError(response.error || 'Session non trouvée');
+        const errorMsg = response.error
+        const errorString = typeof errorMsg === 'string' 
+          ? errorMsg 
+          : (errorMsg as any)?.message || 'Session non trouvée'
+        setError(errorString);
       }
     } catch (error: any) {
       console.error('Error validating session:', error);
@@ -137,11 +163,39 @@ export default function SecureSessionPage() {
   }
 
   if (isVideoCallActive && sessionData) {
+    // Determine the other participant based on current user
+    // If current user is the instructor, show student
+    // If current user is the student, show instructor
+    const currentUserId = user?.id
+    const isCurrentUserInstructor = currentUserId === sessionData.instructor.id
+    const isCurrentUserStudent = sessionData.student && currentUserId === sessionData.student.id
+    
+    let contactId = sessionData.instructor.id
+    let contactName = `${sessionData.instructor.firstName} ${sessionData.instructor.lastName}`
+    let contactRole = 'INSTRUCTOR'
+    
+    if (isCurrentUserInstructor && sessionData.student) {
+      // Manager/Instructor viewing - show student
+      contactId = sessionData.student.id
+      contactName = `${sessionData.student.firstName} ${sessionData.student.lastName}`
+      contactRole = 'STUDENT'
+    } else if (isCurrentUserStudent) {
+      // Student viewing - show instructor (already set above)
+      contactId = sessionData.instructor.id
+      contactName = `${sessionData.instructor.firstName} ${sessionData.instructor.lastName}`
+      contactRole = 'INSTRUCTOR'
+    }
+    
+    // IMPORTANT: When joining via secure session, pass BOTH sessionId AND contactId
+    // sessionId = tells OneOnOneVideoCall it's a session join (no permission check)
+    // contactId = identifies the other participant for display
+    // This way: JOINING session ≠ CALLING someone
     return (
       <OneOnOneVideoCall
-        contactId={sessionData.instructor.id}
-        contactName={`${sessionData.instructor.firstName} ${sessionData.instructor.lastName}`}
-        contactRole="INSTRUCTOR"
+        sessionId={sessionData.sessionId}
+        contactId={contactId}
+        contactName={contactName}
+        contactRole={contactRole}
         onEndCall={handleEndSession}
       />
     );

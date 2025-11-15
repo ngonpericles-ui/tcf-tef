@@ -2,9 +2,9 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FavoriteController = void 0;
-const favoriteService_1 = require("../services/favoriteService");
-const errorHandler_1 = require("../middleware/errorHandler");
-const logger_1 = require("../utils/logger");
+const favoriteService_1 = require("@/services/favoriteService");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
 class FavoriteController {
 }
 exports.FavoriteController = FavoriteController;

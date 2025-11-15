@@ -4,8 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiChatService = void 0;
-const prisma_1 = require("../lib/prisma");
-const logger_1 = require("../utils/logger");
+const prisma_1 = require("@/lib/prisma");
+const logger_1 = require("@/utils/logger");
 const aiService_1 = require("./aiService");
 const questionBankService_1 = __importDefault(require("./questionBankService"));
 class AiChatService {
@@ -152,8 +152,36 @@ class AiChatService {
     static async getRelevantQuestions(message, context) {
         try {
             const messageLower = message.toLowerCase().trim();
-            if (messageLower.length < 10 ||
-                ['salut', 'bonjour', 'bonsoir', 'hey', 'hi', 'hello', 'ça va', 'ca va'].some(g => messageLower.includes(g))) {
+            if (messageLower.length < 15) {
+                return [];
+            }
+            const simplePatterns = [
+                'salut', 'bonjour', 'bonsoir', 'hey', 'hi', 'hello', 'ça va', 'ca va',
+                'ton nom', 'your name', 'comment tu t\'appelles', 'what is your name',
+                'que sais tu', 'what can you', 'que peux tu', 'what do you',
+                'quel jour', 'what day', 'quelle date', 'what date', 'aujourd\'hui', 'today',
+                'comment allez', 'how are you', 'comment ça va'
+            ];
+            if (simplePatterns.some(pattern => messageLower.includes(pattern))) {
+                return [];
+            }
+            const tcfTefKeywords = [
+                'tcf', 'tef', 'examen', 'test', 'simulation', 'épreuve',
+                'grammaire', 'grammar', 'vocabulaire', 'vocabulary',
+                'compréhension', 'comprehension', 'expression', 'speaking',
+                'écoute', 'listening', 'écrit', 'writing', 'oral',
+                'niveau', 'level', 'exercice', 'exercise', 'pratique', 'practice',
+                'conjugaison', 'conjugation', 'accord', 'agreement', 'temps', 'tense',
+                'subjonctif', 'subjunctive', 'conditionnel', 'conditional',
+                'immigration', 'canada', 'france', 'belgique', 'suisse'
+            ];
+            const isTcfTefRelated = tcfTefKeywords.some(keyword => messageLower.includes(keyword));
+            if (!isTcfTefRelated) {
+                return [];
+            }
+            const isDifficult = messageLower.length > 30 ||
+                ['explique', 'explain', 'différence', 'difference', 'pourquoi', 'why', 'comment', 'how'].some(w => messageLower.includes(w));
+            if (!isDifficult) {
                 return [];
             }
             const questions = await questionBankService_1.default.searchQuestions(message, 2);
@@ -247,34 +275,45 @@ class AiChatService {
         }
     }
     static buildSystemPrompt(context, relevantQuestions) {
-        const currentHour = new Date().getHours();
+        const currentDate = new Date();
+        const currentHour = currentDate.getHours();
+        const currentDay = currentDate.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         let greetingInstruction = '';
         if (currentHour >= 5 && currentHour < 12) {
-            greetingInstruction = 'Matin: Utilise "Salut" ou "Bonjour".';
+            greetingInstruction = 'Matin: Utilise "Bonjour" de manière naturelle. Varie tes salutations.';
         }
         else if (currentHour >= 12 && currentHour < 17) {
-            greetingInstruction = 'Après-midi: Utilise "Salut" ou "Bonjour".';
+            greetingInstruction = 'Après-midi: Utilise "Bonjour" ou "Salut" naturellement. Varie tes réponses.';
         }
         else if (currentHour >= 17 && currentHour < 21) {
-            greetingInstruction = 'Soir: Utilise "Salut" ou "Bonsoir".';
+            greetingInstruction = 'Soir: Utilise "Bonsoir" naturellement. Varie tes réponses.';
         }
         else {
-            greetingInstruction = 'Nuit: Utilise "Salut" ou "Bonsoir".';
+            greetingInstruction = 'Nuit: Utilise "Bonsoir" naturellement. Varie tes réponses.';
         }
         const userLevel = context?.userLevel || 'BASIC';
         const language = context?.language || 'fr';
-        const basePrompt = `Assistant IA Aura.ca - TCF/TEF. Niveau: ${userLevel}. Langue: ${language === 'fr' ? 'français' : 'anglais'}.
+        const basePrompt = `Tu es Aura, l'assistant IA intelligent de Aura.ca, spécialisé dans la préparation TCF/TEF pour les Camerounais et Africains.
 
-RÈGLES:
-1. Salutations: ${greetingInstruction} Utilise "Salut" pour un ton décontracté.
-2. Formatage: JAMAIS d'astérisques (*). Écris naturellement.
-3. Longueur: CONCIS. Questions simples: 1-2 phrases. Moyennes: 2-4 phrases. Complexes: 4-6 phrases max.`;
+CONTEXTE:
+- Date actuelle: ${currentDay}
+- Niveau de l'utilisateur: ${userLevel}
+- Langue: ${language === 'fr' ? 'français' : 'anglais'}
+
+RÈGLES IMPORTANTES:
+1. Salutations: ${greetingInstruction} NE RÉPÈTE PAS toujours "Salut!" au début. Varie tes réponses naturellement.
+2. Personnalité: Sois amical, professionnel et encourageant. Réponds de manière naturelle et variée.
+3. Formatage: JAMAIS d'astérisques (*) ou de markdown. Écris naturellement comme dans une conversation.
+4. Longueur: Adapte-toi à la question. Questions simples: réponse courte et directe. Questions complexes: réponse détaillée.
+5. Informations: Si on te demande la date/jour, utilise la date réelle: ${currentDay}
+6. Variété: Change tes formulations. Ne commence pas toujours par "Salut!".`;
         if (relevantQuestions.length > 0) {
             const questionsContext = `
-Questions pertinentes de la banque de données:
-${relevantQuestions.map((q, i) => `${i + 1}. ${q.questionText} (Niveau: ${q.level})`).join('\n')}
 
-Utilise ces questions comme référence pour donner des exemples concrets et des exercices similaires.`;
+QUESTIONS TCF/TEF PERTINENTES (utilise-les comme référence pour des exemples concrets):
+${relevantQuestions.map((q, i) => `${i + 1}. ${q.questionText || q.title} (Niveau: ${q.level || 'N/A'})`).join('\n')}
+
+IMPORTANT: Utilise ces questions uniquement comme référence pour donner des exemples similaires et des exercices pratiques. Ne les répète pas mot pour mot.`;
             return basePrompt + questionsContext;
         }
         return basePrompt;

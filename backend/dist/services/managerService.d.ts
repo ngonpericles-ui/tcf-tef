@@ -65,6 +65,8 @@ export declare class ManagerService {
             isPublished: boolean;
             rating: number;
             enrolledCount: number;
+            availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+            availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
             createdById: string;
         })[];
         testPerformance: ({
@@ -156,6 +158,8 @@ export declare class ManagerService {
                     isPublished: boolean;
                     rating: number;
                     enrolledCount: number;
+                    availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+                    availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
                     createdById: string;
                 })[];
                 testPerformance: ({
@@ -335,6 +339,8 @@ export declare class ManagerService {
             isPublished: boolean;
             rating: number;
             enrolledCount: number;
+            availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+            availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
             createdById: string;
         }[];
         courses?: undefined;
@@ -424,6 +430,8 @@ export declare class ManagerService {
             isPublished: boolean;
             rating: number;
             enrolledCount: number;
+            availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+            availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
             createdById: string;
         }[];
         tests: any[] | {
@@ -500,6 +508,8 @@ export declare class ManagerService {
         isPublished: boolean;
         rating: number;
         enrolledCount: number;
+        availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+        availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
         createdById: string;
     } | {
         level: import(".prisma/client").$Enums.CourseLevel;
@@ -570,6 +580,8 @@ export declare class ManagerService {
         isPublished: boolean;
         rating: number;
         enrolledCount: number;
+        availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+        availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
         createdById: string;
     } | {
         level: import(".prisma/client").$Enums.CourseLevel;
@@ -640,6 +652,8 @@ export declare class ManagerService {
         isPublished: boolean;
         rating: number;
         enrolledCount: number;
+        availableLevels: import("@prisma/client/runtime/library").JsonValue | null;
+        availableSubscriptions: import("@prisma/client/runtime/library").JsonValue | null;
         createdById: string;
     } | {
         level: import(".prisma/client").$Enums.CourseLevel;

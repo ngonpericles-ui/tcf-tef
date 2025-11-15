@@ -20,7 +20,8 @@ import {
   Circle,
   Hand,
   MoreVertical,
-  Send
+  Send,
+  User
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
@@ -117,13 +118,19 @@ export function OneOnOneVideoCall({
   const [remoteAudioTrack, setRemoteAudioTrack] = useState<any>(null)
   const [remoteVideoTrack, setRemoteVideoTrack] = useState<any>(null)
   const [isAgoraInitialized, setIsAgoraInitialized] = useState(false)
+  const [isAgoraInitializing, setIsAgoraInitializing] = useState(false)
   
   // Participants
   const [participants, setParticipants] = useState<Participant[]>([])
   
-  // Refs
+  // Refs for preventing double initialization
   const localVideoRef = useRef<HTMLDivElement>(null)
   const remoteVideoRef = useRef<HTMLDivElement>(null)
+  const initStartedRef = useRef(false)
+  const joiningRef = useRef(false)
+  const joinedRef = useRef(false)
+  const agoraClientRef = useRef<any>(null)
+  const dataStreamIdRef = useRef<number | null>(null)
 
   // Check if user has permission to call this contact
   const canInitiateCall = useCallback(() => {
@@ -148,14 +155,28 @@ export function OneOnOneVideoCall({
   // Initialize Agora and join channel
   useEffect(() => {
     const initAgora = async () => {
-      if ((!contactId && !sessionId) || !user?.id || isAgoraInitialized || typeof window === 'undefined') return
+      // Guard against double initialization
+      if ((!contactId && !sessionId) || !user?.id || isAgoraInitialized || isAgoraInitializing || typeof window === 'undefined') {
+        return
+      }
 
-      // Check permissions
-      if (contactId && !canInitiateCall()) {
+      // React Strict Mode protection
+      if (initStartedRef.current) {
+        console.log("⚠️ Initialization already started, skipping...")
+        return
+      }
+
+      // Check permissions ONLY when initiating a new call (not when joining an existing session)
+      // When sessionId is provided, it means the user was invited and has permission to join
+      if (contactId && !sessionId && !canInitiateCall()) {
         alert("Vous n'avez pas l'autorisation d'appeler cette personne.")
         onEndCall()
         return
       }
+
+      // Mark initialization as started
+      initStartedRef.current = true
+      setIsAgoraInitializing(true)
 
       try {
         setIsConnecting(true)
@@ -167,31 +188,54 @@ export function OneOnOneVideoCall({
           AgoraRTC = agoraModule.default
         }
 
+        // Helper function to convert string UID to numeric UID (same as backend)
+        const stringToNumericUid = (str: string): number => {
+          let hash = 0
+          for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i)
+            hash = ((hash << 5) - hash) + char
+            hash = hash & hash // Convert to 32-bit integer
+          }
+          // Ensure positive number and within Agora's valid range (0 to 2^32-1)
+          return Math.abs(hash) % 2147483647
+        }
+
+        // Clean up any existing client first
+        if (agoraClientRef.current) {
+          try {
+            await agoraClientRef.current.leave()
+            agoraClientRef.current = null
+          } catch (e) {
+            console.warn("Error cleaning up existing client:", e)
+          }
+        }
+
         // Create Agora client with unique configuration
         const client = AgoraRTC.createClient({ 
           mode: "rtc", 
-          codec: "vp8",
-          // Add unique client configuration to prevent conflicts
-          clientId: `one-on-one-${user.id}-${Date.now()}`
+          codec: "vp8"
         })
         setAgoraClient(client)
+        agoraClientRef.current = client
 
-        // Generate unique UID for this user per session
-        const uniqueUid = `${user.id}-${Date.now()}`
+        // Generate consistent UID for this user (deterministic based on user ID and session)
+        // This ensures the same user always gets the same UID for the same session
+        const uidString = sessionId ? `${user.id}-${sessionId}` : `${user.id}-${contactId || 'call'}`
+        const numericUid = stringToNumericUid(uidString)
 
         // Get Agora token from backend
         const channelName = sessionId ? `session-${sessionId}` : `one-on-one-${user.id}-${contactId}`
         const tokenResponse = await apiClient.post(`/agora/rtc/token`, {
           channelName,
           role: "publisher",
-          uid: uniqueUid,
+          uid: uidString, // Send string, backend will convert to numeric
         })
 
         if (!tokenResponse.success || !tokenResponse.data) {
           throw new Error("Failed to get Agora RTC token")
         }
 
-        const tokenData = tokenResponse.data as { token: string }
+        const tokenData = tokenResponse.data as { token: string; uid?: number }
         const APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID || "dddd690283894422ac4f4336bac4a325"
 
         if (!APP_ID || APP_ID === "your-agora-app-id-here") {
@@ -199,68 +243,217 @@ export function OneOnOneVideoCall({
           return
         }
 
-        // Join channel first
-        await client.join(APP_ID, channelName, tokenData.token, uniqueUid)
-        console.log("✅ Successfully joined Agora channel")
+        // Use numeric UID from response if available, otherwise use our calculated one
+        const finalNumericUid = tokenData.uid || numericUid
+        console.log(`🔢 Joining with numeric UID: ${finalNumericUid} (from string: ${uidString})`)
+
+        // Guard against multiple join attempts
+        if (joiningRef.current) {
+          console.warn("⚠️ Already joining, skipping duplicate join attempt")
+          return
+        }
+        if (joinedRef.current) {
+          console.warn("⚠️ Already joined, skipping duplicate join attempt")
+          return
+        }
+
+        joiningRef.current = true
+
+        // Join channel with NUMERIC UID (required by Agora)
+        try {
+          await client.join(APP_ID, channelName, tokenData.token, finalNumericUid)
+          console.log("✅ Successfully joined Agora channel")
+          joinedRef.current = true
+          joiningRef.current = false
+        } catch (joinError: any) {
+          joiningRef.current = false
+          if (joinError?.code === 'UID_CONFLICT') {
+            console.log("⚠️ UID conflict detected, leaving and rejoining...")
+            try {
+              await client.leave()
+              // Wait a bit before rejoining
+              await new Promise(resolve => setTimeout(resolve, 500))
+              await client.join(APP_ID, channelName, tokenData.token, finalNumericUid)
+              console.log("✅ Successfully rejoined Agora channel after UID conflict")
+              joinedRef.current = true
+            } catch (retryError) {
+              console.error("❌ Failed to rejoin after UID conflict:", retryError)
+              throw retryError
+            }
+          } else {
+            throw joinError
+          }
+        }
+        
+        // Wait for connection to be fully established
+        let connectionWaitCount = 0
+        const maxWaitCount = 15 // Wait up to 7.5 seconds (15 * 500ms)
+        while (client.connectionState !== 'CONNECTED' && connectionWaitCount < maxWaitCount) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+          connectionWaitCount++
+          const currentState = client.connectionState
+          console.log(`⏳ Waiting for connection... (${connectionWaitCount}/${maxWaitCount}) State: ${currentState}`)
+          
+          // If we're stuck in DISCONNECTING or FAILED, break early
+          if (currentState === 'DISCONNECTING' || currentState === 'FAILED') {
+            console.warn(`⚠️ Connection in ${currentState} state, breaking wait loop`)
+            break
+          }
+        }
+        
+        // Check final connection state
+        const finalState = client.connectionState
+        if (finalState === 'CONNECTED') {
+          setIsConnected(true)
+          setIsConnecting(false)
+          console.log("✅ Connection fully established")
+        } else {
+          // Still mark as connected if we successfully joined (join succeeded)
+          // The connection state might stabilize after join
+          setIsConnected(true)
+          setIsConnecting(false)
+          console.warn(`⚠️ Connection state is ${finalState} after join, but join succeeded - connection may stabilize`)
+          
+          // Set up a listener to update when connection actually becomes CONNECTED
+          const stateListener = (curState: string) => {
+            if (curState === 'CONNECTED') {
+              console.log("✅ Connection state updated to CONNECTED")
+              setIsConnected(true)
+              client.off("connection-state-change", stateListener)
+            }
+          }
+          client.on("connection-state-change", stateListener)
+        }
         
         // Try to create tracks, but continue even if devices are not available
         let audioTrack = null
         let videoTrack = null
         
-        // Try to create audio track
+        // Try to create audio track (silently handle device not found - it's normal)
         try {
-          console.log("Attempting to create audio track...")
           audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
             encoderConfig: "music_standard"
           })
-          console.log("✅ Audio track created")
           setHasAudioDevice(true)
         } catch (audioError: any) {
-          console.warn("⚠️ Could not create audio track:", audioError.message)
+          // Silently handle device not found - it's expected and normal
+          // Only log unexpected errors
+          if (audioError?.code !== 'DEVICE_NOT_FOUND' && audioError?.name !== 'NotFoundError') {
+            console.warn("⚠️ Could not create audio track:", audioError.message)
+          }
+          // Suppress DEVICE_NOT_FOUND errors completely - they're normal
           setHasAudioDevice(false)
-          // Continue without audio - don't log as error since it's expected
+          // Continue without audio
         }
         
-        // Try to create video track
+        // Try to create video track (silently handle device not found - it's normal)
         try {
-          console.log("Attempting to create video track...")
           videoTrack = await AgoraRTC.createCameraVideoTrack({
             encoderConfig: "720p_1"
           })
-          console.log("✅ Video track created")
           setHasVideoDevice(true)
         } catch (videoError: any) {
-          console.warn("⚠️ Could not create video track:", videoError.message)
+          // Silently handle device not found - it's expected and normal
+          // Only log unexpected errors
+          if (videoError?.code !== 'DEVICE_NOT_FOUND' && videoError?.name !== 'NotFoundError') {
+            console.warn("⚠️ Could not create video track:", videoError.message)
+          }
+          // Suppress DEVICE_NOT_FOUND errors completely - they're normal
           setHasVideoDevice(false)
-          // Continue without video - don't log as error since it's expected
+          // Continue without video
         }
         
         // Set tracks (even if null)
         setLocalAudioTrack(audioTrack)
         setLocalVideoTrack(videoTrack)
         
-        // Publish tracks (only if they exist)
-        const tracksToPublish = []
+        // Wait a bit for connection to fully stabilize before publishing
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Check connection state before publishing (but don't fail if not connected - we already marked as connected)
+        const currentConnectionState = client.connectionState
+        if (currentConnectionState !== 'CONNECTED') {
+          console.warn(`⚠️ Connection state is ${currentConnectionState}, will skip publishing tracks`)
+          // Still continue - connection might stabilize, and we can receive remote media
+        }
+        
+        // Publish tracks (only if they exist and connection is active)
+        const tracksToPublish: any[] = []
         if (audioTrack) tracksToPublish.push(audioTrack)
         if (videoTrack) tracksToPublish.push(videoTrack)
         
-        if (tracksToPublish.length > 0) {
-          await client.publish(tracksToPublish)
-          console.log("✅ Tracks published successfully")
+        if (tracksToPublish.length > 0 && currentConnectionState === 'CONNECTED') {
+          try {
+            // Check if client is still valid
+            if (!client || !client.publish) {
+              throw new Error("Client is not valid for publishing")
+            }
+            await client.publish(tracksToPublish)
+            console.log("✅ Tracks published successfully")
+          } catch (publishError: any) {
+            // Handle publish errors gracefully - don't fail the entire call
+            const errorCode = publishError?.code || ''
+            const errorMessage = publishError?.message || ''
+            
+            if (
+              errorCode === 'UNEXPECTED_ERROR' || 
+              errorMessage.includes('disconnected') ||
+              errorMessage.includes('PeerConnection')
+            ) {
+              console.warn("⚠️ Connection lost during publish - continuing without local tracks")
+              // Don't throw - allow call to continue (user can still receive remote media)
+            } else {
+              console.warn("⚠️ Failed to publish tracks:", errorMessage || publishError)
+              // Still continue - user can participate without publishing
+            }
+          }
+        } else if (tracksToPublish.length > 0) {
+          console.log("ℹ️ Connection not ready yet, will publish tracks when connection stabilizes")
+          // Try to publish later when connection is ready
+          const publishWhenReady = async () => {
+            const tracksToPublishLater: any[] = [...tracksToPublish] // Copy array for closure
+            let attempts = 0
+            const maxAttempts = 10
+            while (attempts < maxAttempts && client.connectionState !== 'CONNECTED') {
+              await new Promise(resolve => setTimeout(resolve, 500))
+              attempts++
+            }
+            if (client.connectionState === 'CONNECTED' && tracksToPublishLater.length > 0) {
+              try {
+                await client.publish(tracksToPublishLater)
+                console.log("✅ Tracks published successfully (delayed)")
+              } catch (error) {
+                console.warn("⚠️ Failed to publish tracks after delay:", error)
+              }
+            }
+          }
+          publishWhenReady() // Don't await - let it happen in background
         } else {
           console.log("ℹ️ No tracks to publish - continuing without audio/video")
         }
         
         // Set up event listeners
         client.on("user-published", async (user: any, mediaType: string) => {
-          await client.subscribe(user, mediaType)
-          
-          if (mediaType === "video") {
-            setRemoteVideoTrack(user.videoTrack)
-          }
-          if (mediaType === "audio") {
-            setRemoteAudioTrack(user.audioTrack)
-            user.audioTrack.play()
+          try {
+            await client.subscribe(user, mediaType)
+            
+            if (mediaType === "video") {
+              // Check if it's a screen track or regular video track
+              const track = user.videoTrack
+              if (track && track.trackMediaType === 'screen') {
+                // Handle screen sharing from remote user
+                console.log("📺 Remote user started screen sharing")
+                setRemoteVideoTrack(track) // Use same state for now, or create separate state
+              } else {
+                setRemoteVideoTrack(track)
+              }
+            }
+            if (mediaType === "audio") {
+              setRemoteAudioTrack(user.audioTrack)
+              user.audioTrack.play()
+            }
+          } catch (error) {
+            console.warn("Failed to handle user-published:", error)
           }
         })
 
@@ -273,13 +466,79 @@ export function OneOnOneVideoCall({
           }
         })
 
-        // Listen for data stream messages (chat)
+        // Listen for when remote user leaves the channel
+        client.on("user-left", (user: any, reason: string) => {
+          console.log("👋 Remote user left the call:", reason)
+          setRemoteVideoTrack(null)
+          setRemoteAudioTrack(null)
+          
+          // Show notification that the other person left
+          if (reason === "Quit" || reason === "BecameAudience") {
+            // User intentionally left
+            alert(`${contactName || 'The other person'} has left the call.`)
+          } else {
+            // Connection issue
+            alert(`${contactName || 'The other person'} disconnected from the call.`)
+          }
+          
+          // Optionally end the call automatically after a delay
+          setTimeout(() => {
+            if (onEndCall) {
+              onEndCall()
+            }
+          }, 3000) // Wait 3 seconds before ending
+        })
+
+        // Listen for connection state changes
+        client.on("connection-state-change", (curState: string, revState: string) => {
+          console.log(`🔄 Connection state changed: ${revState} -> ${curState}`)
+          if (curState === 'CONNECTED') {
+            setIsConnected(true)
+            setIsConnecting(false)
+            console.log("✅ Connection established - call is active")
+          } else if (curState === 'DISCONNECTED' || curState === 'FAILED') {
+            console.warn("⚠️ Connection lost")
+            // Check current state before setting to false
+            setIsConnected((prev) => {
+              // Only set to false if we were previously connected
+              if (prev) {
+                return false
+              }
+              return prev
+            })
+            // Don't set isAgoraInitialized to false - allow UI to show reconnection state
+          } else if (curState === 'CONNECTING' || curState === 'RECONNECTING') {
+            // Keep isConnected true during reconnection to avoid UI flicker
+            console.log(`⏳ Connection state: ${curState}`)
+          }
+        })
+
+        // Create data stream for chat messages
+        try {
+          if (client.createDataStream) {
+            const streamId = await client.createDataStream({ ordered: true })
+            dataStreamIdRef.current = streamId
+            console.log("✅ Data stream created for chat:", streamId)
+          } else {
+            console.warn("⚠️ createDataStream not available, chat will use API fallback")
+          }
+        } catch (streamError) {
+          console.warn("⚠️ Failed to create data stream, chat will use API fallback:", streamError)
+        }
+
+        // Listen for data stream messages (chat and call events)
         client.on("stream-message", (uid: any, data: any) => {
           try {
             const message = JSON.parse(data.text)
             if (message.type === 'chat-message') {
-              console.log("Received chat message:", message.data)
+              console.log("💬 Received chat message:", message.data)
               setChatMessages(prev => [...prev, message.data])
+            } else if (message.type === 'call-ended') {
+              console.log("📞 Call ended by remote user")
+              alert(`${message.data?.senderName || contactName || 'The other person'} has ended the call.`)
+              if (onEndCall) {
+                setTimeout(() => onEndCall(), 1000)
+              }
             }
           } catch (error) {
             console.warn("Failed to parse stream message:", error)
@@ -307,40 +566,67 @@ export function OneOnOneVideoCall({
           }
         ])
 
+        // Mark as fully initialized - connection is established
         setIsAgoraInitialized(true)
-        setIsConnected(true)
+        setIsAgoraInitializing(false)
+        // isConnected is already set to true after join
         setIsConnecting(false)
         
-        // Play local video
+        // Play local video (if available)
         if (localVideoRef.current && localVideoTrack) {
-          localVideoTrack.play(localVideoRef.current)
+          try {
+            localVideoTrack.play(localVideoRef.current)
+          } catch (error) {
+            console.warn("Failed to play local video:", error)
+          }
         }
 
         console.log("One-on-one call started successfully")
         
       } catch (error) {
         console.error("Failed to initialize Agora call:", error)
+        initStartedRef.current = false
+        joiningRef.current = false
+        joinedRef.current = false
+        setIsAgoraInitializing(false)
         setIsConnecting(false)
+        setIsAgoraInitialized(false)
         // Show error to user
         alert("Failed to start video call. Please try again.")
       }
     }
 
-    initAgora()
+    // Delay initialization slightly to avoid React Strict Mode double calls
+    const timer = setTimeout(() => {
+      initAgora()
+    }, 100)
 
     // Cleanup on unmount
     return () => {
-      if (agoraClient) {
-        agoraClient.leave()
+      clearTimeout(timer)
+      initStartedRef.current = false
+      joiningRef.current = false
+      joinedRef.current = false
+      
+      const cleanup = async () => {
+        try {
+          if (localAudioTrack) {
+            localAudioTrack.close()
+          }
+          if (localVideoTrack) {
+            localVideoTrack.close()
+          }
+          if (agoraClientRef.current) {
+            await agoraClientRef.current.leave()
+            agoraClientRef.current = null
+          }
+        } catch (error) {
+          console.warn("Error during cleanup:", error)
+        }
       }
-      if (localAudioTrack) {
-        localAudioTrack.close()
-      }
-      if (localVideoTrack) {
-        localVideoTrack.close()
-      }
+      cleanup()
     }
-  }, [contactId, user?.id, isAgoraInitialized])
+  }, [contactId, sessionId, user?.id])
 
   // Cleanup effect to prevent UID conflicts
   useEffect(() => {
@@ -411,44 +697,78 @@ export function OneOnOneVideoCall({
 
   // Toggle screen sharing
   const toggleScreenShare = async () => {
-    if (!agoraClient) return
+    const client = agoraClientRef.current
+    if (!client) {
+      console.warn("⚠️ Agora client not initialized, cannot toggle screen share")
+      return
+    }
 
     try {
       if (isScreenSharing) {
         // Stop screen sharing
         if (localScreenTrack) {
-          await agoraClient.unpublish([localScreenTrack])
-          localScreenTrack.close()
-          setLocalScreenTrack(null)
+          try {
+            if (client.connectionState === 'CONNECTED') {
+              await client.unpublish([localScreenTrack])
+            }
+            localScreenTrack.close()
+            setLocalScreenTrack(null)
+            setIsScreenSharing(false)
+            console.log("✅ Screen sharing stopped")
+          } catch (error) {
+            console.warn("Error stopping screen share:", error)
+            // Still close the track even if unpublish fails
+            localScreenTrack.close()
+            setLocalScreenTrack(null)
+            setIsScreenSharing(false)
+          }
+        } else {
+          setIsScreenSharing(false)
         }
-        setIsScreenSharing(false)
-        console.log("Screen sharing stopped")
       } else {
+        // Check if client has joined and is connected
+        if (client.connectionState !== 'CONNECTED') {
+          console.warn(`⚠️ Cannot start screen sharing: client not connected (state: ${client.connectionState})`)
+          alert("Please wait for the call to connect before sharing your screen.")
+          return
+        }
+
         // Start screen sharing with proper error handling
         try {
+          console.log("🖥️ Starting screen sharing...")
           const screenTrack = await AgoraRTC.createScreenVideoTrack({
             encoderConfig: "1080p_1"
           })
           
-          await agoraClient.publish([screenTrack])
+          // Verify connection state again before publishing
+          if (client.connectionState !== 'CONNECTED') {
+            screenTrack.close()
+            throw new Error("Client disconnected while creating screen track")
+          }
+          
+          await client.publish([screenTrack])
           setLocalScreenTrack(screenTrack)
           setIsScreenSharing(true)
-          console.log("Screen sharing started")
+          console.log("✅ Screen sharing started successfully")
         } catch (screenError: any) {
-          if (screenError.name === 'NotAllowedError') {
+          console.error("❌ Screen sharing error:", screenError)
+          if (screenError.name === 'NotAllowedError' || screenError.code === 'PERMISSION_DENIED') {
             console.warn("Screen sharing permission denied by user")
             alert("Screen sharing permission was denied. Please allow screen sharing in your browser settings and try again.")
-          } else if (screenError.name === 'NotFoundError') {
+          } else if (screenError.name === 'NotFoundError' || screenError.code === 'DEVICE_NOT_FOUND') {
             console.warn("Screen sharing not supported on this device")
             alert("Screen sharing is not supported on this device.")
+          } else if (screenError.code === 'INVALID_OPERATION' || screenError.message?.includes("haven't joined")) {
+            console.warn("Cannot publish: client not connected")
+            alert("Please wait for the call to connect before sharing your screen.")
           } else {
-            console.error("Screen sharing error:", screenError)
-            alert("Failed to start screen sharing. Please try again.")
+            alert(`Failed to start screen sharing: ${screenError.message || screenError.code || 'Unknown error'}`)
           }
         }
       }
     } catch (error: any) {
       console.error("Error toggling screen share:", error)
+      alert(`Error: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -493,15 +813,67 @@ export function OneOnOneVideoCall({
   const sendChatMessage = useCallback(async (message: string) => {
     if (!sessionId || !message.trim() || isSendingMessage) return
     
+    setIsSendingMessage(true)
     try {
-      setIsSendingMessage(true)
-      
-      const response = await apiClient.post(`/messages/session/${sessionId}/chat`, {
-        message: message.trim()
-      })
-      
-      if (response.success && response.data) {
-        setChatMessages(prev => [...prev, response.data])
+      // Try API first
+      try {
+        const response = await apiClient.post(`/messages/session/${sessionId}/chat`, {
+          message: message.trim()
+        })
+        
+        if (response.success && response.data) {
+          setChatMessages(prev => [...prev, response.data])
+          setNewChatMessage('')
+          return
+        }
+      } catch (apiError: any) {
+        console.warn('API chat failed, trying Agora data stream:', apiError)
+      }
+
+      // Fallback: Use Agora data stream for real-time chat
+      const client = agoraClientRef.current
+      if (client && client.connectionState === 'CONNECTED' && dataStreamIdRef.current !== null) {
+        try {
+          const messageData = {
+            type: 'chat-message',
+            data: {
+              id: `msg_${Date.now()}`,
+              senderId: user?.id,
+              senderName: userName || 'You',
+              content: message.trim(),
+              createdAt: new Date().toISOString()
+            }
+          }
+          
+          await client.sendStreamMessage(dataStreamIdRef.current, JSON.stringify(messageData))
+          
+          // Add to local messages immediately
+          setChatMessages(prev => [...prev, messageData.data])
+          setNewChatMessage('')
+          console.log('✅ Chat message sent via Agora data stream')
+        } catch (streamError) {
+          console.error('Failed to send via Agora data stream:', streamError)
+          // Still add message locally for better UX
+          const localMessage = {
+            id: `msg_${Date.now()}`,
+            senderId: user?.id,
+            senderName: userName || 'You',
+            content: message.trim(),
+            createdAt: new Date().toISOString()
+          }
+          setChatMessages(prev => [...prev, localMessage])
+          setNewChatMessage('')
+        }
+      } else {
+        // Client not connected, add message locally
+        const localMessage = {
+          id: `msg_${Date.now()}`,
+          senderId: user?.id,
+          senderName: userName || 'You',
+          content: message.trim(),
+          createdAt: new Date().toISOString()
+        }
+        setChatMessages(prev => [...prev, localMessage])
         setNewChatMessage('')
       }
     } catch (error) {
@@ -509,7 +881,7 @@ export function OneOnOneVideoCall({
     } finally {
       setIsSendingMessage(false)
     }
-  }, [sessionId, isSendingMessage])
+  }, [sessionId, isSendingMessage, user?.id, userName])
 
   // Load chat messages when component mounts
   useEffect(() => {
@@ -521,51 +893,81 @@ export function OneOnOneVideoCall({
   // End call
   const endCall = async () => {
     try {
-      console.log("Ending one-on-one video call...")
+      console.log("📞 Ending one-on-one video call...")
       
-      if (agoraClient) {
+      const client = agoraClientRef.current
+      
+      // Notify the other person that we're ending the call (via data stream)
+      if (client && client.connectionState === 'CONNECTED' && dataStreamIdRef.current !== null) {
+        try {
+          const endCallMessage = {
+            type: 'call-ended',
+            data: {
+              senderId: user?.id,
+              senderName: userName || 'You',
+              timestamp: new Date().toISOString()
+            }
+          }
+          await client.sendStreamMessage(dataStreamIdRef.current, JSON.stringify(endCallMessage))
+          console.log("✅ Sent call-ended notification to remote user")
+        } catch (error) {
+          console.warn("⚠️ Failed to send call-ended notification:", error)
+        }
+      }
+      
+      if (client || agoraClient) {
+        const activeClient = client || agoraClient
+        
         // Unpublish tracks first
         if (localAudioTrack) {
           try {
-            await agoraClient.unpublish([localAudioTrack])
+            if (activeClient.connectionState === 'CONNECTED') {
+              await activeClient.unpublish([localAudioTrack])
+            }
             localAudioTrack.close()
-            console.log("Audio track closed")
+            console.log("✅ Audio track closed")
           } catch (error) {
-            console.warn("Error closing audio track:", error)
+            console.warn("⚠️ Error closing audio track:", error)
           }
         }
         if (localVideoTrack) {
           try {
-            await agoraClient.unpublish([localVideoTrack])
+            if (activeClient.connectionState === 'CONNECTED') {
+              await activeClient.unpublish([localVideoTrack])
+            }
             localVideoTrack.close()
-            console.log("Video track closed")
+            console.log("✅ Video track closed")
           } catch (error) {
-            console.warn("Error closing video track:", error)
+            console.warn("⚠️ Error closing video track:", error)
           }
         }
         if (localScreenTrack) {
           try {
-            await agoraClient.unpublish([localScreenTrack])
+            if (activeClient.connectionState === 'CONNECTED') {
+              await activeClient.unpublish([localScreenTrack])
+            }
             localScreenTrack.close()
-            console.log("Screen track closed")
+            console.log("✅ Screen track closed")
           } catch (error) {
-            console.warn("Error closing screen track:", error)
+            console.warn("⚠️ Error closing screen track:", error)
           }
         }
         
         // Leave channel
         try {
-          await agoraClient.leave()
-          console.log("Left Agora channel")
+          if (activeClient.connectionState !== 'DISCONNECTED') {
+            await activeClient.leave()
+            console.log("✅ Left Agora channel")
+          }
         } catch (error) {
-          console.warn("Error leaving channel:", error)
+          console.warn("⚠️ Error leaving channel:", error)
         }
         
         // Release Agora client
         try {
-          agoraClient.removeAllListeners()
+          activeClient.removeAllListeners()
         } catch (error) {
-          console.warn("Error removing listeners:", error)
+          console.warn("⚠️ Error removing listeners:", error)
         }
       }
       
@@ -684,55 +1086,193 @@ export function OneOnOneVideoCall({
         </Button>
       </div>
 
-      {/* Video Area */}
-      <div className="flex-1 relative">
-        {/* Remote Video (Main) */}
-        <div className="absolute inset-0 bg-gray-800">
-          {remoteVideoTrack ? (
-            <div ref={remoteVideoRef} className="w-full h-full" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center text-white">
-                <div className="w-24 h-24 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl font-medium">{(contactName || 'U')[0]}</span>
+      {/* Video Area - Improved Layout */}
+      <div className="flex-1 relative bg-black">
+        {/* Screen Sharing - Full Screen (Priority) */}
+        {(isScreenSharing && localScreenTrack) && (
+          <div className="absolute inset-0 bg-black z-10">
+            <div 
+              ref={(el) => {
+                if (el && localScreenTrack) {
+                  localScreenTrack.play(el).catch((error: any) => {
+                    console.warn("Screen track play error:", error)
+                  })
+                }
+              }} 
+              className="w-full h-full"
+            />
+            <div className="absolute top-4 left-4 bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 z-20">
+              <Monitor className="h-5 w-5" />
+              <span className="font-semibold">You are sharing your screen</span>
+            </div>
+            <Button
+              onClick={toggleScreenShare}
+              className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white z-20"
+            >
+              Stop Sharing
+            </Button>
+          </div>
+        )}
+
+        {/* Remote Screen Sharing - Full Screen (Priority) */}
+        {remoteVideoTrack && remoteVideoTrack.trackMediaType === 'screen' && !isScreenSharing && (
+          <div className="absolute inset-0 bg-black z-10">
+            <div 
+              ref={(el) => {
+                if (el && remoteVideoTrack) {
+                  remoteVideoTrack.play(el).catch((error: any) => {
+                    console.warn("Remote screen track play error:", error)
+                  })
+                }
+              }} 
+              className="w-full h-full"
+            />
+            <div className="absolute top-4 left-4 bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 z-20">
+              <Monitor className="h-5 w-5" />
+              <span className="font-semibold">{contactName || 'Participant'} is sharing their screen</span>
+            </div>
+          </div>
+        )}
+
+        {/* Main Layout: Split View (Local Left, Remote Right) for Instructors */}
+        {!isScreenSharing && !(remoteVideoTrack && remoteVideoTrack.trackMediaType === 'screen') && (user?.role === 'ADMIN' || user?.role === 'SENIOR_MANAGER' || user?.role === 'JUNIOR_MANAGER') && (
+          <div className="h-full flex gap-4 p-4">
+            {/* Left: Big Local Video Preview */}
+            <div className="flex-1 min-w-0 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border-2 border-green-400 ring-4 ring-green-400/30 shadow-2xl">
+              <div className="bg-gradient-to-r from-green-500/30 to-green-600/30 px-6 py-3 border-b border-green-400/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <Video className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-green-400 font-bold text-lg">Your Camera</span>
+                    <p className="text-green-300 text-sm">Live video feed</p>
+                  </div>
                 </div>
-                <p className="text-lg">{contactName || 'Unknown'}</p>
-                <p className="text-sm text-gray-400">Waiting for video...</p>
-                {!hasVideoDevice && (
-                  <p className="text-sm text-yellow-400 mt-2">No camera detected on your device</p>
+              </div>
+              <div className="h-[calc(100%-80px)] bg-black relative">
+                {localVideoTrack ? (
+                  <div ref={localVideoRef} className="w-full h-full" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center text-white">
+                      <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-2xl font-medium">You</span>
+                      </div>
+                      <p className="text-gray-400">Camera off</p>
+                    </div>
+                  </div>
+                )}
+                <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold animate-pulse">
+                  LIVE
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Remote Participant */}
+            <div className="w-96 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl overflow-hidden border-2 border-blue-400 ring-4 ring-blue-400/30 shadow-2xl">
+              <div className="bg-gradient-to-r from-blue-500/30 to-blue-600/30 px-6 py-3 border-b border-blue-400/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-blue-400 font-bold text-lg">{contactName || 'Participant'}</span>
+                    <p className="text-blue-300 text-sm">Remote video feed</p>
+                  </div>
+                </div>
+              </div>
+              <div className="h-[calc(100%-80px)] bg-black relative">
+                {remoteVideoTrack ? (
+                  <div ref={remoteVideoRef} className="w-full h-full" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center text-white">
+                      <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-2xl font-medium">{(contactName || 'U')[0]}</span>
+                      </div>
+                      <p className="text-lg font-medium">{contactName || 'Unknown'}</p>
+                      <p className="text-sm text-gray-400">Waiting for video...</p>
+                    </div>
+                  </div>
+                )}
+                {remoteVideoTrack && (
+                  <div className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-semibold animate-pulse">
+                    LIVE
+                  </div>
                 )}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Local Video (Picture-in-Picture) */}
-        <div className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20">
-          {localVideoTrack ? (
-            <div ref={localVideoRef} className="w-full h-full" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-700">
-              <div className="text-center text-white">
-                <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-2">
-                  <span className="text-sm font-medium">You</span>
+        {/* Student Layout: Local Top, Remote Bottom */}
+        {!isScreenSharing && !(remoteVideoTrack && remoteVideoTrack.trackMediaType === 'screen') && user?.role === 'STUDENT' && (
+          <div className="h-full flex flex-col gap-4 p-4">
+            {/* Top: Big Local Video Preview */}
+            <div className="flex-1 min-h-0 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl overflow-hidden border-2 border-green-400 ring-4 ring-green-400/30 shadow-2xl">
+              <div className="bg-gradient-to-r from-green-500/30 to-green-600/30 px-6 py-3 border-b border-green-400/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <Video className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-green-400 font-bold text-lg">Your Camera</span>
+                    <p className="text-green-300 text-sm">Live video feed</p>
+                  </div>
                 </div>
-                <p className="text-xs">Your video</p>
-                {!hasVideoDevice && (
-                  <p className="text-xs text-yellow-400 mt-1">No camera</p>
+              </div>
+              <div className="h-[calc(100%-80px)] bg-black relative">
+                {localVideoTrack ? (
+                  <div ref={localVideoRef} className="w-full h-full" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center text-white">
+                      <div className="w-20 h-20 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-2xl font-medium">You</span>
+                      </div>
+                      <p className="text-gray-400">Camera off</p>
+                    </div>
+                  </div>
                 )}
+                <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold animate-pulse">
+                  LIVE
+                </div>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Screen Sharing Preview - Only show for teachers when sharing */}
-        {isScreenSharing && (user?.role === 'ADMIN' || user?.role === 'SENIOR_MANAGER' || user?.role === 'JUNIOR_MANAGER') && (
-          <div className="absolute top-4 left-4 w-64 h-48 bg-gray-800 rounded-lg border-2 border-blue-500 overflow-hidden">
-            <div className="h-full w-full bg-gray-700 flex items-center justify-center">
-              <div className="text-center text-white">
-                <Monitor className="h-8 w-8 mx-auto mb-2" />
-                <p className="text-sm">Screen Sharing</p>
-                <p className="text-xs text-gray-400">Preview of shared content</p>
+            {/* Bottom: Remote Participant (Instructor) */}
+            <div className="h-64 bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl overflow-hidden border-2 border-blue-400 ring-4 ring-blue-400/30 shadow-2xl">
+              <div className="bg-gradient-to-r from-blue-500/30 to-blue-600/30 px-6 py-3 border-b border-blue-400/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <User className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <span className="text-blue-400 font-bold text-lg">{contactName || 'Instructor'}</span>
+                    <p className="text-blue-300 text-sm">Remote video feed</p>
+                  </div>
+                </div>
+              </div>
+              <div className="h-[calc(100%-80px)] bg-black relative">
+                {remoteVideoTrack ? (
+                  <div ref={remoteVideoRef} className="w-full h-full" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-center text-white">
+                      <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <span className="text-xl font-medium">{(contactName || 'I')[0]}</span>
+                      </div>
+                      <p className="text-sm font-medium">{contactName || 'Instructor'}</p>
+                      <p className="text-xs text-gray-400">Waiting for video...</p>
+                    </div>
+                  </div>
+                )}
+                {remoteVideoTrack && (
+                  <div className="absolute top-2 right-2 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold animate-pulse">
+                    LIVE
+                  </div>
+                )}
               </div>
             </div>
           </div>

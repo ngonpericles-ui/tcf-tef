@@ -176,7 +176,7 @@ export default function MarketplaceProfilePage() {
     isActive: false,
     joinedDate: "",
     lastActive: "",
-    acceptsMessages: true // Default to true
+    acceptsMessages: false // Default to false (OFF state)
   })
 
   const [studentRequests, setStudentRequests] = useState<StudentRequest[]>([])
@@ -223,19 +223,19 @@ export default function MarketplaceProfilePage() {
           setProfile({
             id: profileData.id || user?.id || "",
             name: `${user?.firstName || ""} ${user?.lastName || ""}`.trim(),
-            title: profileData.title || "Formateur Expert",
-            bio: profileData.bio || "",
-            specialties: profileData.specialties || [],
-            subjects: profileData.subjects || [], // Sujets
-            experience: profileData.experience || 0,
-            rating: profileData.rating || 0,
-            totalStudents: profileData.totalStudents || 0,
-            languages: profileData.languages || ["Français"],
-            availability: Array.isArray(profileData.availability) ? profileData.availability : (profileData.availability ? [profileData.availability] : []), // Working time periods as array
-            workingHours: Array.isArray(profileData.workingHours) ? profileData.workingHours : (profileData.workingHours ? [profileData.workingHours] : []), // Working hours as array
-            location: profileData.location || "",
-            website: profileData.website || "",
-            phone: profileData.phone || "",
+            title: profileData.title !== undefined && profileData.title !== null ? profileData.title : "Formateur Expert",
+            bio: profileData.bio !== undefined && profileData.bio !== null ? profileData.bio : "",
+            specialties: Array.isArray(profileData.specialties) ? profileData.specialties : (profileData.specialties !== undefined && profileData.specialties !== null ? [profileData.specialties] : []),
+            subjects: Array.isArray(profileData.subjects) ? profileData.subjects : (profileData.subjects !== undefined && profileData.subjects !== null ? [profileData.subjects] : []), // Sujets
+            experience: profileData.experience !== undefined && profileData.experience !== null ? profileData.experience : 0,
+            rating: profileData.rating !== undefined && profileData.rating !== null ? profileData.rating : 0,
+            totalStudents: profileData.totalStudents !== undefined && profileData.totalStudents !== null ? profileData.totalStudents : 0,
+            languages: Array.isArray(profileData.languages) ? profileData.languages : (profileData.languages !== undefined && profileData.languages !== null ? [profileData.languages] : ["Français"]),
+            availability: Array.isArray(profileData.availability) ? profileData.availability : (profileData.availability !== undefined && profileData.availability !== null ? [profileData.availability] : []), // Working time periods as array
+            workingHours: Array.isArray(profileData.workingHours) ? profileData.workingHours : (profileData.workingHours !== undefined && profileData.workingHours !== null ? [profileData.workingHours] : []), // Working hours as array
+            location: profileData.location !== undefined && profileData.location !== null ? profileData.location : "",
+            website: profileData.website !== undefined && profileData.website !== null ? profileData.website : "",
+            phone: profileData.phone !== undefined && profileData.phone !== null ? profileData.phone : "",
             email: user?.email || "",
             isActive: profileData.isActive || false,
             joinedDate: profileData.joinedDate || new Date().toISOString(),
@@ -251,7 +251,7 @@ export default function MarketplaceProfilePage() {
               }
               return imgUrl || ""
             })(), // Load profile image with full URL
-            acceptsMessages: profileData.acceptsMessages !== false // Default to true if not set
+            acceptsMessages: profileData.acceptsMessages === true // Explicitly check for true, default to false if undefined/null
           })
           // Explicitly check if isActive is true (not just truthy)
           const isActiveStatus = profileData.isActive === true;
@@ -402,19 +402,22 @@ export default function MarketplaceProfilePage() {
       setError(null)
       
       // Transform profile data for API
-      // IMPORTANT: Always send ALL fields to ensure they're saved, even if empty string - don't use || as it treats empty strings as falsy
+      // CRITICAL: Always send ALL fields explicitly, even if empty string or empty array
+      // This ensures fields are properly saved and can be cleared
       const profileData: any = {
-        bio: updatedProfile.bio !== undefined ? updatedProfile.bio : profile.bio,
-        location: updatedProfile.location !== undefined ? updatedProfile.location : profile.location, // Always send location
-        phone: updatedProfile.phone !== undefined ? updatedProfile.phone : profile.phone,
-        website: updatedProfile.website !== undefined ? updatedProfile.website : profile.website,
-        title: updatedProfile.title !== undefined ? updatedProfile.title : profile.title,
-        specialties: updatedProfile.specialties !== undefined ? updatedProfile.specialties : profile.specialties,
-        subjects: updatedProfile.subjects !== undefined ? updatedProfile.subjects : profile.subjects,
-        languages: updatedProfile.languages !== undefined ? updatedProfile.languages : profile.languages,
-        availability: updatedProfile.availability !== undefined ? updatedProfile.availability : profile.availability,
-        workingHours: updatedProfile.workingHours !== undefined ? updatedProfile.workingHours : profile.workingHours,
-        acceptsMessages: updatedProfile.acceptsMessages !== undefined ? updatedProfile.acceptsMessages : profile.acceptsMessages
+        // Always send these fields - use the updated value if provided, otherwise use current profile value
+        // Preserve empty strings - don't convert with || operator
+        bio: updatedProfile.bio !== undefined ? updatedProfile.bio : (profile.bio !== undefined ? profile.bio : ""),
+        location: updatedProfile.location !== undefined ? updatedProfile.location : (profile.location !== undefined ? profile.location : ""),
+        phone: updatedProfile.phone !== undefined ? updatedProfile.phone : (profile.phone !== undefined ? profile.phone : ""),
+        website: updatedProfile.website !== undefined ? updatedProfile.website : (profile.website !== undefined ? profile.website : ""),
+        title: updatedProfile.title !== undefined ? updatedProfile.title : (profile.title !== undefined ? profile.title : ""),
+        specialties: updatedProfile.specialties !== undefined ? (updatedProfile.specialties || []) : (profile.specialties !== undefined ? profile.specialties : []),
+        subjects: updatedProfile.subjects !== undefined ? (updatedProfile.subjects || []) : (profile.subjects !== undefined ? profile.subjects : []),
+        languages: updatedProfile.languages !== undefined ? (updatedProfile.languages || []) : (profile.languages !== undefined ? profile.languages : []),
+        availability: updatedProfile.availability !== undefined ? (updatedProfile.availability || []) : (profile.availability !== undefined ? profile.availability : []),
+        workingHours: updatedProfile.workingHours !== undefined ? (updatedProfile.workingHours || []) : (profile.workingHours !== undefined ? profile.workingHours : []),
+        acceptsMessages: updatedProfile.acceptsMessages !== undefined ? updatedProfile.acceptsMessages : (profile.acceptsMessages !== undefined ? profile.acceptsMessages : false)
       }
       
       console.log('💾 Frontend - Saving profile data:', {
@@ -434,16 +437,17 @@ export default function MarketplaceProfilePage() {
           const updatedProfileData = updatedProfileResponse.data as any
           setProfile(prev => ({
             ...prev,
-            bio: updatedProfileData.bio !== undefined ? updatedProfileData.bio : prev.bio,
-            location: updatedProfileData.location !== undefined ? updatedProfileData.location : prev.location,
-            phone: updatedProfileData.phone !== undefined ? updatedProfileData.phone : prev.phone,
-            website: updatedProfileData.website !== undefined ? updatedProfileData.website : prev.website,
-            title: updatedProfileData.title !== undefined ? updatedProfileData.title : prev.title,
-            specialties: updatedProfileData.specialties !== undefined ? (Array.isArray(updatedProfileData.specialties) ? updatedProfileData.specialties : []) : prev.specialties,
-            subjects: updatedProfileData.subjects !== undefined ? (Array.isArray(updatedProfileData.subjects) ? updatedProfileData.subjects : []) : prev.subjects,
-            languages: updatedProfileData.languages !== undefined ? (Array.isArray(updatedProfileData.languages) ? updatedProfileData.languages : []) : prev.languages,
-            availability: updatedProfileData.availability !== undefined ? (Array.isArray(updatedProfileData.availability) ? updatedProfileData.availability : []) : prev.availability,
-            workingHours: updatedProfileData.workingHours !== undefined ? (Array.isArray(updatedProfileData.workingHours) ? updatedProfileData.workingHours : []) : prev.workingHours,
+            // Always update from backend response - preserve empty strings and empty arrays
+            bio: updatedProfileData.bio !== undefined && updatedProfileData.bio !== null ? updatedProfileData.bio : "",
+            location: updatedProfileData.location !== undefined && updatedProfileData.location !== null ? updatedProfileData.location : "",
+            phone: updatedProfileData.phone !== undefined && updatedProfileData.phone !== null ? updatedProfileData.phone : "",
+            website: updatedProfileData.website !== undefined && updatedProfileData.website !== null ? updatedProfileData.website : "",
+            title: updatedProfileData.title !== undefined && updatedProfileData.title !== null ? updatedProfileData.title : "",
+            specialties: Array.isArray(updatedProfileData.specialties) ? updatedProfileData.specialties : (updatedProfileData.specialties !== undefined && updatedProfileData.specialties !== null ? [updatedProfileData.specialties] : []),
+            subjects: Array.isArray(updatedProfileData.subjects) ? updatedProfileData.subjects : (updatedProfileData.subjects !== undefined && updatedProfileData.subjects !== null ? [updatedProfileData.subjects] : []),
+            languages: Array.isArray(updatedProfileData.languages) ? updatedProfileData.languages : (updatedProfileData.languages !== undefined && updatedProfileData.languages !== null ? [updatedProfileData.languages] : []),
+            availability: Array.isArray(updatedProfileData.availability) ? updatedProfileData.availability : (updatedProfileData.availability !== undefined && updatedProfileData.availability !== null ? [updatedProfileData.availability] : []),
+            workingHours: Array.isArray(updatedProfileData.workingHours) ? updatedProfileData.workingHours : (updatedProfileData.workingHours !== undefined && updatedProfileData.workingHours !== null ? [updatedProfileData.workingHours] : []),
             profileImage: (() => {
               const imgUrl = updatedProfileData.profilePicture || updatedProfileData.profileImage || prev.profileImage || ""
               if (imgUrl && imgUrl.startsWith('/uploads')) {
@@ -455,7 +459,7 @@ export default function MarketplaceProfilePage() {
               }
               return imgUrl || prev.profileImage || ""
             })(), // Keep profile image with full URL
-            acceptsMessages: updatedProfileData.acceptsMessages !== undefined ? (updatedProfileData.acceptsMessages !== false) : prev.acceptsMessages, // Preserve acceptsMessages
+            acceptsMessages: updatedProfileData.acceptsMessages !== undefined ? (updatedProfileData.acceptsMessages === true) : prev.acceptsMessages, // Explicitly check for true
           }))
         } else {
           // Fallback: update with what we sent
@@ -1827,57 +1831,103 @@ export default function MarketplaceProfilePage() {
                                 {t("Statut", "Status")}
                               </p>
                               <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {(profile.acceptsMessages ?? true) === true
+                                {profile.acceptsMessages === true
                                   ? t("Les étudiants peuvent vous envoyer des messages", "Students can send you messages")
                                   : t("Les messages des étudiants sont désactivés", "Student messages are disabled")
                                 }
                               </p>
                             </div>
                           </div>
-                          <Button
-                            variant={(profile.acceptsMessages ?? true) === true ? "default" : "outline"}
-                            onClick={async () => {
-                              const currentValue = (profile.acceptsMessages ?? true) === true
-                              const newValue = !currentValue
-                              try {
-                                setIsSaving(true)
-                                // Optimistically update UI first
-                                setProfile(prev => ({ ...prev, acceptsMessages: newValue }))
-                                
-                                // Use handleProfileUpdate to ensure proper update flow
-                                await handleProfileUpdate({ acceptsMessages: newValue })
-                                toast.success(
-                                  newValue 
-                                    ? t("Messages activés avec succès", "Messages enabled successfully")
-                                    : t("Messages désactivés avec succès", "Messages disabled successfully")
-                                )
-                                // Reload profile to ensure consistency
-                                const profileResponse = await apiClient.get('/manager/marketplace/profile')
-                                if (profileResponse.success && profileResponse.data) {
-                                  const profileData = profileResponse.data as any
-                                  setProfile(prev => ({ ...prev, acceptsMessages: profileData.acceptsMessages ?? true }))
+                          {/* Toggle Switch for Message Acceptance */}
+                          <div className="flex items-center gap-3">
+                            <div className="relative inline-flex items-center">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  // Get current value - explicitly check if it's true (enabled)
+                                  const currentValue = profile.acceptsMessages === true
+                                  const newValue = !currentValue // Toggle: true -> false, false -> true
+                                  
+                                  console.log('🔄 Toggling acceptsMessages:', {
+                                    currentValue,
+                                    newValue,
+                                    currentState: profile.acceptsMessages
+                                  })
+                                  
+                                  try {
+                                    setIsSaving(true)
+                                    // Optimistically update UI first
+                                    setProfile(prev => ({ ...prev, acceptsMessages: newValue }))
+                                    
+                                    // Use handleProfileUpdate to ensure proper update flow
+                                    await handleProfileUpdate({ acceptsMessages: newValue })
+                                    toast.success(
+                                      newValue 
+                                        ? t("Messages activés avec succès", "Messages enabled successfully")
+                                        : t("Messages désactivés avec succès", "Messages disabled successfully")
+                                    )
+                                    // Reload profile to ensure consistency
+                                    const profileResponse = await apiClient.get('/manager/marketplace/profile')
+                                    if (profileResponse.success && profileResponse.data) {
+                                      const profileData = profileResponse.data as any
+                                      // Explicitly set acceptsMessages - check if it's true or false
+                                      const acceptsMessagesValue = profileData.acceptsMessages === true
+                                      console.log('✅ Profile reloaded:', {
+                                        acceptsMessages: profileData.acceptsMessages,
+                                        acceptsMessagesValue
+                                      })
+                                      setProfile(prev => ({ ...prev, acceptsMessages: acceptsMessagesValue }))
+                                    }
+                                  } catch (error: any) {
+                                    // Revert optimistic update on error
+                                    console.error('❌ Error updating acceptsMessages:', error)
+                                    setProfile(prev => ({ ...prev, acceptsMessages: currentValue }))
+                                    toast.error(t("Erreur lors de la mise à jour", "Error updating"))
+                                  } finally {
+                                    setIsSaving(false)
+                                  }
+                                }}
+                                disabled={isSaving}
+                                className={`
+                                  relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#06f957] focus:ring-offset-2
+                                  ${profile.acceptsMessages === true 
+                                    ? 'bg-[#06f957]' 
+                                    : 'bg-gray-300 dark:bg-gray-600'
+                                  }
+                                  ${isSaving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                `}
+                                role="switch"
+                                aria-checked={profile.acceptsMessages === true}
+                                aria-label={profile.acceptsMessages === true 
+                                  ? t("Désactiver les messages", "Disable messages")
+                                  : t("Activer les messages", "Enable messages")
                                 }
-                              } catch (error: any) {
-                                // Revert optimistic update on error
-                                setProfile(prev => ({ ...prev, acceptsMessages: currentValue }))
-                                toast.error(t("Erreur lors de la mise à jour", "Error updating"))
-                              } finally {
-                                setIsSaving(false)
-                              }
-                            }}
-                            disabled={isSaving}
-                            className={(profile.acceptsMessages ?? true) === true ? "bg-green-600 hover:bg-green-700 text-white" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}
-                          >
-                            {isSaving ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                {t("Chargement...", "Loading...")}
-                              </>
-                            ) : (profile.acceptsMessages ?? true) === true
-                              ? t("Activé", "Enabled")
-                              : t("Désactivé", "Disabled")
-                            }
-                          </Button>
+                              >
+                                <span
+                                  className={`
+                                    inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                                    ${profile.acceptsMessages === true ? 'translate-x-6' : 'translate-x-1'}
+                                  `}
+                                />
+                              </button>
+                            </div>
+                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                              {isSaving ? (
+                                <span className="flex items-center gap-2">
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  {t("Chargement...", "Loading...")}
+                                </span>
+                              ) : profile.acceptsMessages === true ? (
+                                <span className="text-green-600 dark:text-green-400 font-semibold">
+                                  {t("Activé", "ON")}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500 dark:text-gray-400 font-semibold">
+                                  {t("Désactivé", "OFF")}
+                                </span>
+                              )}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </CardContent>

@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const axios_1 = __importDefault(require("axios"));
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const i18nService_1 = __importDefault(require("./i18nService"));
 class VapiService {
     constructor() {

@@ -222,7 +222,12 @@ export default function AvantagesProPage() {
               email: t.email,
               role: t.role,
               isActive: t.isActive,
-              status: t.status
+              status: t.status,
+              location: t.location,
+              subjects: t.subjects,
+              workingHours: t.workingHours,
+              availability: t.availability,
+              title: t.title
             }))
           })
 
@@ -269,11 +274,12 @@ export default function AvantagesProPage() {
                   ? [tutor.workingHours] 
                   : []
                 
-                // Status logic: ONLY ONLINE means user is currently online
-                // ACTIVE = user has account (not necessarily online)
-                // ONLINE = user is currently logged in/online on platform
-                // OFFLINE = user has account but not online
-                const isOnline = tutor.status === 'ONLINE'
+                // Status logic: For managers/admins, ACTIVE or ONLINE = online
+                // For students: ONLY ONLINE = online
+                const isManagerOrAdmin = tutor.role === 'ADMIN' || tutor.role === 'SENIOR_MANAGER' || tutor.role === 'JUNIOR_MANAGER'
+                const isOnline = isManagerOrAdmin 
+                  ? (tutor.status === 'ONLINE' || tutor.status === 'ACTIVE')
+                  : (tutor.status === 'ONLINE')
                 
                 const profileImage = (tutor.profileImage || tutor.profilePicture)
                   ? (() => {
@@ -318,6 +324,21 @@ export default function AvantagesProPage() {
           })
 
           setManagers(transformedManagers)
+          
+          console.log('✅ Transformed managers:', transformedManagers.map(t => ({
+            id: t.id,
+            name: `${t.firstName} ${t.lastName}`,
+            status: t.status,
+            isOnline: t.isOnline,
+            role: t.role,
+            location: t.location,
+            title: t.title,
+            bio: t.bio?.substring(0, 50),
+            subjects: t.subjects,
+            workingHours: t.workingHours,
+            availability: t.availability,
+            specialties: t.specialties
+          })))
         }
         
         setDataLoaded(true)

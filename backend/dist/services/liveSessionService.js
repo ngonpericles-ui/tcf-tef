@@ -32,12 +32,16 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionService = void 0;
-const connection_1 = require("../database/connection");
-const errorHandler_1 = require("../middleware/errorHandler");
+const prisma_1 = require("@/lib/prisma");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
+const node_cron_1 = __importDefault(require("node-cron"));
 class LiveSessionService {
     static async createLiveSession(sessionData, createdById, creatorRole) {
         try {
@@ -64,7 +68,7 @@ class LiveSessionService {
                 if (sessionData.requiredTier === 'PRO' && sessionData.maxParticipants === 1) {
                 }
             }
-            const liveSession = await connection_1.prisma.liveSession.create({
+            const liveSession = await prisma_1.prisma.liveSession.create({
                 data: {
                     ...sessionData,
                     createdById,
@@ -97,7 +101,7 @@ class LiveSessionService {
     }
     static async getLiveSessionById(sessionId, userId) {
         try {
-            const liveSession = await connection_1.prisma.liveSession.findUnique({
+            const liveSession = await prisma_1.prisma.liveSession.findUnique({
                 where: { id: sessionId },
                 include: {
                     createdBy: {
@@ -132,7 +136,7 @@ class LiveSessionService {
                 throw new errorHandler_1.NotFoundError('Live session not found');
             }
             if (liveSession.requiredTier !== client_1.SubscriptionTier.FREE && userId) {
-                const user = await connection_1.prisma.user.findUnique({
+                const user = await prisma_1.prisma.user.findUnique({
                     where: { id: userId },
                     select: { subscriptionTier: true, role: true }
                 });
@@ -189,8 +193,8 @@ class LiveSessionService {
                     where.status = status;
                 }
             }
-            const total = await connection_1.prisma.liveSession.count({ where });
-            const sessions = await connection_1.prisma.liveSession.findMany({
+            const total = await prisma_1.prisma.liveSession.count({ where });
+            const sessions = await prisma_1.prisma.liveSession.findMany({
                 where,
                 include: {
                     createdBy: {
@@ -241,7 +245,7 @@ class LiveSessionService {
     }
     static async registerForSession(sessionId, userId) {
         try {
-            const session = await connection_1.prisma.liveSession.findUnique({
+            const session = await prisma_1.prisma.liveSession.findUnique({
                 where: { id: sessionId },
                 include: {
                     participants: true
@@ -256,7 +260,7 @@ class LiveSessionService {
             if (session.status === client_1.LiveSessionStatus.SCHEDULED && session.date <= new Date()) {
                 throw new errorHandler_1.ValidationError('Cannot register for past sessions');
             }
-            const user = await connection_1.prisma.user.findUnique({
+            const user = await prisma_1.prisma.user.findUnique({
                 where: { id: userId },
                 select: { subscriptionTier: true, role: true }
             });
@@ -268,7 +272,7 @@ class LiveSessionService {
                     throw new errorHandler_1.AuthorizationError('Subscription upgrade required to register for this session');
                 }
             }
-            const existingParticipant = await connection_1.prisma.liveSessionParticipant.findUnique({
+            const existingParticipant = await prisma_1.prisma.liveSessionParticipant.findUnique({
                 where: {
                     userId_liveSessionId: {
                         userId,
@@ -282,7 +286,7 @@ class LiveSessionService {
             if (session.participants.length >= session.maxParticipants) {
                 throw new errorHandler_1.ValidationError('Session is full');
             }
-            await connection_1.prisma.liveSessionParticipant.create({
+            await prisma_1.prisma.liveSessionParticipant.create({
                 data: {
                     userId,
                     liveSessionId: sessionId,
@@ -298,7 +302,7 @@ class LiveSessionService {
     }
     static async unregisterFromSession(sessionId, userId) {
         try {
-            const participant = await connection_1.prisma.liveSessionParticipant.findUnique({
+            const participant = await prisma_1.prisma.liveSessionParticipant.findUnique({
                 where: {
                     userId_liveSessionId: {
                         userId,
@@ -309,7 +313,7 @@ class LiveSessionService {
             if (!participant) {
                 throw new errorHandler_1.NotFoundError('Not registered for this session');
             }
-            const session = await connection_1.prisma.liveSession.findUnique({
+            const session = await prisma_1.prisma.liveSession.findUnique({
                 where: { id: sessionId }
             });
             if (!session) {
@@ -318,7 +322,7 @@ class LiveSessionService {
             if (session.status === client_1.LiveSessionStatus.LIVE) {
                 throw new errorHandler_1.ValidationError('Cannot unregister from a live session');
             }
-            await connection_1.prisma.liveSessionParticipant.delete({
+            await prisma_1.prisma.liveSessionParticipant.delete({
                 where: {
                     userId_liveSessionId: {
                         userId,
@@ -341,7 +345,7 @@ class LiveSessionService {
                 userId,
                 userRole
             });
-            const existingSession = await connection_1.prisma.liveSession.findUnique({
+            const existingSession = await prisma_1.prisma.liveSession.findUnique({
                 where: { id: sessionId }
             });
             console.log('📋 Existing session found:', {
@@ -365,7 +369,7 @@ class LiveSessionService {
                 throw new errorHandler_1.AuthorizationError('Access denied. Only admins, managers, or session creators can update session status.');
             }
             console.log('🔄 Updating session status in database...');
-            const updatedSession = await connection_1.prisma.liveSession.update({
+            const updatedSession = await prisma_1.prisma.liveSession.update({
                 where: { id: sessionId },
                 data: {
                     status: newStatus,
@@ -435,7 +439,7 @@ class LiveSessionService {
                         console.error(`❌ Failed to send reminder email to ${participant.user.email}:`, error);
                     }
                 }
-                await connection_1.prisma.sessionReminder.updateMany({
+                await prisma_1.prisma.sessionReminder.updateMany({
                     where: {
                         sessionId,
                         reminderType: 'status_change',
@@ -474,10 +478,10 @@ class LiveSessionService {
     static async getUserRegisteredSessions(userId, pagination) {
         try {
             const { page = 1, limit = 10, sortBy = 'date', sortOrder = 'asc' } = pagination;
-            const total = await connection_1.prisma.liveSessionParticipant.count({
+            const total = await prisma_1.prisma.liveSessionParticipant.count({
                 where: { userId }
             });
-            const participants = await connection_1.prisma.liveSessionParticipant.findMany({
+            const participants = await prisma_1.prisma.liveSessionParticipant.findMany({
                 where: { userId },
                 include: {
                     liveSession: {
@@ -528,7 +532,7 @@ class LiveSessionService {
     }
     static async updateLiveSession(sessionId, userId, userRole, updateData) {
         try {
-            const session = await connection_1.prisma.liveSession.findUnique({
+            const session = await prisma_1.prisma.liveSession.findUnique({
                 where: { id: sessionId },
                 include: {
                     createdBy: {
@@ -553,7 +557,7 @@ class LiveSessionService {
             if (session.createdById !== userId && userRole !== client_1.UserRole.ADMIN) {
                 throw new errorHandler_1.AuthorizationError('You do not have permission to update this session');
             }
-            const updated = await connection_1.prisma.liveSession.update({
+            const updated = await prisma_1.prisma.liveSession.update({
                 where: { id: sessionId },
                 data: {
                     title: updateData.title || session.title,
@@ -583,7 +587,7 @@ class LiveSessionService {
     }
     static async deleteLiveSession(sessionId, userId, userRole) {
         try {
-            const session = await connection_1.prisma.liveSession.findUnique({
+            const session = await prisma_1.prisma.liveSession.findUnique({
                 where: { id: sessionId }
             });
             if (!session) {
@@ -592,7 +596,7 @@ class LiveSessionService {
             if (session.createdById !== userId && userRole !== client_1.UserRole.ADMIN) {
                 throw new errorHandler_1.AuthorizationError('You do not have permission to delete this session');
             }
-            await connection_1.prisma.liveSession.delete({
+            await prisma_1.prisma.liveSession.delete({
                 where: { id: sessionId }
             });
             logger_1.logger.info('Live session deleted', { sessionId, deletedBy: userId });
@@ -610,6 +614,97 @@ class LiveSessionService {
             [client_1.SubscriptionTier.PRO]: 3
         };
         return tierHierarchy[userTier] >= tierHierarchy[requiredTier];
+    }
+    static initializeCronJobs() {
+        node_cron_1.default.schedule('* * * * *', async () => {
+            try {
+                const now = new Date();
+                const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+                const sixMinutesFromNow = new Date(now.getTime() + 6 * 60 * 1000);
+                const sessionsToActivate = await prisma_1.prisma.liveSession.findMany({
+                    where: {
+                        status: 'SCHEDULED',
+                        date: {
+                            gte: fiveMinutesFromNow,
+                            lte: sixMinutesFromNow
+                        }
+                    },
+                    include: {
+                        participants: {
+                            include: {
+                                user: {
+                                    select: {
+                                        id: true,
+                                        firstName: true,
+                                        lastName: true,
+                                        email: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                if (sessionsToActivate.length > 0) {
+                    logger_1.logger.info(`🔄 Found ${sessionsToActivate.length} session(s) to activate (5 minutes before start)`);
+                }
+                for (const session of sessionsToActivate) {
+                    try {
+                        await prisma_1.prisma.liveSession.update({
+                            where: { id: session.id },
+                            data: { status: 'LIVE' }
+                        });
+                        logger_1.logger.info(`✅ Session ${session.id} status changed to LIVE (5 minutes before start)`);
+                        const { EmailService } = await Promise.resolve().then(() => __importStar(require('./emailService')));
+                        const sessionDate = new Date(session.date);
+                        for (const participant of session.participants) {
+                            try {
+                                const emailData = {
+                                    firstName: participant.user.firstName || 'Étudiant',
+                                    email: participant.user.email,
+                                    sessionTitle: session.title,
+                                    sessionDate: sessionDate.toLocaleDateString('fr-FR', {
+                                        weekday: 'long',
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric'
+                                    }),
+                                    sessionTime: sessionDate.toLocaleTimeString('fr-FR', {
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    }),
+                                    joinUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/live`,
+                                    duration: session.duration || 60,
+                                    reminderMinutes: 5
+                                };
+                                await EmailService.sendLiveSessionReminderEmail(emailData);
+                                logger_1.logger.info(`✅ Reminder email sent to ${participant.user.email} for session ${session.id}`);
+                            }
+                            catch (error) {
+                                logger_1.logger.error(`❌ Failed to send reminder email to ${participant.user.email}:`, error);
+                            }
+                        }
+                        await prisma_1.prisma.sessionReminder.updateMany({
+                            where: {
+                                sessionId: session.id,
+                                reminderType: 'status_change',
+                                emailSent: false
+                            },
+                            data: {
+                                emailSent: true,
+                                sentAt: new Date()
+                            }
+                        });
+                    }
+                    catch (error) {
+                        logger_1.logger.error(`❌ Failed to activate session ${session.id}:`, error);
+                    }
+                }
+            }
+            catch (error) {
+                logger_1.logger.error('❌ Error in live session cron job:', error);
+            }
+        });
+        logger_1.logger.info('🕐 Live session status update cron job initialized (runs every minute)');
     }
 }
 exports.LiveSessionService = LiveSessionService;

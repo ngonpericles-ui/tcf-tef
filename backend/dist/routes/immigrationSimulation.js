@@ -454,8 +454,18 @@ router.get('/:id', auth_1.authenticate, async (req, res) => {
 router.post('/book', auth_1.authenticate, async (req, res) => {
     try {
         const userId = req.user?.userId || req.user.id;
-        const { bookingType, preferredDates, country, immigrationType, level, personalInfo, voicePreference } = req.body;
+        const { bookingType, preferredDates, country, immigrationType, level, personalInfo, voicePreference, questionsData } = req.body;
         const language = i18nService_1.default.getLanguageFromRequest(req);
+        console.log('📋 Immigration booking request:', {
+            userId,
+            bookingType,
+            preferredDates,
+            country,
+            immigrationType,
+            level,
+            voicePreference,
+            hasQuestionsData: !!questionsData
+        });
         const sessionData = {
             country: country || 'canada',
             immigrationType: immigrationType || 'skilled_worker',
@@ -464,7 +474,7 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
             voicePreference: voicePreference || 'france_female_1',
             bookingType: bookingType || 'AUTO',
             scheduledDate: preferredDates && preferredDates.length > 0 ? new Date(preferredDates[0]) : null,
-            questionsData: {}
+            questionsData: questionsData || {}
         };
         const simulation = await ImmigrationSimulationService.createImmigrationSession(userId, sessionData);
         res.json({
@@ -477,12 +487,22 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
     }
     catch (error) {
         const language = i18nService_1.default.getLanguageFromRequest(req);
-        console.error('Error booking immigration simulation:', error);
+        console.error('❌ Error booking immigration simulation:', {
+            error: error?.message,
+            stack: error?.stack,
+            userId: req.user?.userId || req.user?.id,
+            body: req.body
+        });
+        const errorMessage = error?.message || (language === 'fr'
+            ? 'Erreur lors de la réservation'
+            : 'Error booking simulation');
         res.status(400).json({
             success: false,
-            message: error.message || (language === 'fr'
-                ? 'Erreur lors de la réservation'
-                : 'Error booking simulation')
+            error: {
+                message: errorMessage,
+                code: error?.code || 'BOOKING_ERROR'
+            },
+            message: errorMessage
         });
     }
 });

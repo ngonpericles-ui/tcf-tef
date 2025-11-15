@@ -585,6 +585,12 @@ function QuestionsPageContent() {
 
   const handleConfirmBooking = async () => {
     try {
+      // Validate required fields
+      if (!selectedCountry || !selectedTopic) {
+        toast.error(t_('Veuillez sélectionner un pays et un type d\'immigration', 'Please select a country and immigration type'));
+        return;
+      }
+
       const bookingData: any = {
         bookingType: bookingType === 'AUTO' ? 'AUTO' : 'MANUAL',
         voicePreference: voicePreference || undefined,
@@ -616,7 +622,16 @@ function QuestionsPageContent() {
         bookingData.preferredDates = [];
       }
 
+      console.log('📤 Sending booking request:', bookingData);
+      
       const response = await apiClient.post('/immigration-simulation/book', bookingData);
+      
+      console.log('📥 Booking response received:', {
+        success: response.success,
+        data: response.data,
+        error: (response as any).error,
+        message: (response as any).message
+      });
 
       if (response.success) {
         toast.success(
@@ -634,12 +649,31 @@ function QuestionsPageContent() {
           await fetchBookings();
         }, 1000);
       } else {
+        console.error('❌ Booking failed - Response details:', {
+          response,
+          error: (response as any).error,
+          message: (response as any).message
+        });
         const errorMsg = (response as any).error?.message || (response as any).message || t_('Échec de la réservation', 'Failed to book simulation');
         toast.error(errorMsg);
       }
     } catch (error: any) {
-      console.error('Error booking simulation:', error);
-      toast.error(t_('Erreur lors de la réservation', 'Failed to book simulation'));
+      console.error('❌ Error booking simulation - FULL DETAILS:', {
+        error,
+        response: error?.response,
+        responseData: error?.response?.data,
+        errorMessage: error?.response?.data?.error?.message,
+        message: error?.response?.data?.message,
+        status: error?.response?.status
+      });
+      
+      const errorMsg = error?.response?.data?.error?.message || 
+                      error?.response?.data?.message || 
+                      error?.message || 
+                      t_('Erreur lors de la réservation', 'Failed to book simulation');
+      
+      console.error('📋 Error message to display:', errorMsg);
+      toast.error(errorMsg);
     }
   };
 

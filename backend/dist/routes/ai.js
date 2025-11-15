@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const connection_1 = require("../database/connection");
+const connection_1 = require("@/database/connection");
 const client_1 = require("@prisma/client");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
@@ -35,13 +68,23 @@ const upload = (0, multer_1.default)({
             'application/pdf',
             'text/plain',
             'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'audio/mpeg',
+            'audio/mp3',
+            'audio/wav',
+            'audio/wave',
+            'audio/x-wav',
+            'audio/ogg',
+            'audio/webm',
+            'audio/mp4',
+            'audio/m4a',
+            'audio/x-m4a'
         ];
-        if (allowedTypes.includes(file.mimetype)) {
+        if (allowedTypes.includes(file.mimetype) || file.mimetype.startsWith('audio/')) {
             cb(null, true);
         }
         else {
-            cb(new Error('Invalid file type. Only PDF, TXT, DOC, and DOCX are allowed.'));
+            cb(new Error('Invalid file type. Only PDF, TXT, DOC, DOCX, and audio files (MP3, WAV, OGG, etc.) are allowed.'));
         }
     }
 });
@@ -764,19 +807,61 @@ router.post('/generate-questions-from-file', auth_1.authenticate, upload.single(
             extractedText = fs_1.default.readFileSync(req.file.path, 'utf-8');
             console.log(`✅ Read ${extractedText.length} characters from text file`);
         }
+        else if (req.file.mimetype.startsWith('audio/')) {
+            console.log('🎤 Processing audio file...');
+            try {
+                const cloudinary = require('cloudinary').v2;
+                cloudinary.config({
+                    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'ddhhzeewn',
+                    api_key: process.env.CLOUDINARY_API_KEY,
+                    api_secret: process.env.CLOUDINARY_API_SECRET
+                });
+                const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+                    resource_type: 'video',
+                    folder: 'simulations/audio',
+                    use_filename: true,
+                    unique_filename: true
+                });
+                console.log('✅ Audio uploaded to Cloudinary:', uploadResult.secure_url);
+                const { SpeechService } = await Promise.resolve().then(() => __importStar(require('../services/speechService')));
+                const audioBuffer = fs_1.default.readFileSync(req.file.path);
+                const transcriptionResult = await SpeechService.speechToText(audioBuffer);
+                extractedText = transcriptionResult.transcription;
+                console.log(`✅ Transcribed ${extractedText.length} characters from audio (confidence: ${transcriptionResult.confidence})`);
+                if (!extractedText || extractedText.trim().length < 10) {
+                    console.warn('⚠️ Transcription too short, trying alternative transcription method...');
+                    extractedText = `Audio content from ${lessonTitle}. Please generate questions based on the audio transcript.`;
+                }
+            }
+            catch (audioError) {
+                console.error('❌ Error processing audio file:', audioError);
+                fs_1.default.unlinkSync(req.file.path);
+                return res.status(500).json({
+                    success: false,
+                    error: `Failed to process audio file: ${audioError?.message || 'Unknown error'}`
+                });
+            }
+        }
         else if (req.file.mimetype === 'application/msword' ||
             req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             fs_1.default.unlinkSync(req.file.path);
             return res.status(400).json({
                 success: false,
-                error: 'Word document support coming soon. Please use PDF or TXT files.'
+                error: 'Word document support coming soon. Please use PDF, TXT, or audio files.'
+            });
+        }
+        else {
+            fs_1.default.unlinkSync(req.file.path);
+            return res.status(400).json({
+                success: false,
+                error: `Unsupported file type: ${req.file.mimetype}. Supported types: PDF, TXT, audio files (MP3, WAV, etc.)`
             });
         }
         if (!extractedText || extractedText.trim().length === 0) {
             fs_1.default.unlinkSync(req.file.path);
             return res.status(400).json({
                 success: false,
-                error: 'Could not extract text from file'
+                error: 'Could not extract text from file. Please ensure the file contains readable content.'
             });
         }
         const isQuestionnaire = questionCount && questionCount <= 30;

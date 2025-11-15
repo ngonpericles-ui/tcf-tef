@@ -35,9 +35,9 @@ var __importStar = (this && this.__importStar) || (function () {
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SubscriptionController = void 0;
-const subscriptionService_1 = require("../services/subscriptionService");
-const errorHandler_1 = require("../middleware/errorHandler");
-const logger_1 = require("../utils/logger");
+const subscriptionService_1 = require("@/services/subscriptionService");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
 class SubscriptionController {
 }
 exports.SubscriptionController = SubscriptionController;
@@ -200,7 +200,7 @@ SubscriptionController.getSubscriptionAnalytics = (0, errorHandler_1.asyncHandle
         });
         return;
     }
-    const { prisma } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
+    const { prisma } = await Promise.resolve().then(() => __importStar(require('@/database/connection')));
     const [totalSubscriptions, activeSubscriptions, subscriptionsByTier, recentSubscriptions, totalRevenue] = await Promise.all([
         prisma.subscription.count(),
         prisma.subscription.count({

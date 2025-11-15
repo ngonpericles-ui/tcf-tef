@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PasswordService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class PasswordService {
     static getSaltRounds(role) {
         switch (role) {

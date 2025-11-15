@@ -156,8 +156,8 @@ class AIService {
             try {
                 text = await mistralApiManager.generateContent(message, {
                     systemPrompt: systemPrompt,
-                    maxTokens: 200,
-                    temperature: 0.7,
+                    maxTokens: 300,
+                    temperature: 0.8,
                     model: 'mistral-small-latest'
                 });
                 text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
@@ -263,27 +263,36 @@ class AIService {
             "writing": "Questions d'expression écrite: rédaction, style, cohérence",
             "oral": "Questions d'expression orale: prononciation, fluidité, communication"
         };
-        const validQuestionCount = Math.min(Math.max(0, questionCount), 100);
+        console.log('🔍 AI Generation - Content Analysis:', {
+            contentLength: content?.length || 0,
+            contentPreview: content?.substring(0, 200) || 'NO CONTENT',
+            transcriptionLength: transcription?.length || 0,
+            hasValidContent: !!(content && content.trim().length > 100)
+        });
+        const sourceContent = transcription || content;
+        if (!sourceContent || sourceContent.trim().length < 100) {
+            console.error('❌ INSUFFICIENT CONTENT FOR QUESTION GENERATION:', {
+                contentLength: sourceContent?.length || 0,
+                contentPreview: sourceContent?.substring(0, 100) || 'EMPTY'
+            });
+            throw new Error('Document content is too short or empty. Please ensure the PDF/document contains readable text content before generating questions.');
+        }
+        const validQuestionCount = Math.min(Math.max(1, questionCount), 100);
         if (validQuestionCount !== questionCount) {
             console.log(`⚠️ Question count adjusted from ${questionCount} to ${validQuestionCount}`);
         }
-        if (validQuestionCount === 0) {
-            console.log('📝 Question count is 0 - allowing manual question addition only');
-            return { questions: [] };
-        }
-        const sourceContent = transcription || content;
-        const effectiveContent = sourceContent.trim().length < 50
-            ? `Le sujet d'examen "${sourceContent.trim()}" pour le cours "${courseTitle}" et la leçon "${lessonTitle}". ${categoryInstructions[category] || 'Questions générales de français.'}`
-            : sourceContent;
+        const effectiveContent = sourceContent.trim();
         console.log('📝 AI Generation Input:', {
-            contentLength: content.length,
+            originalContentLength: content.length,
             effectiveContentLength: effectiveContent.length,
+            contentPreview: effectiveContent.substring(0, 300),
             lessonTitle,
             courseTitle,
             questionCount,
             validQuestionCount,
             category,
-            difficulty
+            difficulty,
+            hasRealContent: effectiveContent.length > 100
         });
         const isExpressionEcrite = category === 'expression_ecrite' || category === 'writing' || category === 'WRITING';
         const isListening = category === 'listening';
@@ -300,6 +309,9 @@ class AIService {
         }
         else if (isReading) {
             prompt = this.getReadingComprehensionPrompt(effectiveContent, courseTitle, lessonTitle, validQuestionCount, difficulty, questionTypes);
+        }
+        else if (category === 'grammar' || category === 'vocabulary') {
+            prompt = this.getVocabularyGrammarPrompt(effectiveContent, courseTitle, lessonTitle, validQuestionCount, category, difficulty || 'medium', questionTypes);
         }
         else {
             prompt = this.getStandardPrompt(effectiveContent, courseTitle, lessonTitle, validQuestionCount, category, difficulty, questionTypes, categoryInstructions, difficultyInstructions);
@@ -325,27 +337,72 @@ class AIService {
                 });
                 console.log(`🤖 AI Response (Batch ${batch + 1}/${batches}):`, response.substring(0, 300) + '...');
                 try {
-                    const jsonMatch = response.match(/\{[\s\S]*"questions"[\s\S]*\}/);
+                    console.log(`🔍 Raw AI Response (Batch ${batch + 1}):`, response.substring(0, 1000));
+                    let parsed = null;
+                    const jsonMatch = response.match(/\{[\s\S]*?"questions"[\s\S]*?\]/);
                     if (jsonMatch) {
-                        const jsonStr = jsonMatch[0];
-                        const cleanedJson = jsonStr
-                            .replace(/,\s*}/g, '}')
-                            .replace(/,\s*]/g, ']')
-                            .replace(/(\w+):/g, '"$1":')
-                            .replace(/:(\w+)/g, ':"$1"');
-                        const parsed = JSON.parse(cleanedJson);
-                        if (parsed.questions && Array.isArray(parsed.questions)) {
-                            console.log(`✅ Successfully parsed JSON response (Batch ${batch + 1}): ${parsed.questions.length} questions`);
-                            const questionsWithPassage = parsed.questions.map((q) => {
-                                const passage = q.passage || parsed.passage || null;
-                                return {
-                                    ...q,
-                                    passage: passage
-                                };
-                            });
-                            allQuestions.push(...questionsWithPassage);
-                            continue;
+                        try {
+                            let jsonStr = jsonMatch[0];
+                            const openBraces = (jsonStr.match(/\{/g) || []).length;
+                            const closeBraces = (jsonStr.match(/\}/g) || []).length;
+                            if (openBraces > closeBraces) {
+                                jsonStr += '}';
+                            }
+                            const cleanedJson = jsonStr
+                                .replace(/,\s*}/g, '}')
+                                .replace(/,\s*]/g, ']')
+                                .replace(/(\w+):/g, '"$1":')
+                                .replace(/"(\w+)":/g, '"$1":')
+                                .replace(/:\s*([^",\[\{][^,\]\}]*)/g, ':"$1"')
+                                .replace(/:"(\d+)"/g, ':$1')
+                                .replace(/:"(true|false)"/g, ':$1')
+                                .replace(/:"null"/g, ':null');
+                            console.log(`🧹 Cleaned JSON (Batch ${batch + 1}):`, cleanedJson.substring(0, 500));
+                            parsed = JSON.parse(cleanedJson);
                         }
+                        catch (cleanError) {
+                            console.log(`❌ JSON cleaning failed (Batch ${batch + 1}):`, cleanError.message);
+                        }
+                    }
+                    if (!parsed) {
+                        try {
+                            parsed = JSON.parse(response);
+                        }
+                        catch (fullParseError) {
+                            console.log(`❌ Full JSON parse failed (Batch ${batch + 1}):`, fullParseError.message);
+                        }
+                    }
+                    if (!parsed) {
+                        const codeBlockMatch = response.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+                        if (codeBlockMatch) {
+                            try {
+                                parsed = JSON.parse(codeBlockMatch[1]);
+                                console.log(`✅ Extracted JSON from code block (Batch ${batch + 1})`);
+                            }
+                            catch (codeBlockError) {
+                                console.log(`❌ Code block JSON parse failed (Batch ${batch + 1}):`, codeBlockError.message);
+                            }
+                        }
+                    }
+                    if (parsed && parsed.questions && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
+                        console.log(`✅ Successfully parsed JSON response (Batch ${batch + 1}): ${parsed.questions.length} questions`);
+                        const questionsWithPassage = parsed.questions.map((q) => {
+                            const passage = q.passage || parsed.passage || null;
+                            return {
+                                ...q,
+                                passage: passage
+                            };
+                        });
+                        allQuestions.push(...questionsWithPassage);
+                        continue;
+                    }
+                    else {
+                        console.log(`❌ Invalid JSON structure (Batch ${batch + 1}):`, {
+                            hasParsed: !!parsed,
+                            hasQuestions: parsed?.questions ? true : false,
+                            isArray: Array.isArray(parsed?.questions),
+                            questionCount: parsed?.questions?.length || 0
+                        });
                     }
                 }
                 catch (parseError) {
@@ -362,7 +419,7 @@ class AIService {
                                 questionText,
                                 type: questionType,
                                 options: questionType === "multiple-choice" ? this.generateRealisticOptions(effectiveContent, category, allQuestions.length + index) : [],
-                                correctAnswer: questionType === "multiple-choice" ? Math.floor(Math.random() * 4) : questionType === "true-false" ? (Math.random() > 0.5 ? "true" : "false") : "Réponse attendue basée sur le contenu",
+                                correctAnswer: questionType === "multiple-choice" ? this.getRandomCorrectAnswer(allQuestions.length + index) : questionType === "true-false" ? (Math.random() > 0.5 ? "true" : "false") : "Réponse attendue basée sur le contenu",
                                 explanation: `Explication détaillée pour la question ${allQuestions.length + index + 1}`,
                                 passage: null,
                                 points: 1,
@@ -775,11 +832,12 @@ CONTENU SOURCE (extrait du PDF):
 "${content.substring(0, 6000)}${content.length > 6000 ? '...[contenu tronqué]' : ''}"
 
 MISSION CRITIQUE:
-1. EXTRACTION DU PASSAGE: Identifiez un passage LONG de 500-2000+ mots dans le contenu source qui servira de TEXTE À LIRE
-   - Si le contenu est court, utilisez-le en entier
-   - Si le contenu est long, sélectionnez un passage cohérent de 500-2000 mots (plusieurs paragraphes)
-   - Le passage peut être le document entier si approprié
-2. GÉNÉRATION DE QUESTIONS: Créez ${questionCount} questions COMPLÈTES et COMPRÉHENSIVES BASÉES sur ce passage long, mais les questions NE DOIVENT PAS répéter le passage
+1. EXTRACTION DU PASSAGE: Identifiez un passage LONG de 300-1500 mots dans le contenu source qui servira de TEXTE À LIRE
+   - Utilisez le contenu réel du document (pas de résumé)
+   - Sélectionnez un passage cohérent et complet
+   - Le passage doit contenir suffisamment d'informations pour générer des questions variées
+   - IMPORTANT: Ce passage sera affiché aux étudiants pour qu'ils le lisent avant de répondre
+2. GÉNÉRATION DE QUESTIONS: Créez ${questionCount} questions BASÉES sur ce passage, mais les questions NE DOIVENT PAS répéter le passage mot pour mot
 
 RÈGLES ABSOLUES POUR COMPRÉHENSION ÉCRITE:
 - Le PASSAGE et la QUESTION doivent être COMPLÈTEMENT DIFFÉRENTS
@@ -798,15 +856,15 @@ TYPES DE QUESTIONS: ${questionTypes.join(', ')}
 
 FORMAT DE RÉPONSE JSON (OBLIGATOIRE):
 {
-  "passage": "Passage LONG de 500-2000+ mots extrait du contenu (SÉPARÉ des questions) - peut être plusieurs paragraphes",
+  "passage": "Passage de 300-1500 mots extrait du contenu réel (ce passage sera affiché aux étudiants)",
   "questions": [
     {
-      "passage": "Passage LONG de 500-2000+ mots (peut être le même pour toutes les questions ou varier par section)",
-      "questionText": "Question complète et claire selon format TCF/TEF testant la compréhension approfondie du passage",
+      "passage": "Même passage de 300-1500 mots (identique pour toutes les questions de cette série)",
+      "questionText": "Question claire testant la compréhension du passage (sans répéter le texte)",
       "type": "multiple-choice",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "options": ["Option A réaliste", "Option B réaliste", "Option C réaliste", "Option D réaliste"],
       "correctAnswer": 0,
-      "explanation": "Explication courte de la réponse (30-50 mots)",
+      "explanation": "Explication courte de la réponse",
       "points": 1,
       "category": "READING",
       "level": "${difficulty || 'B1'}"
@@ -839,49 +897,75 @@ Réponds UNIQUEMENT avec le JSON valide.
     }
     static getStandardPrompt(content, courseTitle, lessonTitle, questionCount, category, difficulty, questionTypes, categoryInstructions, difficultyInstructions) {
         return `
-      Vous êtes un assistant IA spécialisé dans l'éducation du français et la préparation aux tests TCF/TEF.
-      Générez des questions COMPLÈTES et DÉTAILLÉES basées sur le contenu suivant.
-      
-      CONTEXTE IMPORTANT:
-      - Vous devez générer EXACTEMENT ${questionCount} questions DÉTAILLÉES et UNIQUES
-      - Chaque question doit être COMPLÈTE et COMPRÉHENSIVE, couvrant toutes les informations essentielles
-      - Les questions doivent encourager des réponses élaborées, pas seulement des réponses courtes
-      - Chaque question doit aborder différents aspects du contenu (vocabulaire, grammaire, compréhension, expression)
-      - Les questions doivent être VARIÉES et DIFFÉRENTES les unes des autres
-      
-      Cours: ${courseTitle}
-      Leçon: ${lessonTitle}
-      Contenu: ${content.substring(0, 8000)} ${content.length > 8000 ? '...[contenu tronqué pour respecter les limites]' : ''}
-      Catégorie: ${category || 'générale'}
-      Niveau de difficulté: ${difficulty || 'moyen'} - ${difficultyInstructions[difficulty] || 'niveau standard'}
-      
-      INSTRUCTIONS SPÉCIFIQUES:
-      1. Générez EXACTEMENT ${questionCount} questions/SUJETS DÉTAILLÉS
-      2. Chaque question doit être LONGUE et COMPLÈTE (minimum 20-30 mots)
-      3. Chaque question doit couvrir des aspects ESSENTIELS du contenu
-      4. Les questions doivent varier en difficulté et en type
-      5. ${categoryInstructions[category] || 'Questions générales de français.'}
-      6. Niveau de difficulté: ${difficultyInstructions[difficulty] || 'Questions de niveau standard.'}
-      
-      Format de réponse JSON:
-      {
-        "questions": [
-          {
-            "questionText": "Question COMPLÈTE et DÉTAILLÉE",
-            "type": "multiple-choice",
-            "options": ["Option A", "Option B", "Option C", "Option D"],
-            "correctAnswer": 0,
-            "explanation": "Explication DÉTAILLÉE",
-            "points": 1,
-            "category": "${category || 'GENERAL'}",
-            "level": "${difficulty || 'B1'}"
-          }
-        ]
-      }
-      
-      Types de questions supportés: ${questionTypes.join(", ")}
-      Réponds UNIQUEMENT avec le JSON valide.
-    `;
+Vous êtes un expert en création de questions TCF/TEF de haute qualité.
+
+CONTENU SOURCE (extrait du document):
+"${content.substring(0, 8000)}${content.length > 8000 ? '...[contenu tronqué]' : ''}"
+
+MISSION CRITIQUE:
+1. ANALYSER le contenu source pour comprendre les concepts clés, vocabulaire, et structures
+2. GÉNÉRER ${questionCount} questions de qualité professionnelle basées sur ce contenu réel
+3. RESPECTER les standards TCF/TEF officiels
+
+RÈGLES ABSOLUES:
+- Questions basées UNIQUEMENT sur le contenu fourni (pas de connaissances générales)
+- Format TCF/TEF strict: MCQ avec 4 options réalistes et plausibles
+- UNE SEULE bonne réponse par question
+- Options variées et crédibles (pas d'indices évidents)
+- Répartition aléatoire des bonnes réponses (A, B, C, D)
+
+QUALITÉ DES OPTIONS MCQ:
+- Option A correcte: 25% du temps
+- Option B correcte: 25% du temps  
+- Option C correcte: 25% du temps
+- Option D correcte: 25% du temps
+- Toutes les options doivent être grammaticalement correctes
+- Éviter les indices comme "toutes les réponses ci-dessus"
+
+TYPES DE QUESTIONS AUTORISÉS: ${questionTypes.join(', ')}
+CATÉGORIE: ${category || 'générale'}
+NIVEAU: ${difficulty || 'moyen'}
+INSTRUCTIONS SPÉCIFIQUES: ${categoryInstructions[category] || 'Questions générales de français.'}
+
+FORMAT DE RÉPONSE JSON (OBLIGATOIRE):
+{
+  "questions": [
+    {
+      "questionText": "Question claire et précise basée sur le contenu",
+      "type": "multiple-choice",
+      "options": ["Option A réaliste", "Option B réaliste", "Option C réaliste", "Option D réaliste"],
+      "correctAnswer": 0,
+      "explanation": "Explication courte et claire",
+      "points": 1,
+      "category": "${category?.toUpperCase() || 'GENERAL'}",
+      "level": "${difficulty || 'B1'}",
+      "passage": null
+    }
+  ]
+}
+
+EXEMPLES DE BONNES QUESTIONS:
+
+Si le contenu parle de "Marie visite Paris en été":
+
+✅ BONNE QUESTION:
+"Quand Marie visite-t-elle Paris ?"
+Options: ["Au printemps", "En été", "En automne", "En hiver"]
+CorrectAnswer: 1 (En été)
+
+❌ MAUVAISE QUESTION:
+"Marie visite Paris en été. Quand Marie visite-t-elle Paris ?"
+(Répète l'information - interdit!)
+
+VARIEZ LES BONNES RÉPONSES:
+- Question 1: correctAnswer: 0 (Option A)
+- Question 2: correctAnswer: 2 (Option C)  
+- Question 3: correctAnswer: 1 (Option B)
+- Question 4: correctAnswer: 3 (Option D)
+
+Générez EXACTEMENT ${questionCount} questions de qualité professionnelle.
+Réponds UNIQUEMENT avec le JSON valide.
+`;
     }
     static generateRealisticOptions(content, category = 'general', questionIndex = 0) {
         const contentWords = content.split(/\s+/).filter(word => word.length > 3);
@@ -1050,6 +1134,58 @@ Réponds UNIQUEMENT avec le JSON valide.
                 'Environnement et développement durable'
             ];
         }
+    }
+    static getRandomCorrectAnswer(questionIndex) {
+        const seed = questionIndex * 7 + 3;
+        return seed % 4;
+    }
+    static generateContentBasedFallback(content, questionType, category, difficulty, questionIndex) {
+        const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
+        const randomSentence = sentences[questionIndex % sentences.length] || "Le contenu étudié";
+        const contentKeywords = this.extractKeywords(content);
+        const keyword1 = contentKeywords[questionIndex % contentKeywords.length] || "concept";
+        const keyword2 = contentKeywords[(questionIndex + 1) % contentKeywords.length] || "élément";
+        let questionText = "";
+        let options = [];
+        let correctAnswer = 0;
+        if (questionType === "multiple-choice") {
+            questionText = `Selon le contenu, quel est l'aspect principal concernant ${keyword1} ?`;
+            options = [
+                `${keyword1} est un élément central`,
+                `${keyword2} est plus important`,
+                `Aucune relation avec ${keyword1}`,
+                `${keyword1} n'est pas mentionné`
+            ];
+            correctAnswer = this.getRandomCorrectAnswer(questionIndex);
+        }
+        else if (questionType === "true-false") {
+            questionText = `Le contenu mentionne-t-il des informations sur ${keyword1} ?`;
+            correctAnswer = Math.random() > 0.5 ? "true" : "false";
+        }
+        else {
+            questionText = `Expliquez l'importance de ${keyword1} selon le contenu étudié.`;
+            correctAnswer = `Réponse basée sur l'analyse de ${keyword1} dans le contexte du document`;
+        }
+        return {
+            questionText,
+            type: questionType,
+            options,
+            correctAnswer,
+            explanation: `Cette question évalue la compréhension de ${keyword1} dans le contexte du document étudié.`,
+            passage: null,
+            points: 1,
+            category: category?.toUpperCase() || 'GENERAL',
+            level: difficulty || 'B1'
+        };
+    }
+    static extractKeywords(content) {
+        const commonWords = ['le', 'la', 'les', 'un', 'une', 'des', 'de', 'du', 'et', 'ou', 'mais', 'donc', 'car', 'ni', 'or'];
+        const words = content.toLowerCase()
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter(word => word.length > 3 && !commonWords.includes(word));
+        const uniqueWords = [...new Set(words)];
+        return uniqueWords.slice(0, 20);
     }
 }
 exports.AIService = AIService;

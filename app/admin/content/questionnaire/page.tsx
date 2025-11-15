@@ -264,7 +264,7 @@ export default function QuestionnaireCreator() {
           formData.append('category', 'TEST')
           formData.append('title', questionnaire.title)
           
-          const uploadResponse = await apiClient.post('/upload', formData, {
+          const uploadResponse = await apiClient.post('/content/upload', formData, {
             headers: {
               'Content-Type': 'multipart/form-data'
             }
@@ -899,7 +899,7 @@ export default function QuestionnaireCreator() {
       formData.append('category', 'TEST')
       formData.append('title', questionnaire.title || 'Audio Test')
       
-      const uploadResponse = await apiClient.post('/upload', formData, {
+      const uploadResponse = await apiClient.post('/content/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -952,7 +952,7 @@ export default function QuestionnaireCreator() {
       formData.append('category', 'TEST')
       formData.append('title', questionnaire.title || 'Video Test')
       
-      const uploadResponse = await apiClient.post('/upload', formData, {
+      const uploadResponse = await apiClient.post('/content/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -1988,9 +1988,13 @@ export default function QuestionnaireCreator() {
                         }
                       }}
                       onBlur={(e) => {
-                        // Ensure valid value on blur
-                        const value = parseInt(e.target.value) || 1
-                        setQuestionCount(Math.min(30, Math.max(1, value)))
+                        // Ensure valid value on blur - but allow 0 to keep button disabled until user enters a number
+                        const value = parseInt(e.target.value) || 0
+                        if (value === 0) {
+                          setQuestionCount(0) // Keep 0 to show user needs to enter a number
+                        } else {
+                          setQuestionCount(Math.min(30, Math.max(1, value)))
+                        }
                       }}
                       placeholder="Entrez le nombre exact de questions (1-30)"
                       className="bg-background border-input text-foreground"
@@ -2021,6 +2025,7 @@ export default function QuestionnaireCreator() {
                 <Button
                   onClick={handleGenerateQuestionsWithAI}
                     disabled={isGeneratingQuestions || 
+                      questionCount === 0 ||
                       (questionnaire.category === "listening" && !audioUrl && !videoUrl) ||
                       ((questionnaire.category === "reading" || questionnaire.category === "expression_ecrite") && !extractedPdfContent?.trim()) ||
                       (questionnaire.category !== "listening" && questionnaire.category !== "reading" && questionnaire.category !== "expression_ecrite" && !extractedPdfContent?.trim()) ||

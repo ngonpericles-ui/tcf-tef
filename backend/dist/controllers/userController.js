@@ -2,10 +2,10 @@
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserController = void 0;
-const userService_1 = require("../services/userService");
-const errorHandler_1 = require("../middleware/errorHandler");
+const userService_1 = require("@/services/userService");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 class UserController {
 }
 exports.UserController = UserController;

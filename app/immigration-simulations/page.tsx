@@ -303,8 +303,16 @@ function ImmigrationPageContent() {
                   <div className="absolute inset-0 bg-gradient-to-br from-[#2ECC71]/10 via-transparent to-[#2ECC71]/5 rounded-3xl" />
                   
                   {/* Image Container */}
-                  <div className="relative rounded-2xl overflow-hidden shadow-xl">
-                    <div className="w-full bg-center bg-no-repeat aspect-video bg-cover rounded-lg" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCeyuKF1zqODsGHCBRcyvh4KSGFRvWPcbchFz2K8JdTMKMbxvCHcthjU2adsiCZJvG6wKkTUwi_UaCdULOWblOhGbBjHgoleURguS4t6Bk1dhgaoJkS_GE609yRtOQE1ZUI6VrH5xB-UIhDpofp26jKFRqtWwdrSbB2hEXfhU_nnOsCziRg_djpauczVlToJzo_AK6eYm2DTJJ0t6MhgkKJP2h6hwfE_p1SzwqS-q2isuXAVFMJwIoYWF98dLiulknev3DTMSl4QuN")' }}></div>
+                  <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[568/379]">
+                    <Image
+                      src="/immigration-simulations/timeline/travel.png"
+                      alt="Immigration Journey"
+                      width={568}
+                      height={379}
+                      className="w-full h-full rounded-lg object-cover"
+                      priority
+                      unoptimized={false}
+                    />
                     {/* Overlay Gradient */}
                     <div className="absolute inset-0 bg-gradient-to-t from-[#2ECC71]/5 to-transparent pointer-events-none" />
                   </div>

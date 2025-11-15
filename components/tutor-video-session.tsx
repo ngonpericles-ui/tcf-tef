@@ -130,6 +130,11 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
   const [isAgoraInitialized, setIsAgoraInitialized] = useState(false)
   const [isAgoraInitializing, setIsAgoraInitializing] = useState(false)
   
+  // Refs for cleanup
+  const agoraClientRef = useRef<any>(null)
+  const localAudioTrackRef = useRef<any>(null)
+  const localVideoTrackRef = useRef<any>(null)
+  
   // Device detection states
   const [hasCamera, setHasCamera] = useState<boolean | null>(null)
   const [hasMicrophone, setHasMicrophone] = useState<boolean | null>(null)
@@ -372,16 +377,26 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
             ...msg,
             timestamp: new Date(msg.timestamp)
           }))
+          // Sort by timestamp
+          messagesWithDates.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
           
           setChatMessages(prevMessages => {
             const previousCount = prevMessages.length
             const newCount = messagesWithDates.length
             
+            // Only update if there are new messages
             if (newCount > previousCount) {
               console.log(`💬 New messages received: ${previousCount} → ${newCount}`)
+              return messagesWithDates
             }
-            
-            return messagesWithDates
+            // Check if any message IDs are different (in case messages were edited/deleted)
+            const prevIds = new Set(prevMessages.map(m => m.id))
+            const newIds = new Set(messagesWithDates.map(m => m.id))
+            if (prevIds.size !== newIds.size || [...newIds].some(id => !prevIds.has(id))) {
+              return messagesWithDates
+            }
+            // No changes, keep previous messages
+            return prevMessages
           })
         }
 
@@ -487,8 +502,19 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
 
   // Initialize Agora with proper error handling
   useEffect(() => {
+    // Guard refs to prevent double initialization
+    const initStartedRef = { current: false }
+    const joiningRef = { current: false }
+    const joinedRef = { current: false }
+    
     const initAgora = async () => {
       if (!sessionId || !user?.id || isAgoraInitialized || isAgoraInitializing || typeof window === 'undefined') return
+      if (initStartedRef.current || joiningRef.current || joinedRef.current) {
+        console.log("⚠️ Agora initialization already in progress, skipping...")
+        return
+      }
+      
+      initStartedRef.current = true
 
       try {
         setIsAgoraInitializing(true)
@@ -511,6 +537,7 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
         // Create Agora client
         const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" })
         setAgoraClient(client)
+        agoraClientRef.current = client
 
         // Get Agora token from backend
         const tokenResponse = await apiClient.post(`/agora/rtc/token`, {
@@ -523,10 +550,25 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
           throw new Error("Failed to get Agora RTC token")
         }
 
-        const tokenData = tokenResponse.data as { token: string }
+        const tokenData = tokenResponse.data as { token: string; uid: number; originalUid?: string | number }
         if (!tokenData.token) {
           throw new Error("No token received from server")
         }
+
+        // Use numeric UID returned by backend (required by Agora)
+        const numericUid = tokenData.uid || (typeof tokenData.originalUid === 'number' ? tokenData.originalUid : parseInt(String(tokenData.originalUid || user.id), 10))
+        
+        // Convert string UID to numeric if needed
+        const finalNumericUid = typeof numericUid === 'number' ? numericUid : (() => {
+          let hash = 0
+          const uidStr = String(user.id)
+          for (let i = 0; i < uidStr.length; i++) {
+            const char = uidStr.charCodeAt(i)
+            hash = ((hash << 5) - hash) + char
+            hash = hash & hash // Convert to 32-bit integer
+          }
+          return Math.abs(hash) % 2147483647
+        })()
 
         const { token } = tokenData
         const APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID || "dddd690283894422ac4f4336bac4a325"
@@ -538,24 +580,101 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
           return
         }
 
-        console.log("Joining Agora channel:", sessionId, "with App ID:", APP_ID)
+        console.log("Joining Agora channel:", sessionId, "with App ID:", APP_ID, "UID:", finalNumericUid)
         
-        // Check if already in channel to prevent UID_CONFLICT
+        // Check if already joined
+        if (joinedRef.current) {
+          console.log("⚠️ Already joined, skipping join...")
+          return
+        }
+        
+        joiningRef.current = true
         try {
-          await client.join(APP_ID, sessionId, token, user.id)
+          await client.join(APP_ID, sessionId, token, finalNumericUid)
+          joinedRef.current = true
+          joiningRef.current = false
         } catch (joinError: any) {
+          joiningRef.current = false
           if (joinError.code === 'UID_CONFLICT') {
-            console.log("User already in channel, leaving and rejoining...")
-            await client.leave()
-            await client.join(APP_ID, sessionId, token, user.id)
+            console.log("⚠️ UID_CONFLICT detected, leaving and rejoining...")
+            try {
+              await client.leave()
+              await new Promise(resolve => setTimeout(resolve, 500)) // Wait before rejoining
+              await client.join(APP_ID, sessionId, token, finalNumericUid)
+              joinedRef.current = true
+              console.log("✅ Successfully rejoined after UID_CONFLICT")
+            } catch (retryError) {
+              console.error("❌ Failed to rejoin after UID_CONFLICT:", retryError)
+              throw retryError
+            }
           } else {
             throw joinError
           }
         }
 
-        // Initialize Agora client without auto-creating tracks
-        // Tracks will be created when user manually turns on camera/mic
-        console.log("✅ Agora client joined successfully (tracks will be created on demand)")
+        console.log("✅ Agora client joined successfully")
+        
+        // Wait for connection to stabilize
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Auto-publish video and audio tracks for tutor (instructor)
+        if (user.role !== "STUDENT" && hasCamera !== false && hasMicrophone !== false) {
+          try {
+            const tracksToPublish: any[] = []
+            
+            // Create and publish video track
+            if (hasCamera) {
+              try {
+                const videoTrack = await AgoraRTC.createCameraVideoTrack()
+                localVideoTrackRef.current = videoTrack
+                setLocalVideoTrack(videoTrack)
+                
+                // Create MediaStream from track for preview
+                if (videoTrack.getMediaStreamTrack) {
+                  const stream = new MediaStream([videoTrack.getMediaStreamTrack()])
+                  setLocalVideoStream(stream)
+                }
+                
+                tracksToPublish.push(videoTrack)
+                setIsVideoOn(true)
+                console.log("✅ Video track created")
+              } catch (videoError: any) {
+                if (videoError.code !== 'DEVICE_NOT_FOUND') {
+                  console.warn("⚠️ Failed to create video track:", videoError)
+                }
+              }
+            }
+            
+            // Create and publish audio track
+            if (hasMicrophone) {
+              try {
+                const audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
+                localAudioTrackRef.current = audioTrack
+                setLocalAudioTrack(audioTrack)
+                tracksToPublish.push(audioTrack)
+                setIsMicOn(true)
+                console.log("✅ Audio track created")
+              } catch (audioError: any) {
+                if (audioError.code !== 'DEVICE_NOT_FOUND') {
+                  console.warn("⚠️ Failed to create audio track:", audioError)
+                }
+              }
+            }
+            
+            // Publish tracks if connection is ready
+            if (tracksToPublish.length > 0 && client.connectionState === 'CONNECTED') {
+              try {
+                await client.publish(tracksToPublish)
+                console.log("✅ Tracks published successfully")
+              } catch (publishError) {
+                console.warn("⚠️ Failed to publish tracks:", publishError)
+              }
+            }
+          } catch (error) {
+            console.warn("⚠️ Failed to auto-publish tracks:", error)
+          }
+        }
+        
         setIsAgoraInitialized(true)
         setIsAgoraInitializing(false)
 
@@ -603,10 +722,47 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
             }
           }
         })
+        
+        // Handle existing users in channel (users who joined before us)
+        const existingUsers = client.remoteUsers || []
+        if (existingUsers.length > 0) {
+          console.log(`👥 Found ${existingUsers.length} existing users in channel`)
+          for (const remoteUser of existingUsers) {
+            try {
+              if (remoteUser.hasVideo) {
+                await client.subscribe(remoteUser, "video")
+                const remoteVideoTrack = remoteUser.videoTrack
+                if (remoteVideoTrack) {
+                  const remoteVideoContainer = document.createElement("div")
+                  remoteVideoContainer.id = `remote-video-${remoteUser.uid}`
+                  remoteVideoContainer.style.width = "100%"
+                  remoteVideoContainer.style.height = "100%"
+                  
+                  const videoGrid = document.querySelector('.grid')
+                  if (videoGrid) {
+                    videoGrid.appendChild(remoteVideoContainer)
+                    remoteVideoTrack.play(remoteVideoContainer)
+                  }
+                }
+              }
+              if (remoteUser.hasAudio) {
+                await client.subscribe(remoteUser, "audio")
+                const remoteAudioTrack = remoteUser.audioTrack
+                if (remoteAudioTrack) {
+                  remoteAudioTrack.play()
+                }
+              }
+            } catch (error) {
+              console.error("Failed to subscribe to existing user:", error)
+            }
+          }
+        }
 
       } catch (error) {
         console.error("Failed to initialize Agora:", error)
-        // Fallback to basic functionality without Agora
+        initStartedRef.current = false
+        joiningRef.current = false
+        joinedRef.current = false
         setIsAgoraInitialized(false)
         setIsAgoraInitializing(false)
       }
@@ -614,25 +770,41 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
 
     // Add a small delay to ensure everything is ready
     const timer = setTimeout(initAgora, 1000)
-    return () => clearTimeout(timer)
-
+    
     // Cleanup function
     return () => {
+      clearTimeout(timer)
       const cleanupAgora = async () => {
         try {
-          if (localAudioTrack) {
-            localAudioTrack.close()
+          // Use refs for cleanup to avoid stale closures
+          if (localAudioTrackRef.current) {
+            localAudioTrackRef.current.close()
+            localAudioTrackRef.current = null
             setLocalAudioTrack(null)
           }
-          if (localVideoTrack) {
-            localVideoTrack.close()
+          if (localVideoTrackRef.current) {
+            localVideoTrackRef.current.close()
+            localVideoTrackRef.current = null
             setLocalVideoTrack(null)
+            setLocalVideoStream(null)
           }
-          if (agoraClient) {
-            await agoraClient.leave()
+          if (agoraClientRef.current) {
+            try {
+              // Only leave if we actually joined
+              if (agoraClientRef.current.connectionState !== 'DISCONNECTED') {
+                await agoraClientRef.current.leave()
+              }
+            } catch (leaveError) {
+              console.warn("Error leaving channel:", leaveError)
+            }
+            agoraClientRef.current = null
             setAgoraClient(null)
-            console.log("Agora client left channel")
+            console.log("✅ Agora client left channel")
           }
+          // Reset guard refs
+          initStartedRef.current = false
+          joiningRef.current = false
+          joinedRef.current = false
           setIsAgoraInitialized(false)
           setIsAgoraInitializing(false)
         } catch (error) {
@@ -641,7 +813,7 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
       }
       cleanupAgora()
     }
-  }, [sessionId, user?.id, user?.role])
+  }, [sessionId, user?.id, user?.role, hasCamera, hasMicrophone])
 
   // Handle camera and microphone controls
   const handleMicToggle = async () => {
@@ -652,16 +824,19 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
         return
       }
 
-      if (isAgoraInitialized && AgoraRTC) {
-        if (!localAudioTrack && !isMicOn) {
+      if (isAgoraInitialized && AgoraRTC && agoraClientRef.current) {
+        if (!localAudioTrackRef.current && !isMicOn) {
           // Create microphone track when turning ON
           const audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
+          localAudioTrackRef.current = audioTrack
           setLocalAudioTrack(audioTrack)
-          await agoraClient?.publish([audioTrack])
-          console.log("✅ Microphone track created and published")
-        } else if (localAudioTrack) {
+          if (agoraClientRef.current.connectionState === 'CONNECTED') {
+            await agoraClientRef.current.publish([audioTrack])
+            console.log("✅ Microphone track created and published")
+          }
+        } else if (localAudioTrackRef.current) {
           // Toggle existing track
-          await localAudioTrack.setMuted(isMicOn)
+          await localAudioTrackRef.current.setMuted(isMicOn)
           console.log("Microphone toggled via Agora:", !isMicOn)
         }
         setIsMicOn(!isMicOn)
@@ -685,16 +860,26 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
         return
       }
 
-      if (isAgoraInitialized && AgoraRTC) {
-        if (!localVideoTrack && !isVideoOn) {
+      if (isAgoraInitialized && AgoraRTC && agoraClientRef.current) {
+        if (!localVideoTrackRef.current && !isVideoOn) {
           // Create camera track when turning ON
           const videoTrack = await AgoraRTC.createCameraVideoTrack()
+          localVideoTrackRef.current = videoTrack
           setLocalVideoTrack(videoTrack)
-          await agoraClient?.publish([videoTrack])
-          console.log("✅ Camera track created and published")
-        } else if (localVideoTrack) {
+          
+          // Create MediaStream from track for preview
+          if (videoTrack.getMediaStreamTrack) {
+            const stream = new MediaStream([videoTrack.getMediaStreamTrack()])
+            setLocalVideoStream(stream)
+          }
+          
+          if (agoraClientRef.current.connectionState === 'CONNECTED') {
+            await agoraClientRef.current.publish([videoTrack])
+            console.log("✅ Camera track created and published")
+          }
+        } else if (localVideoTrackRef.current) {
           // Toggle existing track
-          await localVideoTrack.setMuted(isVideoOn)
+          await localVideoTrackRef.current.setMuted(isVideoOn)
           console.log("Video toggled via Agora:", !isVideoOn)
         }
         setIsVideoOn(!isVideoOn)
@@ -998,11 +1183,18 @@ export function TutorVideoSession({ onSessionEnd }: TutorVideoSessionProps = {})
   }
 
   if (!session) {
+    const getBackUrl = () => {
+      if (!user) return "/"
+      if (user.role === "ADMIN") return "/admin/live-sessions"
+      if (["SENIOR_MANAGER", "JUNIOR_MANAGER"].includes(user.role)) return "/manager/sessions"
+      return "/live"
+    }
+
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <p className="text-destructive mb-4">Session not found</p>
-          <Button onClick={() => window.location.href = "/admin/live-sessions"}>
+          <Button onClick={() => window.location.href = getBackUrl()}>
             Back to Sessions
           </Button>
         </div>
