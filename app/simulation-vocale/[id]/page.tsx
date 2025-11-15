@@ -617,9 +617,8 @@ function SimulationRoomContent() {
   const minutesUntilStart = timeUntilStart / (1000 * 60);
   const simulationEnd = new Date(scheduledDate.getTime() + simulation.duration * 1000);
   
-  const canStart = simulation.status === 'ACTIVE' || 
-                   (minutesUntilStart <= 5 && minutesUntilStart >= 0) || 
-                   (now >= scheduledDate && now <= simulationEnd);
+  // Allow immediate access to simulations - no time restrictions
+  const canStart = simulation.status === 'ACTIVE' || simulation.status === 'SCHEDULED';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
@@ -666,30 +665,7 @@ function SimulationRoomContent() {
             </div>
           )}
 
-          {!canStart && !isCallActive && !micPermissionError && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-              <Card className="max-w-md">
-                <CardContent className="pt-6 text-center">
-                  <Loader2 className="h-12 w-12 animate-spin text-purple-600 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">
-                    {t_('Simulation non accessible', 'Simulation not accessible')}
-                  </h2>
-                  <p className="text-gray-600">
-                    {minutesUntilStart > 5
-                      ? t_(
-                          `Cette simulation sera accessible dans ${Math.ceil(minutesUntilStart - 5)} minute${Math.ceil(minutesUntilStart - 5) > 1 ? 's' : ''}.`,
-                          `This simulation will be accessible in ${Math.ceil(minutesUntilStart - 5)} minute${Math.ceil(minutesUntilStart - 5) > 1 ? 's' : ''}.`
-                        )
-                      : t_(
-                          'Cette simulation n\'est pas encore accessible.',
-                          'This simulation is not yet accessible.'
-                        )
-                    }
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          {/* Removed time restriction overlay - simulations now start immediately */}
         </div>
 
         {/* Controls */}
@@ -728,7 +704,7 @@ function SimulationRoomContent() {
                 onClick={handleStartCall}
                 size="lg"
                 className="h-16 w-16 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-                disabled={!canStart || !micPermissionGranted || !vapiRef.current}
+                disabled={!canStart || !vapiRef.current}
               >
                 <PhoneOff className="h-6 w-6 rotate-135" />
               </Button>
@@ -745,9 +721,7 @@ function SimulationRoomContent() {
 
           {!isCallActive && canStart && (
             <p className="text-center text-sm text-gray-600 mt-4">
-              {!micPermissionGranted 
-                ? t_('Autorisez l\'accès au microphone pour démarrer', 'Allow microphone access to start')
-                : !vapiRef.current
+              {!vapiRef.current
                 ? t_('Initialisation du service vocal...', 'Initializing voice service...')
                 : t_('Cliquez sur le bouton vert pour démarrer la simulation', 'Click the green button to start the simulation')
               }
