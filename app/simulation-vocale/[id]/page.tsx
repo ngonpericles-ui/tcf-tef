@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
 import { motion } from 'framer-motion';
+import { apiClient } from '@/lib/api-client';
 import { SimulationWaitingPage } from '@/components/simulation-waiting-page';
 
 interface VoiceSimulation {
@@ -164,80 +165,59 @@ function SimulationRoomContent() {
   useEffect(() => {
     const loadSimulation = async () => {
       try {
-        const url = `/api/voice-simulation/${simulationId}`;
-
-        let urlWithToken = url;
-        const headers: HeadersInit = {
-          'Content-Type': 'application/json'
-        };
+        console.log('🔄 Loading simulation:', simulationId);
         
-        if (token) {
-          urlWithToken = `${url}?token=${token}`;
-        } else {
-          headers['Authorization'] = `Bearer ${localStorage.getItem('token')}`;
-        }
+        // Use apiClient which handles authentication automatically
+        const response = await apiClient.get(`/voice-simulation/${simulationId}`);
 
-        const response = await fetch(urlWithToken, { headers });
-
-        if (!response.ok) {
-          const errorResponse = await response.json().catch(() => ({ message: 'Erreur serveur' }));
+        if (!response.success) {
+          console.error('❌ Failed to load simulation:', response.error);
           
-          if (errorResponse.code === 'TOO_EARLY') {
+          const errorData = response.error as any;
+          
+          if (errorData?.code === 'TOO_EARLY') {
             setErrorCode('TOO_EARLY');
             setErrorData({
-              minutesUntilAccessible: errorResponse.minutesUntilAccessible || 0,
-              scheduledDate: errorResponse.scheduledDate
+              minutesUntilAccessible: errorData.minutesUntilAccessible || 0,
+              scheduledDate: errorData.scheduledDate
             });
-            setError(errorResponse.message || t_('Accès temporairement restreint', 'Access temporarily restricted'));
+            setError(errorData.message || t_('Accès temporairement restreint', 'Access temporarily restricted'));
             return;
-          } else if (errorResponse.code === 'SIMULATION_ENDED') {
+          } else if (errorData?.code === 'SIMULATION_ENDED') {
             setErrorCode('SIMULATION_ENDED');
-            setError(errorResponse.message || t_('Cette simulation a pris fin', 'This simulation has ended'));
+            setError(errorData.message || t_('Cette simulation a pris fin', 'This simulation has ended'));
             return;
-          } else if (response.status === 401 || response.status === 403) {
-            setError(errorResponse.message || t_('Accès refusé ou simulation non accessible', 'Access denied or simulation not accessible'));
-          } else if (response.status === 404) {
+          } else if (errorData?.status === 401 || errorData?.status === 403) {
+            setError(errorData?.message || t_('Accès refusé ou simulation non accessible', 'Access denied or simulation not accessible'));
+          } else if (errorData?.status === 404) {
             setError(t_('Simulation non trouvée', 'Simulation not found'));
           } else {
-            setError(errorResponse.message || t_('Erreur lors du chargement', 'Error loading simulation'));
+            setError(errorData?.message || t_('Erreur lors du chargement', 'Error loading simulation'));
           }
           return;
         }
 
-        const data = await response.json();
-        setSimulation(data.data);
+        console.log('✅ Simulation loaded successfully:', response.data);
+        const simulationData = response.data as VoiceSimulation;
+        setSimulation(simulationData);
 
-        if (data.data.status === 'ACTIVE') {
+        if (simulationData.status === 'ACTIVE') {
           setIsCallActive(true);
           console.log('✅ Simulation is already ACTIVE');
         }
 
-        if (data.data.status === 'COMPLETED') {
-          const endedAt = data.data.updatedAt || data.data.endedAt || data.data.completedAt;
-          if (endedAt) {
-            const endTime = new Date(endedAt);
-            const now = new Date();
-            const timeSinceEnd = (now.getTime() - endTime.getTime()) / (1000 * 60);
-            
-            if (timeSinceEnd > 2) {
-              setErrorCode('SIMULATION_ENDED');
-              setError(
-                t_(
-                  'Cette simulation a pris fin. Le lien d\'accès expire 2 minutes après la fin pour des raisons de sécurité.',
-                  'This simulation has ended. Access links expire 2 minutes after completion for security reasons.'
-                )
-              );
-              return;
-            }
-          }
+        if (simulationData.status === 'COMPLETED') {
+          // For completed simulations, we'll let the backend handle timing restrictions
+          // The simulation access is managed server-side
+          console.log('✅ Simulation is COMPLETED - access controlled by backend');
         }
 
-        const scheduledDate = new Date(data.data.scheduledDate);
+        const scheduledDate = new Date(simulationData.scheduledDate);
         const now = new Date();
         const timeUntilStart = scheduledDate.getTime() - now.getTime();
         const minutesUntilStart = timeUntilStart / (1000 * 60);
 
-        if (data.data.status === 'ACTIVE') {
+        if (simulationData.status === 'ACTIVE') {
           setHasSeenGuide(true);
           console.log('✅ Simulation is ACTIVE, skipping guide');
         } else {
@@ -246,7 +226,7 @@ function SimulationRoomContent() {
             setErrorCode('TOO_EARLY');
             setErrorData({
               minutesUntilAccessible: waitTime,
-              scheduledDate: data.data.scheduledDate
+              scheduledDate: simulationData.scheduledDate
             });
             setError(
               t_(
