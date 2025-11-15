@@ -86,7 +86,15 @@ function SimulationRoomContent() {
 
   // Initialize VAPI SDK
   useEffect(() => {
+    console.log('🔍 VAPI init check:', {
+      hasVapiConfig: !!vapiConfig,
+      isClient: typeof window !== 'undefined',
+      hasVapiRef: !!vapiRef.current,
+      publicKey: vapiConfig?.publicKey
+    });
+    
     if (vapiConfig && typeof window !== 'undefined' && !vapiRef.current) {
+      console.log('🚀 Starting VAPI initialization...');
       const initVapi = async () => {
         try {
           setIsInitializingVapi(true);
@@ -138,7 +146,7 @@ function SimulationRoomContent() {
             setIsCallActive(false);
           });
 
-          console.log('✅ VAPI initialized successfully');
+          console.log('✅ VAPI initialized successfully - Button should now be enabled!', !!vapiRef.current);
         } catch (error) {
           console.error('❌ Error initializing VAPI:', error);
           toast.error(t_('Erreur d\'initialisation du service vocal', 'Voice service initialization error'));
@@ -708,14 +716,22 @@ function SimulationRoomContent() {
             </Button>
 
             {!isCallActive ? (
-              <Button
-                onClick={handleStartCall}
-                size="lg"
-                className="h-16 w-16 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-                disabled={!canStart || !vapiRef.current}
-              >
-                <PhoneOff className="h-6 w-6 rotate-135" />
-              </Button>
+              <>
+                {console.log('🔍 Button state check:', {
+                  canStart,
+                  hasVapiRef: !!vapiRef.current,
+                  isDisabled: !canStart || !vapiRef.current,
+                  simulationStatus: simulation?.status
+                })}
+                <Button
+                  onClick={handleStartCall}
+                  size="lg"
+                  className="h-16 w-16 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                  disabled={!canStart || !vapiRef.current}
+                >
+                  <PhoneOff className="h-6 w-6 rotate-135" />
+                </Button>
+              </>
             ) : (
               <Button
                 onClick={handleEndCall}
