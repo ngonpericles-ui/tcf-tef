@@ -17,16 +17,31 @@ export async function GET(
       }, { status: 400 });
     }
     
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-    const authHeader = request.headers.get('authorization') || '';
+    // Get backend URL - try multiple environment variable options
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 
+                       process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 
+                       'http://localhost:3001';
+    
+    // Handle token from query parameter (for email links)
+    const token = request.nextUrl.searchParams.get('token');
+    const authHeader = token 
+      ? `Bearer ${token}` 
+      : (request.headers.get('authorization') || '');
+    
+    // Build URL with token if present
+    const url = token 
+      ? `${backendUrl}/api/voice-simulation/${id}?token=${token}`
+      : `${backendUrl}/api/voice-simulation/${id}`;
     
     console.log('📋 Frontend API route: Fetching simulation:', {
       id,
-      backendUrl: `${backendUrl}/api/voice-simulation/${id}`,
-      hasAuth: !!authHeader
+      url,
+      hasToken: !!token,
+      hasAuth: !!authHeader,
+      backendUrl
     });
     
-    const response = await fetch(`${backendUrl}/api/voice-simulation/${id}`, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -51,11 +66,29 @@ export async function GET(
     if (!response.ok) {
       console.error('❌ Backend error:', {
         status: response.status,
-        error: responseData
+        error: responseData,
+        url,
+        hasToken: !!token,
+        hasAuth: !!authHeader
       });
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to fetch simulation';
+      if (response.status === 404) {
+        errorMessage = responseData?.message || 'Simulation not found';
+      } else if (response.status === 401 || response.status === 403) {
+        errorMessage = responseData?.message || 'Access denied or authentication failed';
+      } else if (responseData?.message) {
+        errorMessage = responseData.message;
+      } else if (responseData?.error?.message) {
+        errorMessage = responseData.error.message;
+      }
+      
       return NextResponse.json({
         success: false,
-        error: responseData?.message || responseData?.error?.message || responseData?.error || 'Failed to fetch simulation'
+        error: errorMessage,
+        code: responseData?.code,
+        details: responseData
       }, { status: response.status });
     }
 
