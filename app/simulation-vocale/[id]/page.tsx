@@ -382,7 +382,13 @@ function SimulationRoomContent() {
       }
 
       const startData = response;
-      const assistantId = startData.data?.assistant?.id || startData.data?.assistantId || simulation?.assistantId;
+      console.log('🎯 Backend response structure:', startData);
+      
+      // Handle different response structures safely
+      const assistantId = (startData as any).data?.assistant?.id || 
+                         (startData as any).data?.assistantId || 
+                         (startData as any).assistant?.id ||
+                         simulation?.assistantId;
 
       if (!assistantId) {
         toast.dismiss();
