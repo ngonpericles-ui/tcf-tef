@@ -171,28 +171,26 @@ function SimulationRoomContent() {
         const response = await apiClient.get(`/voice-simulation/${simulationId}`);
 
         if (!response.success) {
-          console.error('❌ Failed to load simulation:', response.error);
+          console.error('❌ Failed to load simulation:', response);
           
-          const errorData = response.error as any;
+          // Backend error response comes directly in response object, not nested in error
+          const errorResponse = response as any;
           
-          if (errorData?.code === 'TOO_EARLY') {
+          if (errorResponse.code === 'TOO_EARLY') {
             setErrorCode('TOO_EARLY');
             setErrorData({
-              minutesUntilAccessible: errorData.minutesUntilAccessible || 0,
-              scheduledDate: errorData.scheduledDate
+              minutesUntilAccessible: errorResponse.minutesUntilAccessible || 0,
+              scheduledDate: errorResponse.scheduledDate
             });
-            setError(errorData.message || t_('Accès temporairement restreint', 'Access temporarily restricted'));
+            setError(errorResponse.message || t_('Accès temporairement restreint', 'Access temporarily restricted'));
             return;
-          } else if (errorData?.code === 'SIMULATION_ENDED') {
+          } else if (errorResponse.code === 'SIMULATION_ENDED') {
             setErrorCode('SIMULATION_ENDED');
-            setError(errorData.message || t_('Cette simulation a pris fin', 'This simulation has ended'));
+            setError(errorResponse.message || t_('Cette simulation a pris fin', 'This simulation has ended'));
             return;
-          } else if (errorData?.status === 401 || errorData?.status === 403) {
-            setError(errorData?.message || t_('Accès refusé ou simulation non accessible', 'Access denied or simulation not accessible'));
-          } else if (errorData?.status === 404) {
-            setError(t_('Simulation non trouvée', 'Simulation not found'));
           } else {
-            setError(errorData?.message || t_('Erreur lors du chargement', 'Error loading simulation'));
+            // Generic error handling
+            setError(errorResponse.message || errorResponse.error?.message || t_('Erreur lors du chargement', 'Error loading simulation'));
           }
           return;
         }
