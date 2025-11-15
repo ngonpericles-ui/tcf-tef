@@ -34,10 +34,10 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AdminService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const client_1 = require("@prisma/client");
-const password_1 = require("@/utils/password");
-const logger_1 = require("@/utils/logger");
+const password_1 = require("../utils/password");
+const logger_1 = require("../utils/logger");
 class AdminService {
     static async getDashboardData(timeframe, metrics) {
         const now = new Date();

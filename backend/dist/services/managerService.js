@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ManagerService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const client_1 = require("@prisma/client");
-const notificationService_1 = require("@/services/notificationService");
-const logger_1 = require("@/utils/logger");
+const notificationService_1 = require("../services/notificationService");
+const logger_1 = require("../utils/logger");
 class ManagerService {
     static async getDashboardData(managerId, timeframe, team) {
         const startDate = this.getStartDate(timeframe);

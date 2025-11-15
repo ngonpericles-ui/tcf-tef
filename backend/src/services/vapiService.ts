@@ -351,7 +351,19 @@ class VapiService {
     - Recommandations spécifiques pour l'amélioration basées sur les difficultés observées
     - Points forts identifiés
 
-    Commence maintenant l'entretien par te présenter, puis pose IMMÉDIATEMENT la première question personnelle (nom).`;
+    ════════════════════════════════════════════════════════════════
+    DÉMARRAGE IMMÉDIAT (TRÈS IMPORTANT)
+    ════════════════════════════════════════════════════════════════
+    
+    DÈS QUE L'APPEL COMMENCE:
+    1. Dis immédiatement le message de bienvenue (firstMessage)
+    2. IMMÉDIATEMENT après, pose la première question personnelle: "Comment vous appelez-vous ?"
+    3. N'attends PAS de réponse avant de commencer - commence à parler dès que l'appel démarre
+    4. Sois naturel, amical et encourageant
+    5. Après la réponse du candidat, continue avec les autres questions personnelles (âge, profession, famille, lieu de résidence)
+    6. PROGRESSE ensuite vers A2, B1, B2 selon les performances
+    
+    IMPORTANT: Ne reste pas silencieux au début - parle immédiatement pour mettre le candidat à l'aise et commencer l'évaluation.`;
 
     // Get server URL for function calls
     const serverUrl = `${process.env.BACKEND_URL || process.env.FRONTEND_URL || 'http://localhost:5000'}/api/voice-simulation/vapi-function-call`;
@@ -561,7 +573,7 @@ class VapiService {
         tools: tools
       },
       voice: voiceSettings,
-      firstMessage: "Bonjour ! Je suis votre évaluateur pour cette simulation d'entretien oral en français. Nous allons passer environ 5 minutes ensemble. Êtes-vous prêt à commencer ?",
+      firstMessage: "Bonjour ! Je suis votre évaluateur pour cette simulation d'entretien oral en français. Nous allons passer environ 5 minutes ensemble. Commençons par quelques questions simples. Comment vous appelez-vous ?",
       endCallMessage: "Merci pour cette simulation ! Vous recevrez vos résultats détaillés par email dans quelques minutes. Bonne journée !",
       recordingEnabled: true,
       maxDurationSeconds: 300, // 5 minutes
@@ -1174,16 +1186,36 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
     }
   }
 
-  // Get progressive questions from question bank - organized by level and category
+  // Cache for progressive questions to avoid database hits on every simulation
+  private static progressiveQuestionsCache: {
+    data: {
+      personalInfo: any[];
+      byLevel: { A1: any[]; A2: any[]; B1: any[]; B2: any[] };
+      byCategory: Record<string, any[]>;
+    };
+    timestamp: number;
+  } | null = null;
+  
+  private static readonly CACHE_TTL = 15 * 60 * 1000; // 15 minutes cache
+
+  // Get progressive questions from question bank - optimized with caching
   async getProgressiveQuestions(): Promise<{
     personalInfo: any[];
     byLevel: { A1: any[]; A2: any[]; B1: any[]; B2: any[] };
     byCategory: Record<string, any[]>;
   }> {
     try {
-      console.log(`🔍 Fetching progressive questions from all levels and categories`);
+      // Check cache first
+      const now = Date.now();
+      if (VapiService.progressiveQuestionsCache && 
+          (now - VapiService.progressiveQuestionsCache.timestamp) < VapiService.CACHE_TTL) {
+        console.log(`⚡ Using cached progressive questions (${VapiService.progressiveQuestionsCache.data.byLevel.A1.length + VapiService.progressiveQuestionsCache.data.byLevel.A2.length + VapiService.progressiveQuestionsCache.data.byLevel.B1.length + VapiService.progressiveQuestionsCache.data.byLevel.B2.length} total questions)`);
+        return VapiService.progressiveQuestionsCache.data;
+      }
 
-      // Get question banks from database
+      console.log(`🔍 Fetching progressive questions from database (cache expired or empty)`);
+
+      // Get question banks from database - optimized query
       const questionBanks = await prisma.questionBank.findMany({
         where: {
           isActive: true
@@ -1197,7 +1229,8 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
         },
         orderBy: {
           createdAt: 'desc'
-        }
+        },
+        take: 50 // Limit to prevent massive queries
       });
 
       console.log(`📚 Found ${questionBanks.length} question banks in database`);
@@ -1300,11 +1333,20 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
         return fallback;
       }
 
-      return {
+      const result = {
         personalInfo: personalInfoQuestions,
         byLevel: questionsByLevel,
         byCategory: questionsByCategory
       };
+
+      // Cache the result
+      VapiService.progressiveQuestionsCache = {
+        data: result,
+        timestamp: now
+      };
+
+      console.log(`📚 Progressive questions organized and cached successfully`);
+      return result;
 
     } catch (error) {
       console.error('❌ Error getting progressive questions:', error);

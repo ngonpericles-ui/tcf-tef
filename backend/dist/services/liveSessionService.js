@@ -37,10 +37,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LiveSessionService = void 0;
-const prisma_1 = require("@/lib/prisma");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const prisma_1 = require("../lib/prisma");
+const errorHandler_1 = require("../middleware/errorHandler");
 const client_1 = require("@prisma/client");
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 const node_cron_1 = __importDefault(require("node-cron"));
 class LiveSessionService {
     static async createLiveSession(sessionData, createdById, creatorRole) {

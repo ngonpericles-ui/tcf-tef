@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ContentManagementService = void 0;
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const logger_1 = require("../utils/logger");
 const errors_1 = require("../utils/errors");
 const cloudinaryService_1 = require("./cloudinaryService");

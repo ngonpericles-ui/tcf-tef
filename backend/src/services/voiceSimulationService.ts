@@ -281,7 +281,7 @@ class VoiceSimulationService {
 
       const simulation = result.simulation;
 
-      // Get progressive questions organized by level and category
+      // Get progressive questions organized by level and category (cached for performance)
       const progressiveQuestions = await vapiService.getProgressiveQuestions();
 
       // Get voice ID from questionsData (where we store the actual voice ID like 'france_male_1')
@@ -430,6 +430,31 @@ class VoiceSimulationService {
   // Get a specific simulation
   async getSimulation(simulationId: string, userId: string): Promise<any> {
     try {
+      // First check if simulation exists at all (for better error messages)
+      const simulationExists = await prisma.voiceSimulation.findUnique({
+        where: { id: simulationId },
+        select: { id: true, userId: true }
+      });
+
+      if (!simulationExists) {
+        console.error('❌ Simulation not found in database:', {
+          simulationId,
+          userId
+        });
+        throw new Error('Simulation not found');
+      }
+
+      // Check if userId matches
+      if (simulationExists.userId !== userId) {
+        console.error('❌ User ID mismatch:', {
+          simulationId,
+          simulationUserId: simulationExists.userId,
+          requestUserId: userId
+        });
+        throw new Error('Access denied: This simulation belongs to a different user');
+      }
+
+      // Now fetch the full simulation with all data
       const simulation = await prisma.voiceSimulation.findFirst({
         where: {
           id: simulationId,

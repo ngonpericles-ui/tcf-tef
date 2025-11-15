@@ -69,12 +69,20 @@ class AgoraService {
             const currentTime = Math.floor(Date.now() / 1000);
             const privilegeExpiredTs = currentTime + expiry;
             const token = agora_token_1.RtmTokenBuilder.buildToken(this.appId, this.appCertificate, uid, privilegeExpiredTs);
-            logger_1.logger.info('RTM token generated successfully', { uid, expiry: privilegeExpiredTs });
+            let hash = 0;
+            for (let i = 0; i < uid.length; i++) {
+                const char = uid.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            const numericUid = Math.abs(hash) % 2147483647;
+            logger_1.logger.info('RTM token generated successfully', { uid, numericUid, expiry: privilegeExpiredTs });
             return {
                 token,
                 appId: this.appId,
                 channelName: '',
-                uid,
+                uid: numericUid,
+                originalUid: uid,
                 role: 'rtm_user',
                 expiry: privilegeExpiredTs,
                 timestamp: currentTime

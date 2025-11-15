@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const prisma_1 = require("@/lib/prisma");
+const prisma_1 = require("../lib/prisma");
 const vapiService_1 = __importDefault(require("./vapiService"));
 const emailService_1 = require("./emailService");
 const i18nService_1 = __importDefault(require("./i18nService"));
@@ -343,6 +343,25 @@ class VoiceSimulationService {
     }
     async getSimulation(simulationId, userId) {
         try {
+            const simulationExists = await prisma_1.prisma.voiceSimulation.findUnique({
+                where: { id: simulationId },
+                select: { id: true, userId: true }
+            });
+            if (!simulationExists) {
+                console.error('❌ Simulation not found in database:', {
+                    simulationId,
+                    userId
+                });
+                throw new Error('Simulation not found');
+            }
+            if (simulationExists.userId !== userId) {
+                console.error('❌ User ID mismatch:', {
+                    simulationId,
+                    simulationUserId: simulationExists.userId,
+                    requestUserId: userId
+                });
+                throw new Error('Access denied: This simulation belongs to a different user');
+            }
             const simulation = await prisma_1.prisma.voiceSimulation.findFirst({
                 where: {
                     id: simulationId,

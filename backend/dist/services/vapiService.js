@@ -37,7 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const axios_1 = __importDefault(require("axios"));
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const i18nService_1 = __importDefault(require("./i18nService"));
 class VapiService {
     constructor() {
@@ -249,7 +249,19 @@ class VapiService {
     - Recommandations spécifiques pour l'amélioration basées sur les difficultés observées
     - Points forts identifiés
 
-    Commence maintenant l'entretien par te présenter, puis pose IMMÉDIATEMENT la première question personnelle (nom).`;
+    ════════════════════════════════════════════════════════════════
+    DÉMARRAGE IMMÉDIAT (TRÈS IMPORTANT)
+    ════════════════════════════════════════════════════════════════
+    
+    DÈS QUE L'APPEL COMMENCE:
+    1. Dis immédiatement le message de bienvenue (firstMessage)
+    2. IMMÉDIATEMENT après, pose la première question personnelle: "Comment vous appelez-vous ?"
+    3. N'attends PAS de réponse avant de commencer - commence à parler dès que l'appel démarre
+    4. Sois naturel, amical et encourageant
+    5. Après la réponse du candidat, continue avec les autres questions personnelles (âge, profession, famille, lieu de résidence)
+    6. PROGRESSE ensuite vers A2, B1, B2 selon les performances
+    
+    IMPORTANT: Ne reste pas silencieux au début - parle immédiatement pour mettre le candidat à l'aise et commencer l'évaluation.`;
         const serverUrl = `${process.env.BACKEND_URL || process.env.FRONTEND_URL || 'http://localhost:5000'}/api/voice-simulation/vapi-function-call`;
         const serverUrlSecret = process.env.VAPI_SERVER_URL_SECRET || 'vapi-secret-key';
         const tools = [
@@ -452,7 +464,7 @@ class VapiService {
                 tools: tools
             },
             voice: voiceSettings,
-            firstMessage: "Bonjour ! Je suis votre évaluateur pour cette simulation d'entretien oral en français. Nous allons passer environ 5 minutes ensemble. Êtes-vous prêt à commencer ?",
+            firstMessage: "Bonjour ! Je suis votre évaluateur pour cette simulation d'entretien oral en français. Nous allons passer environ 5 minutes ensemble. Commençons par quelques questions simples. Comment vous appelez-vous ?",
             endCallMessage: "Merci pour cette simulation ! Vous recevrez vos résultats détaillés par email dans quelques minutes. Bonne journée !",
             recordingEnabled: true,
             maxDurationSeconds: 300,
@@ -997,7 +1009,13 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
     }
     async getProgressiveQuestions() {
         try {
-            console.log(`🔍 Fetching progressive questions from all levels and categories`);
+            const now = Date.now();
+            if (VapiService.progressiveQuestionsCache &&
+                (now - VapiService.progressiveQuestionsCache.timestamp) < VapiService.CACHE_TTL) {
+                console.log(`⚡ Using cached progressive questions (${VapiService.progressiveQuestionsCache.data.byLevel.A1.length + VapiService.progressiveQuestionsCache.data.byLevel.A2.length + VapiService.progressiveQuestionsCache.data.byLevel.B1.length + VapiService.progressiveQuestionsCache.data.byLevel.B2.length} total questions)`);
+                return VapiService.progressiveQuestionsCache.data;
+            }
+            console.log(`🔍 Fetching progressive questions from database (cache expired or empty)`);
             const questionBanks = await connection_1.prisma.questionBank.findMany({
                 where: {
                     isActive: true
@@ -1011,7 +1029,8 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
                 },
                 orderBy: {
                     createdAt: 'desc'
-                }
+                },
+                take: 50
             });
             console.log(`📚 Found ${questionBanks.length} question banks in database`);
             const questionsByLevel = {
@@ -1092,11 +1111,17 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
                 const fallback = this.getDefaultProgressiveQuestions();
                 return fallback;
             }
-            return {
+            const result = {
                 personalInfo: personalInfoQuestions,
                 byLevel: questionsByLevel,
                 byCategory: questionsByCategory
             };
+            VapiService.progressiveQuestionsCache = {
+                data: result,
+                timestamp: now
+            };
+            console.log(`📚 Progressive questions organized and cached successfully`);
+            return result;
         }
         catch (error) {
             console.error('❌ Error getting progressive questions:', error);
@@ -1286,5 +1311,7 @@ Répondez UNIQUEMENT avec un JSON dans ce format exact:
         return questions.slice(0, count);
     }
 }
+VapiService.progressiveQuestionsCache = null;
+VapiService.CACHE_TTL = 15 * 60 * 1000;
 exports.default = new VapiService();
 //# sourceMappingURL=vapiService.js.map

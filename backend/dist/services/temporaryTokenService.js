@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const connection_1 = require("@/database/connection");
+const connection_1 = require("../database/connection");
 const crypto_1 = __importDefault(require("crypto"));
 class TemporaryTokenService {
     static async generateToken(userId, simulationId, simulationType, expirationHours = 2) {
@@ -78,7 +78,7 @@ class TemporaryTokenService {
                 return { isValid: false, error: 'Simulation not found or access denied' };
             }
             if (tokenData.simulationType === 'voice') {
-                const { prisma } = await Promise.resolve().then(() => __importStar(require('@/database/connection')));
+                const { prisma } = await Promise.resolve().then(() => __importStar(require('../database/connection')));
                 const simulation = await prisma.voiceSimulation.findUnique({
                     where: { id: tokenData.simulationId }
                 });
@@ -104,18 +104,12 @@ class TemporaryTokenService {
                         simulationType: tokenData.simulationType
                     };
                 }
-                if (minutesUntilStart > 0 && minutesUntilStart <= 5) {
+                if (minutesUntilStart > 0) {
                     return {
                         isValid: true,
                         userId: tokenData.userId,
                         simulationId: tokenData.simulationId,
                         simulationType: tokenData.simulationType
-                    };
-                }
-                if (minutesUntilStart > 5) {
-                    return {
-                        isValid: false,
-                        error: `Cette simulation n'est pas encore accessible. Elle sera accessible 5 minutes avant le début (dans ${Math.ceil(minutesUntilStart - 5)} minute${Math.ceil(minutesUntilStart - 5) > 1 ? 's' : ''}).`
                     };
                 }
             }

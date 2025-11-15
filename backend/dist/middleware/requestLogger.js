@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requestTimeout = exports.createBilingualErrorResponse = exports.apiUsageTracker = exports.performanceMonitor = exports.errorLogger = exports.requestLogger = void 0;
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 function generateRequestId() {
     return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }

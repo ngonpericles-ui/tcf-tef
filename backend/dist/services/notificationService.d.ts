@@ -1,4 +1,4 @@
-import { NotificationWithStatus, CreateNotificationRequest, PaginationParams } from '@/types';
+import { NotificationWithStatus, CreateNotificationRequest, PaginationParams } from '../types';
 import { UserRole, NotificationType, NotificationStatus } from '@prisma/client';
 export declare class NotificationService {
     static createNotification(notificationData: CreateNotificationRequest, creatorRole: UserRole): Promise<any>;

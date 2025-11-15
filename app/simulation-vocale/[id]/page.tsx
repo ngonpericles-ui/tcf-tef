@@ -219,31 +219,17 @@ function SimulationRoomContent() {
           setHasSeenGuide(true);
           console.log('✅ Simulation is ACTIVE, skipping guide');
         } else {
-          if (minutesUntilStart > 5) {
-            const waitTime = Math.ceil(minutesUntilStart - 5);
-            setErrorCode('TOO_EARLY');
-            setErrorData({
-              minutesUntilAccessible: waitTime,
-              scheduledDate: simulationData.scheduledDate
-            });
-            setError(
-              t_(
-                `Cette simulation n'est pas encore accessible. Elle sera accessible dans ${waitTime} minute${waitTime > 1 ? 's' : ''}.`,
-                `This simulation is not yet accessible. It will be accessible in ${waitTime} minute${waitTime > 1 ? 's' : ''}.`
-              )
-            );
+          // Allow immediate access to simulations - no time restrictions
+          // Users can access simulations as soon as they are created
+          const guideSeen = localStorage.getItem(`guide_seen_${simulationId}`);
+          if (!guideSeen) {
+            const guideUrl = token
+              ? `/simulation-vocale/${simulationId}/guide?token=${token}`
+              : `/simulation-vocale/${simulationId}/guide`;
+            router.push(guideUrl);
             return;
-          } else {
-            const guideSeen = localStorage.getItem(`guide_seen_${simulationId}`);
-            if (!guideSeen) {
-              const guideUrl = token
-                ? `/simulation-vocale/${simulationId}/guide?token=${token}`
-                : `/simulation-vocale/${simulationId}/guide`;
-              router.push(guideUrl);
-              return;
-            }
-            setHasSeenGuide(true);
           }
+          setHasSeenGuide(true);
         }
       } catch (error: any) {
         console.error('Error loading simulation:', error);

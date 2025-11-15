@@ -119,6 +119,8 @@ declare class VapiService {
     processCallResults(callId: string, simulationId: string): Promise<any>;
     private generateDetailedFeedback;
     private analyzeTranscript;
+    private static progressiveQuestionsCache;
+    private static readonly CACHE_TTL;
     getProgressiveQuestions(): Promise<{
         personalInfo: any[];
         byLevel: {

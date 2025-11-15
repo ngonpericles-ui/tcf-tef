@@ -192,16 +192,6 @@ const simulationAccessMiddleware = (simulationType) => {
                         }
                     }
                 }
-                const timeUntilStart = (scheduledDate.getTime() - now.getTime()) / (1000 * 60);
-                if (timeUntilStart > 5) {
-                    return res.status(403).json({
-                        success: false,
-                        message: `This link will be accessible 5 minutes before the simulation starts (in ${Math.ceil(timeUntilStart - 5)} minute${Math.ceil(timeUntilStart - 5) > 1 ? 's' : ''}).`,
-                        code: 'TOO_EARLY',
-                        minutesUntilAccessible: Math.ceil(timeUntilStart - 5),
-                        scheduledDate: scheduledDate.toISOString()
-                    });
-                }
             }
             if (!hasAccess) {
                 return res.status(403).json({

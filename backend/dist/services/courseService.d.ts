@@ -1,4 +1,4 @@
-import { CourseWithDetails, CreateCourseRequest, UpdateCourseRequest, PaginationParams, FilterParams } from '@/types';
+import { CourseWithDetails, CreateCourseRequest, UpdateCourseRequest, PaginationParams, FilterParams } from '../types';
 import { UserRole } from '@prisma/client';
 export declare class CourseService {
     static createCourse(courseData: CreateCourseRequest, createdById: string, creatorRole: UserRole): Promise<CourseWithDetails>;

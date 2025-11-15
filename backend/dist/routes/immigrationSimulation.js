@@ -466,9 +466,61 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
             voicePreference,
             hasQuestionsData: !!questionsData
         });
+        const normalizedCountry = country?.toLowerCase() || 'canada';
+        let mappedImmigrationType = immigrationType;
+        if (normalizedCountry === 'canada') {
+            const canadaMap = {
+                'immigration': 'skilled_worker',
+                'school': 'student',
+                'work': 'skilled_worker',
+                'relocation': 'family_reunification',
+                'family': 'family_reunification'
+            };
+            mappedImmigrationType = canadaMap[immigrationType] || immigrationType || 'skilled_worker';
+        }
+        else if (normalizedCountry === 'france') {
+            const franceMap = {
+                'immigration': 'work_permit',
+                'school': 'student',
+                'work': 'work_permit',
+                'relocation': 'family',
+                'family': 'family'
+            };
+            mappedImmigrationType = franceMap[immigrationType] || immigrationType || 'work_permit';
+        }
+        else if (normalizedCountry === 'belgium') {
+            const belgiumMap = {
+                'immigration': 'work',
+                'school': 'student',
+                'work': 'work',
+                'relocation': 'student',
+                'family': 'student'
+            };
+            mappedImmigrationType = belgiumMap[immigrationType] || immigrationType || 'work';
+        }
+        else {
+            const defaultMap = {
+                'immigration': 'skilled_worker',
+                'school': 'student',
+                'work': 'work_permit',
+                'relocation': 'family_reunification',
+                'family': 'family_reunification'
+            };
+            mappedImmigrationType = defaultMap[immigrationType] || immigrationType || 'skilled_worker';
+        }
+        const validTypes = ['skilled_worker', 'student', 'family_reunification', 'work_permit', 'work', 'family'];
+        if (validTypes.includes(immigrationType)) {
+            mappedImmigrationType = immigrationType;
+        }
+        console.log('🔄 Mapped values:', {
+            originalCountry: country,
+            normalizedCountry,
+            originalImmigrationType: immigrationType,
+            mappedImmigrationType
+        });
         const sessionData = {
-            country: country || 'canada',
-            immigrationType: immigrationType || 'skilled_worker',
+            country: normalizedCountry,
+            immigrationType: mappedImmigrationType,
             level: level || 'B1',
             personalInfo: personalInfo || {},
             voicePreference: voicePreference || 'france_female_1',
@@ -476,7 +528,9 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
             scheduledDate: preferredDates && preferredDates.length > 0 ? new Date(preferredDates[0]) : null,
             questionsData: questionsData || {}
         };
+        console.log('📋 Session data prepared:', sessionData);
         const simulation = await ImmigrationSimulationService.createImmigrationSession(userId, sessionData);
+        console.log('✅ Simulation created successfully:', simulation?.id);
         res.json({
             success: true,
             data: simulation,
@@ -488,10 +542,15 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
     catch (error) {
         const language = i18nService_1.default.getLanguageFromRequest(req);
         console.error('❌ Error booking immigration simulation:', {
-            error: error?.message,
-            stack: error?.stack,
+            errorMessage: error?.message,
+            errorName: error?.name,
+            errorCode: error?.code,
+            errorStack: error?.stack,
             userId: req.user?.userId || req.user?.id,
-            body: req.body
+            requestBody: JSON.stringify(req.body, null, 2),
+            errorType: error?.constructor?.name,
+            isValidationError: error?.name === 'ValidationError',
+            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error), 2)
         });
         const errorMessage = error?.message || (language === 'fr'
             ? 'Erreur lors de la réservation'
@@ -500,7 +559,8 @@ router.post('/book', auth_1.authenticate, async (req, res) => {
             success: false,
             error: {
                 message: errorMessage,
-                code: error?.code || 'BOOKING_ERROR'
+                code: error?.code || error?.name || 'BOOKING_ERROR',
+                details: error?.details || null
             },
             message: errorMessage
         });

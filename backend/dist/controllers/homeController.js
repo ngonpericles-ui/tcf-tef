@@ -3,7 +3,7 @@ var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HomeController = void 0;
 const homeService_1 = require("../services/homeService");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const errorHandler_1 = require("../middleware/errorHandler");
 const logger_1 = require("../utils/logger");
 class HomeController {
 }
