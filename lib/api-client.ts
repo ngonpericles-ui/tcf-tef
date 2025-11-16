@@ -50,7 +50,7 @@ class ApiClient {
 
     this.client = axios.create({
       baseURL: apiUrl,
-      timeout: 0, // No timeout - for large file uploads and poor internet connections
+      timeout: 30000, // 30 second timeout (GET requests may need more time if DB is slow)
       headers: {
         'Content-Type': 'application/json',
       },
@@ -133,10 +133,15 @@ class ApiClient {
         const url = error.config?.url || 'unknown';
         const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
         
+        // Log error with proper serialization to avoid showing empty objects
+        const errorData = error.response?.data;
+        const errorMessage = errorData?.message || errorData?.error?.message || error.message || 'Unknown error';
+        const errorCode = errorData?.code || errorData?.error?.code || error.code || status;
+        
         console.error(`❌ API Error: ${method} ${url} - Status: ${status}`, {
-          message: error.message,
-          code: error.code,
-          response: error.response?.data,
+          message: errorMessage,
+          code: errorCode,
+          responseData: errorData ? JSON.stringify(errorData) : 'No response data',
           noResponse: !error.response
         });
         
@@ -368,17 +373,61 @@ class ApiClient {
       const response = await this.client.post(url, data, config)
       return response.data as ApiResponse<T>
     } catch (error: any) {
+      // Extract error details with proper serialization
+      const errorData = error.response?.data;
+      const errorMessage = errorData?.message || errorData?.error?.message || error.message || 'Request failed';
+      const errorCode = errorData?.code || errorData?.error?.code || error.code || 'UNKNOWN_ERROR';
+      
       console.error('❌ POST Error:', {
         url,
         status: error.response?.status,
-        code: error.code,
-        message: error.message,
-        data: error.response?.data
+        code: errorCode,
+        message: errorMessage,
+        responseData: errorData ? JSON.stringify(errorData) : 'No response data'
       })
 
       // If it's an Axios error with a response, return the error data
+      // Ensure it has the proper structure with error.message
       if (error.response?.data) {
-        return error.response.data as ApiResponse<T>
+        const responseData = error.response.data as any;
+        
+        // Handle empty object responses
+        if (responseData && Object.keys(responseData).length === 0) {
+          return {
+            success: false,
+            code: errorCode,
+            message: errorMessage,
+            error: {
+              message: errorMessage,
+              code: errorCode
+            }
+          } as ApiResponse<T>;
+        }
+        
+        // If response doesn't have error.message, add it for consistency
+        if (responseData && !responseData.error && responseData.message) {
+          return {
+            ...responseData,
+            error: {
+              message: responseData.message,
+              code: responseData.code || 'UNKNOWN_ERROR'
+            }
+          } as ApiResponse<T>;
+        }
+        
+        // Ensure response has success: false if it's an error
+        if (responseData && responseData.success === undefined) {
+          return {
+            success: false,
+            ...responseData,
+            error: responseData.error || {
+              message: responseData.message || errorMessage,
+              code: responseData.code || errorCode
+            }
+          } as ApiResponse<T>;
+        }
+        
+        return responseData as ApiResponse<T>;
       }
 
       // Handle network errors specifically

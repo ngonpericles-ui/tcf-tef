@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { SharedDataProvider, useSharedData } from '@/components/shared-data-provider';
 import { Button } from '@/components/ui/button';
@@ -12,11 +12,11 @@ import {
   Video,
   VideoOff,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/components/language-provider';
-import { motion } from 'framer-motion';
 import { apiClient } from '@/lib/api-client';
 import { SimulationWaitingPage } from '@/components/simulation-waiting-page';
 
@@ -33,11 +33,18 @@ interface VapiConfig {
   publicKey: string;
 }
 
+interface StartSimulationData {
+  simulation: VoiceSimulation;
+  call: { id: string };
+  assistant: { id: string };
+  questions: any[];
+  message: string;
+}
+
 function SimulationRoomContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { userProfile } = useSharedData();
   const { t, lang } = useLanguage();
   const simulationId = (params?.id as string | undefined) || undefined;
   const token = (searchParams?.get('token') || null) as string | null;
@@ -52,103 +59,165 @@ function SimulationRoomContent() {
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(true);
-  const [callDuration, setCallDuration] = useState(0);
   const [hasSeenGuide, setHasSeenGuide] = useState(false);
   const [vapiConfig, setVapiConfig] = useState<VapiConfig | null>(null);
   const [micPermissionGranted, setMicPermissionGranted] = useState(false);
-  const [micPermissionError, setMicPermissionError] = useState<string | null>(null);
   const [isInitializingVapi, setIsInitializingVapi] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(300);
+  const [timerStarted, setTimerStarted] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [hasFatalError, setHasFatalError] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const vapiRef = useRef<any>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intentionallyEndedRef = useRef<boolean>(false);
 
-  // Load VAPI configuration
   useEffect(() => {
-    const loadVapiConfig = async () => {
+    const loadData = async () => {
       try {
-        const response = await fetch('/api/voice-simulation/vapi-config');
-        if (response.ok) {
-          const data = await response.json();
-          setVapiConfig(data.data);
-          console.log('✅ VAPI config loaded');
-        } else {
-          console.error('❌ Failed to load VAPI config');
+        // Load both in parallel for faster initialization
+        const [vapiResponse, simulationResponse] = await Promise.allSettled([
+          apiClient.get('/voice-simulation/vapi-config').then(r => r.success ? r.data : null).catch(() => null),
+          simulationId ? apiClient.get(`/voice-simulation/${simulationId}${token ? `?token=${token}` : ''}`).catch((err) => {
+            // Handle timeout errors specifically
+            if (err?.code === 'ECONNABORTED' || err?.message?.includes('timeout')) {
+              console.error('⏱️ Simulation data request timed out');
+              return { success: false, error: { message: 'Request timed out. The server may be slow. Please refresh the page.', code: 'TIMEOUT' } };
+            }
+            return null;
+          }) : Promise.resolve(null)
+        ]);
+
+        // Set VAPI config immediately
+        if (vapiResponse.status === 'fulfilled' && vapiResponse.value) {
+          const configData = vapiResponse.value as any;
+          if (configData?.publicKey && typeof configData.publicKey === 'string') {
+            setVapiConfig({ publicKey: configData.publicKey });
+          }
         }
-      } catch (error) {
-        console.error('Error loading VAPI config:', error);
+
+        // Set simulation data immediately
+        if (simulationResponse.status === 'fulfilled' && simulationResponse.value) {
+          const response = simulationResponse.value as any;
+          if (response.success && response.data) {
+            setSimulation(response.data);
+            const guideSeen = localStorage.getItem(`guide_seen_${simulationId}`);
+            if (response.data.status !== 'ACTIVE' && !guideSeen) {
+              const guideUrl = token
+                ? `/simulation-vocale/${simulationId}/guide?token=${token}`
+                : `/simulation-vocale/${simulationId}/guide`;
+              router.push(guideUrl);
+              return;
+            }
+            setHasSeenGuide(true);
+          } else if (!response.success) {
+            if (response.error?.code === 'TIMEOUT') {
+              setError(response.error.message || t_('Le chargement a pris trop de temps. Veuillez rafraîchir la page.', 'Loading took too long. Please refresh the page.'));
+            } else if (response.code === 'TOO_EARLY') {
+              setErrorCode('TOO_EARLY');
+              setErrorData({
+                minutesUntilAccessible: response.minutesUntilAccessible || 0,
+                scheduledDate: response.scheduledDate
+              });
+              setError(response.message || t_('Accès temporairement restreint', 'Access temporarily restricted'));
+            } else if (response.code === 'SIMULATION_ENDED') {
+              setErrorCode('SIMULATION_ENDED');
+              setError(response.message || t_('Cette simulation a pris fin', 'This simulation has ended'));
+            } else {
+              setError(response.message || response.error?.message || t_('Erreur lors du chargement', 'Error loading simulation'));
+            }
+          }
+        } else if (simulationResponse.status === 'rejected') {
+          // Handle promise rejection
+          const error = simulationResponse.reason;
+          if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
+            setError(t_('Le chargement a pris trop de temps. Veuillez rafraîchir la page.', 'Loading took too long. Please refresh the page.'));
+          } else {
+            setError(t_('Erreur lors du chargement de la simulation', 'Error loading simulation'));
+          }
+        }
+      } catch (error: any) {
+        console.error('Error loading simulation data:', error);
+        setError(t_('Erreur lors du chargement', 'Error loading simulation'));
+      } finally {
+        // Always stop loading
+        setLoading(false);
       }
     };
 
-    loadVapiConfig();
-  }, []);
+    if (simulationId) {
+      loadData();
+    } else {
+      // If no simulationId, stop loading immediately
+      setLoading(false);
+    }
+  }, [simulationId, token, t_, router]);
 
-  // Initialize VAPI SDK
   useEffect(() => {
-    console.log('🔍 VAPI init check:', {
-      hasVapiConfig: !!vapiConfig,
-      isClient: typeof window !== 'undefined',
-      hasVapiRef: !!vapiRef.current,
-      publicKey: vapiConfig?.publicKey
-    });
-    
     if (vapiConfig && typeof window !== 'undefined' && !vapiRef.current) {
-      console.log('🚀 Starting VAPI initialization...');
       const initVapi = async () => {
         try {
           setIsInitializingVapi(true);
-          // Dynamically import VAPI
           const { default: Vapi } = await import('@vapi-ai/web');
-          
           vapiRef.current = new Vapi(vapiConfig.publicKey);
           
-          // Set up event listeners
           vapiRef.current.on('call-start', () => {
-            console.log('✅ VAPI call started');
             setIsCallActive(true);
-            toast.success(t_('Appel démarré', 'Call started'));
-          });
-
-          vapiRef.current.on('call-end', () => {
-            console.log('✅ VAPI call ended');
-            setIsCallActive(false);
-            handleEndCall();
-          });
-
-          vapiRef.current.on('speech-start', () => {
-            console.log('🎤 User started speaking');
-          });
-
-          vapiRef.current.on('speech-end', () => {
-            console.log('🎤 User stopped speaking');
-          });
-
-          vapiRef.current.on('message', (message: any) => {
-            console.log('💬 Message received:', message);
-            if (message.type === 'transcript' && message.transcript) {
-              console.log(`${message.role === 'user' ? 'Vous' : 'Évaluateur'}: ${message.transcript}`);
+            if (!timerStarted) {
+              setTimeRemaining(300);
+              setTimerStarted(true);
+              timerIntervalRef.current = setInterval(() => {
+                setTimeRemaining((prev) => {
+                  if (prev <= 1) {
+                    if (timerIntervalRef.current) {
+                      clearInterval(timerIntervalRef.current);
+                      timerIntervalRef.current = null;
+                    }
+                    intentionallyEndedRef.current = true;
+                    setTimeout(() => handleEndCall(), 100);
+                    return 0;
+                  }
+                  return prev - 1;
+                });
+              }, 1000);
             }
           });
 
-          vapiRef.current.on('assistant-speech-start', () => {
-            console.log('🎙️ AI assistant started speaking');
-            // AI is now talking - this confirms the greeting/flow is working
+          vapiRef.current.on('call-end', () => {
+            const wasIntentionallyEnded = intentionallyEndedRef.current;
+            if (!wasIntentionallyEnded && isCallActive) {
+              handleEndCall();
+            }
+            intentionallyEndedRef.current = false;
+            setIsCallActive(false);
+            if (timerIntervalRef.current) {
+              clearInterval(timerIntervalRef.current);
+              timerIntervalRef.current = null;
+            }
+            setTimerStarted(false);
+            setTimeRemaining(300);
           });
 
-          vapiRef.current.on('assistant-speech-end', () => {
-            console.log('🎙️ AI assistant finished speaking');
+          vapiRef.current.on('assistant-speech-start', () => {
+            toast.success(t_('L\'IA commence à parler...', 'AI is starting to speak...'));
           });
 
           vapiRef.current.on('error', (error: any) => {
-            console.error('❌ VAPI error:', error);
-            toast.error(t_('Erreur de connexion vocale', 'Voice connection error'));
-            setIsCallActive(false);
+            let errorMessage = t_('Erreur de connexion vocale', 'Voice connection error');
+            if (error?.message) {
+              errorMessage = error.message;
+            } else if (typeof error === 'string') {
+              errorMessage = error;
+            }
+            if (isCallActive) {
+              setIsCallActive(false);
+            }
+            toast.error(errorMessage);
           });
-
-          console.log('✅ VAPI initialized successfully - Button should now be enabled!', !!vapiRef.current);
         } catch (error) {
-          console.error('❌ Error initializing VAPI:', error);
+          console.error('Error initializing VAPI:', error);
           toast.error(t_('Erreur d\'initialisation du service vocal', 'Voice service initialization error'));
         } finally {
           setIsInitializingVapi(false);
@@ -160,154 +229,45 @@ function SimulationRoomContent() {
 
     return () => {
       if (vapiRef.current) {
-        try {
-          vapiRef.current.stop();
-        } catch (e) {
-          console.warn('Error stopping VAPI:', e);
+        intentionallyEndedRef.current = true;
+        vapiRef.current.stop().catch(() => {});
+        if (typeof vapiRef.current.removeAllListeners === 'function') {
+          vapiRef.current.removeAllListeners();
         }
       }
-    };
-  }, [vapiConfig, t_]);
-
-  // Load simulation data
-  useEffect(() => {
-    const loadSimulation = async () => {
-      try {
-        console.log('🔄 Loading simulation:', simulationId);
-        
-        // Use apiClient which handles authentication automatically
-        const response = await apiClient.get(`/voice-simulation/${simulationId}`);
-
-        if (!response.success) {
-          console.error('❌ Failed to load simulation:', response);
-          
-          // Backend error response comes directly in response object, not nested in error
-          const errorResponse = response as any;
-          
-          if (errorResponse.code === 'TOO_EARLY') {
-            setErrorCode('TOO_EARLY');
-            setErrorData({
-              minutesUntilAccessible: errorResponse.minutesUntilAccessible || 0,
-              scheduledDate: errorResponse.scheduledDate
-            });
-            setError(errorResponse.message || t_('Accès temporairement restreint', 'Access temporarily restricted'));
-            return;
-          } else if (errorResponse.code === 'SIMULATION_ENDED') {
-            setErrorCode('SIMULATION_ENDED');
-            setError(errorResponse.message || t_('Cette simulation a pris fin', 'This simulation has ended'));
-            return;
-          } else {
-            // Generic error handling
-            setError(errorResponse.message || errorResponse.error?.message || t_('Erreur lors du chargement', 'Error loading simulation'));
-          }
-          return;
-        }
-
-        console.log('✅ Simulation loaded successfully:', response.data);
-        const simulationData = response.data as VoiceSimulation;
-        setSimulation(simulationData);
-
-        if (simulationData.status === 'ACTIVE') {
-          setIsCallActive(true);
-          console.log('✅ Simulation is already ACTIVE');
-        }
-
-        if (simulationData.status === 'COMPLETED') {
-          // For completed simulations, we'll let the backend handle timing restrictions
-          // The simulation access is managed server-side
-          console.log('✅ Simulation is COMPLETED - access controlled by backend');
-        }
-
-        const scheduledDate = new Date(simulationData.scheduledDate);
-        const now = new Date();
-        const timeUntilStart = scheduledDate.getTime() - now.getTime();
-        const minutesUntilStart = timeUntilStart / (1000 * 60);
-
-        if (simulationData.status === 'ACTIVE') {
-          setHasSeenGuide(true);
-          console.log('✅ Simulation is ACTIVE, skipping guide');
-        } else {
-          // Allow immediate access to simulations - no time restrictions
-          // Users can access simulations as soon as they are created
-          const guideSeen = localStorage.getItem(`guide_seen_${simulationId}`);
-          if (!guideSeen) {
-            const guideUrl = token
-              ? `/simulation-vocale/${simulationId}/guide?token=${token}`
-              : `/simulation-vocale/${simulationId}/guide`;
-            router.push(guideUrl);
-            return;
-          }
-          setHasSeenGuide(true);
-        }
-      } catch (error: any) {
-        console.error('Error loading simulation:', error);
-        setError(t_('Erreur de connexion', 'Connection error'));
-      } finally {
-        setLoading(false);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     };
+  }, [vapiConfig, t_, isCallActive, timerStarted]);
 
-    if (simulationId) {
-      loadSimulation();
-    }
-  }, [simulationId, token, t_, router]);
-
-  // Request microphone and camera access (OPTIONAL - not required for simulation to work)
   useEffect(() => {
     const requestMediaAccess = async () => {
-      // Check if browser supports getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('⚠️ Browser does not support getUserMedia - simulation will still work');
+      if (!navigator.mediaDevices?.getUserMedia) {
         setMicPermissionGranted(false);
-        setMicPermissionError(null); // Don't show error, just continue
         return;
       }
 
       try {
-        console.log('🎤 Attempting to request microphone and camera access (optional)...');
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: 'user'
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100
-          }
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 44100 }
         });
-
-        console.log('✅ Microphone and camera access granted');
         setMicPermissionGranted(true);
-        setMicPermissionError(null);
-
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           streamRef.current = stream;
         }
-      } catch (error: any) {
-        console.warn('⚠️ Could not access microphone/camera - simulation will still work:', error);
+      } catch (error) {
         setMicPermissionGranted(false);
-        
-        // Don't show error toast - just log it
-        // The simulation can work without camera/mic (VAPI handles audio internally)
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          console.log('ℹ️ Microphone/camera permission denied - continuing without them');
-        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-          console.log('ℹ️ No microphone/camera detected - continuing without them');
-        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-          console.log('ℹ️ Microphone/camera in use - continuing without them');
-        }
-        
-        // Don't set error message - allow simulation to proceed
-        setMicPermissionError(null);
       }
     };
 
-    // Only request access if we have simulation data and can start
-    // But don't block if it fails - simulation can work without it
     if (simulation && !loading) {
       requestMediaAccess();
     }
@@ -318,154 +278,219 @@ function SimulationRoomContent() {
         streamRef.current = null;
       }
     };
-  }, [simulation, loading, t_]);
+  }, [simulation, loading]);
 
-  // Timer for call duration
-  useEffect(() => {
-    if (isCallActive) {
-      timerRef.current = setInterval(() => {
-        setCallDuration(prev => {
-          const newDuration = prev + 1;
-          if (newDuration >= (simulation?.duration || 300)) {
-            handleEndCall();
-            return prev;
-          }
-          return newDuration;
-        });
-      }, 1000);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      setCallDuration(0);
+  const handleStartCall = useCallback(async () => {
+    console.log('handleStartCall called', { isStarting, hasFatalError, hasVapiRef: !!vapiRef.current });
+    if (isStarting || hasFatalError || !vapiRef.current) {
+      console.log('handleStartCall blocked:', { isStarting, hasFatalError, hasVapiRef: !!vapiRef.current });
+      return;
     }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [isCallActive, simulation?.duration]);
-
-  const handleStartCall = async () => {
-    console.log('🔥 CRITICAL: handleStartCall function CALLED! Button click detected!');
+    
+    setIsStarting(true);
+    
+    let loadingToastId: string | number | undefined;
+    
     try {
-      // Check if VAPI is initialized
-      if (!vapiRef.current) {
-        toast.error(t_(
-          'Le service vocal n\'est pas encore initialisé. Veuillez patienter...',
-          'Voice service is not yet initialized. Please wait...'
-        ));
-        return;
-      }
-
-      // Note: Microphone/camera are optional - VAPI will handle audio internally
-      // Even if browser mic/cam are not available, the simulation can still work
-      if (!micPermissionGranted) {
-        console.log('ℹ️ Starting simulation without browser microphone/camera - VAPI will handle audio');
-      }
-
-      // Check if simulation is already ACTIVE
-      if (simulation?.status === 'ACTIVE') {
-        console.log('✅ Simulation is already ACTIVE');
-        setIsCallActive(true);
-        return;
-      }
-
-      toast.loading(t_('Démarrage de la simulation...', 'Starting simulation...'));
-
-      // Step 1: Start simulation on backend using apiClient for proper auth
+      console.log('Starting simulation on backend...', { simulationId, token });
+      // Show loading toast with estimated time
+      loadingToastId = toast.loading(t_('Démarrage de la simulation... (10-15 secondes)', 'Starting simulation... (10-15 seconds)'));
       const startUrl = token
         ? `/voice-simulation/start/${simulationId}?token=${token}`
         : `/voice-simulation/start/${simulationId}`;
       
-      console.log('🚀 Starting simulation on backend:', startUrl);
-      const response = await apiClient.post(startUrl, {});
+      console.log('POST request to:', startUrl);
+      console.log('Making API call now...');
+      
+      // Optimized timeout: First request takes 10-15s (with caching), subsequent requests are < 2s
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          console.error('API call timed out after 20 seconds');
+          reject(new Error('Request timeout after 20 seconds. Please try again.'));
+        }, 20000);
+      });
+      
+      const startTime = Date.now();
+      const apiCallPromise = apiClient.post<StartSimulationData>(startUrl, {}).then(response => {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`✅ API call completed successfully in ${duration}s`, response);
+        return response;
+      }).catch(error => {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.error(`❌ API call failed after ${duration}s:`, {
+          message: error?.message,
+          response: error?.response,
+          status: error?.response?.status,
+          data: error?.response?.data,
+          stack: error?.stack
+        });
+        throw error;
+      });
+      
+      console.log('Starting Promise.race with timeout...');
+      
+      const response = await Promise.race([
+        apiCallPromise,
+        timeoutPromise
+      ]) as any;
+      
+      console.log('Backend response received:', { 
+        success: response.success, 
+        hasData: !!response.data, 
+        hasAssistant: !!response.data?.assistant,
+        assistantId: response.data?.assistant?.id,
+        fullResponse: JSON.stringify(response, null, 2)
+      });
+
+      // Always dismiss loading toast first
+      toast.dismiss(loadingToastId);
 
       if (!response.success) {
-        toast.dismiss();
-        const errorMessage = response.error?.message || response.message || t_('Erreur lors du démarrage', 'Failed to start simulation');
-        console.error('❌ Failed to start simulation on backend:', response);
-        toast.error(errorMessage);
+        const errorMessage = response.error?.message || 
+                           response.message || 
+                           (response as any).providerMessage ||
+                           t_('Erreur lors du démarrage', 'Failed to start simulation');
+        const errorCode = response.error?.code || (response as any).code;
+        
+        console.error('❌ Backend returned error:', { errorMessage, errorCode, response });
+        
+        if (errorCode === 'VAPI_ERROR' || 
+            errorMessage.includes('Authentication failed') || 
+            errorMessage.includes('Invalid API Key')) {
+          setHasFatalError(true);
+          toast.error(t_(
+            'Erreur de configuration VAPI. Veuillez contacter le support.',
+            'VAPI configuration error. Please contact support.'
+          ));
+        } else {
+          toast.error(errorMessage);
+        }
         return;
       }
 
-      const startData = response;
-      console.log('🎯 Backend response structure:', startData);
+      if (!response.data?.assistant?.id) {
+        console.error('❌ Assistant ID missing in response:', {
+          hasData: !!response.data,
+          hasAssistant: !!response.data?.assistant,
+          dataKeys: response.data ? Object.keys(response.data) : [],
+          fullData: JSON.stringify(response.data, null, 2)
+        });
+        toast.error(t_('ID assistant non trouvé dans la réponse du serveur', 'Assistant ID not found in server response'));
+        return;
+      }
+
+      const assistantId = response.data.assistant.id.trim();
       
-      // Handle different response structures safely
-      const assistantId = (startData as any).data?.assistant?.id || 
-                         (startData as any).data?.assistantId || 
-                         (startData as any).assistant?.id ||
-                         simulation?.assistantId;
-
-      if (!assistantId) {
+      if (!assistantId || assistantId === '') {
         toast.dismiss();
-        toast.error(t_('ID assistant non trouvé', 'Assistant ID not found'));
+        toast.error(t_('ID assistant invalide', 'Invalid assistant ID'));
         return;
       }
 
-      // Step 2: Start VAPI call with assistant
       try {
-        console.log('🎤 Starting VAPI call with assistant:', assistantId);
-        console.log('🎤 VAPI client status:', {
-          isInitialized: !!vapiRef.current,
-          config: vapiConfig
-        });
+        console.log('🎤 Starting VAPI call with assistant ID:', assistantId);
+        console.log('📞 VAPI ref available:', !!vapiRef.current);
         
-        await vapiRef.current.start({
-          assistantId: assistantId
-        });
+        if (!vapiRef.current) {
+          throw new Error('VAPI not initialized. Please refresh the page.');
+        }
         
-        toast.dismiss();
-        toast.success(t_('Simulation démarrée! L\'IA va commencer à parler...', 'Simulation started! AI will begin speaking...'));
+        await vapiRef.current.start(assistantId);
+        console.log('✅ VAPI call started successfully');
+        
         setIsCallActive(true);
+        setTimeRemaining(300);
+        setTimerStarted(true);
+        
+        timerIntervalRef.current = setInterval(() => {
+          setTimeRemaining((prev) => {
+            if (prev <= 1) {
+              if (timerIntervalRef.current) {
+                clearInterval(timerIntervalRef.current);
+                timerIntervalRef.current = null;
+              }
+              intentionallyEndedRef.current = true;
+              setTimeout(() => handleEndCall(), 100);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+        // Loading toast already dismissed above
+        toast.success(t_('Simulation démarrée! L\'IA va commencer à parler...', 'Simulation started! AI will begin speaking...'));
+        
         if (simulation) {
           setSimulation({ ...simulation, status: 'ACTIVE' });
         }
-        console.log('✅ VAPI call started successfully - AI should now be talking!');
       } catch (vapiError: any) {
-        console.error('❌ VAPI call start error:', vapiError);
-        toast.dismiss();
-        toast.error(t_(
-          'Erreur lors du démarrage de l\'appel vocal. Veuillez réessayer.',
-          'Error starting voice call. Please try again.'
-        ));
+        console.error('❌ VAPI start error:', {
+          message: vapiError?.message,
+          stack: vapiError?.stack,
+          name: vapiError?.name,
+          assistantId: assistantId
+        });
+        setIsCallActive(false);
+        const errorMessage = vapiError?.message || 
+                           t_('Erreur lors du démarrage de l\'appel vocal. Veuillez réessayer.', 'Error starting voice call. Please try again.');
+        toast.dismiss(loadingToastId);
+        toast.error(errorMessage);
       }
-    } catch (error) {
-      console.error('Error starting call:', error);
-      toast.dismiss();
-      toast.error(t_('Erreur de connexion', 'Connection error'));
+    } catch (error: any) {
+      console.error('❌ Error starting call:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        response: error?.response,
+        isTimeout: error?.message?.includes('timeout')
+      });
+      
+      // Always reset button state on error
+      setIsCallActive(false);
+      setIsStarting(false);
+      toast.dismiss(loadingToastId);
+      
+      if (error?.message?.includes('timeout')) {
+        toast.error(t_('La requête a pris trop de temps. Le serveur peut être occupé. Réessayez dans quelques secondes.', 'Request timed out. Server may be busy. Please try again in a few seconds.'));
+      } else {
+        const errorMsg = error?.message || error?.response?.data?.message || t_('Erreur de connexion', 'Connection error');
+        toast.error(errorMsg);
+      }
+    } finally {
+      setIsStarting(false);
     }
-  };
+  }, [simulationId, token, isStarting, hasFatalError, t_, simulation]);
 
   const handleEndCall = async () => {
     try {
-      // Stop VAPI call first
+      intentionallyEndedRef.current = true;
+      
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      setTimerStarted(false);
+      setTimeRemaining(300);
+      
       if (vapiRef.current) {
         try {
           await vapiRef.current.stop();
-          console.log('✅ VAPI call stopped');
         } catch (e) {
           console.warn('Error stopping VAPI call:', e);
         }
       }
 
-      const endUrl = token
-        ? `/api/voice-simulation/end/${simulationId}?token=${token}`
-        : `/api/voice-simulation/end/${simulationId}`;
-      
-      const response = await fetch(endUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? {} : { 'Authorization': `Bearer ${localStorage.getItem('token')}` })
-        }
-      });
-
       setIsCallActive(false);
+      toast.dismiss();
       
-      if (response.ok) {
+      const endUrl = token
+        ? `/voice-simulation/end/${simulationId}?token=${token}`
+        : `/voice-simulation/end/${simulationId}`;
+      
+      const response = await apiClient.post(endUrl, {});
+      
+      if (response.success) {
         toast.success(t_('Simulation terminée', 'Simulation ended'));
         setTimeout(() => {
           router.push(`/simulation-vocale/results?id=${simulationId}`);
@@ -476,8 +501,12 @@ function SimulationRoomContent() {
     } catch (error) {
       console.error('Error ending call:', error);
       setIsCallActive(false);
+      setTimerStarted(false);
+      toast.dismiss();
+      toast.error(t_('Erreur lors de la fin', 'Error ending simulation'));
     }
   };
+
 
   const toggleMute = () => {
     if (streamRef.current) {
@@ -499,72 +528,23 @@ function SimulationRoomContent() {
     }
   };
 
-  // Circular Timer Component
-  const CircularTimer = ({ currentTime, totalTime }: { currentTime: number; totalTime: number }) => {
-    const remaining = totalTime - currentTime;
-    const percentage = (remaining / totalTime) * 100;
-    const isUrgent = remaining <= 30;
-    const size = 120;
-    const strokeWidth = 8;
-    const radius = (size - strokeWidth) / 2;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (percentage / 100) * circumference;
-
-    return (
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        className="absolute top-6 right-6"
-      >
-        <svg width={size} height={size} className="transform -rotate-90">
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke="rgba(255, 255, 255, 0.2)"
-            strokeWidth={strokeWidth}
-            fill="none"
-          />
-          <motion.circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={isUrgent ? '#ef4444' : '#10b981'}
-            strokeWidth={strokeWidth}
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            initial={{ strokeDashoffset: circumference }}
-            animate={{ strokeDashoffset: offset }}
-            transition={{ duration: 1, ease: "linear" }}
-          />
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={isUrgent ? '#ef4444' : '#10b981'}
-            strokeWidth={strokeWidth / 2}
-            fill="none"
-            opacity={0.3}
-            className={isUrgent ? 'animate-pulse' : ''}
-          />
-        </svg>
-      </motion.div>
-    );
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (loading || isInitializingVapi) {
+  const timerPercentage = (timeRemaining / 300) * 100;
+
+  // Only show loading screen if we don't have simulation data yet
+  // Once simulation is loaded, show the room even if VAPI is still initializing
+  if (loading && !simulation) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-purple-600 mx-auto mb-4" />
           <p className="text-gray-600">
-            {loading 
-              ? t_('Chargement de la simulation...', 'Loading simulation...')
-              : t_('Initialisation du service vocal...', 'Initializing voice service...')
-            }
+            {t_('Chargement de la simulation...', 'Loading simulation...')}
           </p>
         </div>
       </div>
@@ -628,19 +608,11 @@ function SimulationRoomContent() {
     return null;
   }
 
-  const scheduledDate = new Date(simulation.scheduledDate);
-  const now = new Date();
-  const timeUntilStart = scheduledDate.getTime() - now.getTime();
-  const minutesUntilStart = timeUntilStart / (1000 * 60);
-  const simulationEnd = new Date(scheduledDate.getTime() + simulation.duration * 1000);
-  
-  // Allow immediate access to simulations - no time restrictions
   const canStart = simulation.status === 'ACTIVE' || simulation.status === 'SCHEDULED';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
       <div className="flex flex-col h-screen">
-        {/* Main video area */}
         <div className="flex-1 relative bg-black">
           <video
             ref={videoRef}
@@ -658,81 +630,97 @@ function SimulationRoomContent() {
           )}
 
           {isCallActive && (
-            <CircularTimer
-              currentTime={callDuration}
-              totalTime={simulation.duration}
-            />
-          )}
-
-          {/* Microphone permission error overlay */}
-          {micPermissionError && !micPermissionGranted && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-4">
-              <Card className="max-w-md w-full">
-                <CardContent className="pt-6 text-center">
-                  <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">
-                    {t_('Accès Microphone/Caméra Requis', 'Microphone/Camera Access Required')}
-                  </h2>
-                  <p className="text-gray-600 dark:text-gray-400 mb-4">{micPermissionError}</p>
-                  <Button onClick={() => window.location.reload()}>
-                    {t_('Réessayer', 'Retry')}
-                  </Button>
-                </CardContent>
-              </Card>
+            <div className="absolute top-6 right-6 z-50">
+              <div className="relative w-24 h-24">
+                <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    fill="none"
+                    stroke="rgba(34, 197, 94, 0.2)"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    fill="none"
+                    stroke="#22c55e"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 45}`}
+                    strokeDashoffset={`${2 * Math.PI * 45 * (1 - timerPercentage / 100)}`}
+                    className="transition-all duration-1000 ease-linear"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {formatTime(timeRemaining)}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
-
-          {/* Removed time restriction overlay - simulations now start immediately */}
         </div>
 
-        {/* Controls */}
         <div className="bg-white/95 backdrop-blur-sm border-t border-gray-200 p-6">
           <div className="max-w-4xl mx-auto flex items-center justify-center gap-4">
-            <Button
-              onClick={toggleMute}
-              size="lg"
-              variant={isMuted ? "destructive" : "outline"}
-              className="h-16 w-16 rounded-full"
-              disabled={!isCallActive && !canStart}
-            >
-              {isMuted ? (
-                <MicOff className="h-6 w-6" />
-              ) : (
-                <Mic className="h-6 w-6" />
+            <div className="relative">
+              <Button
+                onClick={toggleMute}
+                size="lg"
+                variant={isMuted ? "destructive" : "outline"}
+                className="h-16 w-16 rounded-full"
+                disabled={!isCallActive && !canStart}
+              >
+                {isMuted ? (
+                  <MicOff className="h-6 w-6" />
+                ) : (
+                  <Mic className="h-6 w-6" />
+                )}
+              </Button>
+              {!micPermissionGranted && (
+                <div className="absolute -top-1 -right-1 bg-yellow-500 rounded-full p-1">
+                  <AlertTriangle className="h-4 w-4 text-white" />
+                </div>
               )}
-            </Button>
+            </div>
 
-            <Button
-              onClick={toggleCamera}
-              size="lg"
-              variant={!isCameraOn ? "destructive" : "outline"}
-              className="h-16 w-16 rounded-full"
-              disabled={!isCallActive && !canStart}
-            >
-              {isCameraOn ? (
-                <Video className="h-6 w-6" />
-              ) : (
-                <VideoOff className="h-6 w-6" />
+            <div className="relative">
+              <Button
+                onClick={toggleCamera}
+                size="lg"
+                variant={!isCameraOn ? "destructive" : "outline"}
+                className="h-16 w-16 rounded-full"
+                disabled={!isCallActive && !canStart}
+              >
+                {isCameraOn ? (
+                  <Video className="h-6 w-6" />
+                ) : (
+                  <VideoOff className="h-6 w-6" />
+                )}
+              </Button>
+              {!micPermissionGranted && (
+                <div className="absolute -top-1 -right-1 bg-yellow-500 rounded-full p-1">
+                  <AlertTriangle className="h-4 w-4 text-white" />
+                </div>
               )}
-            </Button>
+            </div>
 
             {!isCallActive ? (
-              <>
-                {console.log('🔍 Button state check:', {
-                  canStart,
-                  hasVapiRef: !!vapiRef.current,
-                  isDisabled: !canStart || !vapiRef.current,
-                  simulationStatus: simulation?.status
-                })}
-                <Button
-                  onClick={handleStartCall}
-                  size="lg"
-                  className="h-16 w-16 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-                  disabled={!canStart || !vapiRef.current}
-                >
+              <Button
+                onClick={handleStartCall}
+                size="lg"
+                className="h-16 w-16 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                disabled={!canStart || !vapiRef.current || isStarting}
+              >
+                {isStarting ? (
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                ) : (
                   <PhoneOff className="h-6 w-6 rotate-135" />
-                </Button>
-              </>
+                )}
+              </Button>
             ) : (
               <Button
                 onClick={handleEndCall}
