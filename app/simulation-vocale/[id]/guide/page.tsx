@@ -77,7 +77,7 @@ function SimulationGuideContent() {
     }
   ];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -85,23 +85,51 @@ function SimulationGuideContent() {
       if (simulationId) {
         localStorage.setItem(`guide_seen_${simulationId}`, 'true');
       }
-      // Rediriger vers l'interface de simulation
+      
+      // Check if this is a direct start (from button click)
+      const isDirectStart = localStorage.getItem(`direct_start_${simulationId}`) === 'true';
+      
+      if (isDirectStart) {
+        // For direct start: redirect to simulation room with auto-start flag
+        // Remove the direct_start flag
+        localStorage.removeItem(`direct_start_${simulationId}`);
+        const url = token
+          ? `/simulation-vocale/${simulationId}?token=${token}&autoStart=true`
+          : `/simulation-vocale/${simulationId}?autoStart=true`;
+        router.push(url);
+      } else {
+        // For email/reservation access: normal redirect
+        const url = token
+          ? `/simulation-vocale/${simulationId}?token=${token}`
+          : `/simulation-vocale/${simulationId}`;
+        router.push(url);
+      }
+    }
+  };
+
+  const handleSkip = async () => {
+    // Marquer que le guide a été vu
+    if (simulationId) {
+      localStorage.setItem(`guide_seen_${simulationId}`, 'true');
+    }
+    
+    // Check if this is a direct start
+    const isDirectStart = localStorage.getItem(`direct_start_${simulationId}`) === 'true';
+    
+    if (isDirectStart) {
+      // For direct start: redirect with auto-start flag
+      localStorage.removeItem(`direct_start_${simulationId}`);
+      const url = token
+        ? `/simulation-vocale/${simulationId}?token=${token}&autoStart=true`
+        : `/simulation-vocale/${simulationId}?autoStart=true`;
+      router.push(url);
+    } else {
+      // For email/reservation access: normal redirect
       const url = token
         ? `/simulation-vocale/${simulationId}?token=${token}`
         : `/simulation-vocale/${simulationId}`;
       router.push(url);
     }
-  };
-
-  const handleSkip = () => {
-    // Marquer que le guide a été vu
-    if (simulationId) {
-      localStorage.setItem(`guide_seen_${simulationId}`, 'true');
-    }
-    const url = token
-      ? `/simulation-vocale/${simulationId}?token=${token}`
-      : `/simulation-vocale/${simulationId}`;
-    router.push(url);
   };
 
   const IconComponent = steps[currentStep].icon;

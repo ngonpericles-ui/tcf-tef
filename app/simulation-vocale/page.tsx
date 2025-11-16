@@ -93,28 +93,113 @@ function SimulationPageContent() {
   useEffect(() => {
     // Only check access when userProfile is loaded and haven't checked yet
     if (userProfile && !hasCheckedAccess) {
-      checkSubscriptionAccess();
+      // Load access check and data in parallel for faster page load
+      const loadAllData = async () => {
+        const startTime = Date.now();
+        setHasCheckedAccess(true);
+        
+        // OPTIMIZED: Load all data in parallel
+        // Note: Promise.allSettled handles rejections automatically, no need for .catch()
+        const [freeAttemptsResponse, subscriptionResponse, simulationsResponse, monthlyCountResponse] = await Promise.allSettled([
+          apiClient.get('/simulations/free-attempts/count'),
+          apiClient.get('/subscriptions/active'),
+          apiClient.get('/voice-simulation/history'),
+          apiClient.get('/voice-simulation/monthly-count')
+        ]);
+        
+        // Check access (free attempts first, then subscription)
+        let granted = false;
+        let tier = 'FREE';
+        
+        // Safely check freeAttemptsResponse
+        if (freeAttemptsResponse.status === 'fulfilled' && 
+            freeAttemptsResponse.value && 
+            typeof freeAttemptsResponse.value === 'object' &&
+            'success' in freeAttemptsResponse.value &&
+            freeAttemptsResponse.value.success && 
+            freeAttemptsResponse.value.data) {
+          const freeAttemptsData = freeAttemptsResponse.value.data as any;
+          if (freeAttemptsData.remainingFreeAttempts > 0) {
+            tier = 'FREE_WITH_ATTEMPTS';
+            granted = true;
+            console.log('✅ Access granted: User has free attempts remaining', freeAttemptsData.remainingFreeAttempts);
+          }
+        }
+        
+        // Safely check subscriptionResponse
+        if (!granted && subscriptionResponse.status === 'fulfilled' && 
+            subscriptionResponse.value && 
+            typeof subscriptionResponse.value === 'object' &&
+            'success' in subscriptionResponse.value &&
+            subscriptionResponse.value.success && 
+            subscriptionResponse.value.data) {
+          const subscriptionData = subscriptionResponse.value.data as any;
+          tier = subscriptionData.subscription?.tier || 'FREE';
+          if (tier === 'PREMIUM' || tier === 'PRO') {
+            granted = true;
+            console.log('✅ Access granted: User has valid subscription', tier);
+          }
+        }
+        
+        // Set access state
+        setSubscriptionTier(tier);
+        setAccessGranted(granted);
+        
+        // If access granted, use the pre-fetched data
+        if (granted) {
+          // Safely check simulationsResponse
+          if (simulationsResponse.status === 'fulfilled' && 
+              simulationsResponse.value && 
+              typeof simulationsResponse.value === 'object' &&
+              'success' in simulationsResponse.value &&
+              simulationsResponse.value.success) {
+            const simulationsData = Array.isArray(simulationsResponse.value.data) ? simulationsResponse.value.data : [];
+            setSimulations(simulationsData);
+            console.log('✅ Simulations loaded:', simulationsData.length);
+          }
+          
+          // Safely check monthlyCountResponse
+          if (monthlyCountResponse.status === 'fulfilled' && 
+              monthlyCountResponse.value && 
+              typeof monthlyCountResponse.value === 'object' &&
+              'success' in monthlyCountResponse.value &&
+              monthlyCountResponse.value.success) {
+            const monthlyData = monthlyCountResponse.value.data as any;
+            setMonthlyCount(monthlyData.monthlyCount || 0);
+            console.log('✅ Monthly count loaded');
+          }
+        } else {
+          // No access - redirect
+          console.log('❌ Access denied: No free attempts and no valid subscription');
+          toast.error('Les simulations vocales nécessitent un abonnement Premium ou Pro');
+          router.push('/abonnement');
+        }
+        
+        setLoading(false);
+        const loadTime = Date.now() - startTime;
+        console.log(`⚡ All data loaded in ${loadTime}ms`);
+      };
+      
+      loadAllData();
     }
   }, [userProfile, hasCheckedAccess]);
-
-  useEffect(() => {
-    // Fetch data if access is granted (either through free attempts or subscription)
-    if (accessGranted) {
-      fetchSimulations();
-      fetchMonthlyCount();
-    }
-  }, [accessGranted]);
 
   const checkSubscriptionAccess = async () => {
     try {
       setLoading(true);
       setHasCheckedAccess(true);
 
-      // STEP 1: Check free attempts FIRST (all users get 5 free simulations)
-      const freeAttemptsResponse = await apiClient.get('/simulations/free-attempts/count');
+      // OPTIMIZED: Check both in parallel instead of sequentially
+      const [freeAttemptsResponse, subscriptionResponse] = await Promise.allSettled([
+        apiClient.get('/simulations/free-attempts/count').catch(() => null),
+        apiClient.get('/subscriptions/active').catch(() => null)
+      ]);
       
-      if (freeAttemptsResponse.success && freeAttemptsResponse.data) {
-        const freeAttemptsData = freeAttemptsResponse.data as any;
+      // Check free attempts first (faster path for most users)
+      if (freeAttemptsResponse.status === 'fulfilled' && 
+          freeAttemptsResponse.value?.success && 
+          freeAttemptsResponse.value.data) {
+        const freeAttemptsData = freeAttemptsResponse.value.data as any;
         if (freeAttemptsData.remainingFreeAttempts > 0) {
           // User has free attempts - ALLOW ACCESS
           console.log('✅ Access granted: User has free attempts remaining', freeAttemptsData.remainingFreeAttempts);
@@ -125,11 +210,11 @@ function SimulationPageContent() {
         }
       }
       
-      // STEP 2: If no free attempts, check REAL subscription from API (not userProfile)
-      const subscriptionResponse = await apiClient.get('/subscriptions/active');
-      
-      if (subscriptionResponse.success && subscriptionResponse.data) {
-        const subscriptionData = subscriptionResponse.data as any;
+      // Check subscription if no free attempts
+      if (subscriptionResponse.status === 'fulfilled' && 
+          subscriptionResponse.value?.success && 
+          subscriptionResponse.value.data) {
+        const subscriptionData = subscriptionResponse.value.data as any;
         const tier = subscriptionData.subscription?.tier;
         setSubscriptionTier(tier);
         
@@ -209,9 +294,36 @@ function SimulationPageContent() {
   const handleStartVapiSimulation = async () => {
     try {
       setIsStartingSimulation(true);
-      toast.loading(t_('Création de la simulation...', 'Creating simulation...'));
+      
+      // Step 1: Check monthly simulation count FIRST (only restriction for direct start)
+      toast.loading(t_('Vérification de votre quota...', 'Checking your quota...'));
+      
+      try {
+        const countResponse = await apiClient.get('/voice-simulation/monthly-count');
+        if (countResponse.success && countResponse.data) {
+          const monthlyData = countResponse.data as any;
+          const { remaining, limit, monthlyCount } = monthlyData;
+          
+          if (remaining <= 0) {
+            toast.dismiss();
+            toast.error(
+              t_(
+                `Vous avez atteint votre limite de ${limit} simulation(s) ce mois. Veuillez réessayer le mois prochain.`,
+                `You have reached your limit of ${limit} simulation(s) this month. Please try again next month.`
+              )
+            );
+            setIsStartingSimulation(false);
+            return;
+          }
+        }
+      } catch (countError: any) {
+        console.warn('Could not check monthly count:', countError);
+        // Continue anyway - backend will enforce limit during booking
+      }
 
-      // Step 1: Get user's voice preference
+      // Step 2: Get voice preference (parallel with count check if possible, but keep it simple)
+      toast.loading(t_('Préparation de la simulation...', 'Preparing simulation...'));
+      
       let voicePreference: string | undefined;
       try {
         const savedPreference = localStorage.getItem('voicePreference');
@@ -222,27 +334,12 @@ function SimulationPageContent() {
           }
         }
       } catch (e) {
-        console.warn('Could not load voice preference from localStorage:', e);
+        // Ignore - will use default
       }
 
-      // If no preference in localStorage, try to get from backend
-      if (!voicePreference) {
-        try {
-          const response = await apiClient.get('/users/preferences/voice');
-          if (response.success && response.data) {
-            const voiceData = response.data as any;
-            if (voiceData.voiceId) {
-              voicePreference = voiceData.voiceId;
-            }
-          }
-        } catch (e) {
-          console.warn('Could not load voice preference from backend:', e);
-        }
-      }
-
-      // Step 2: Create simulation with AUTO booking type and immediate date (now + 5 seconds for instant start)
+      // Step 3: Create simulation quickly with immediate date
       const now = new Date();
-      const scheduledDate = new Date(now.getTime() + 5 * 1000); // 5 seconds from now for instant start
+      const scheduledDate = new Date(now.getTime() + 2 * 1000); // 2 seconds from now for fast start
 
       const bookingResponse = await apiClient.post('/voice-simulation/book', {
         bookingType: 'AUTO',
@@ -254,18 +351,18 @@ function SimulationPageContent() {
         throw new Error(bookingResponse.error?.message || t_('Échec de la création de la simulation', 'Failed to create simulation'));
       }
 
-      const simulationId = bookingResponse.data.simulation?.id || bookingResponse.data.id;
+      const bookingData = bookingResponse.data as any;
+      const simulationId = bookingData.simulation?.id || bookingData.id;
       if (!simulationId) {
         throw new Error(t_('ID de simulation non trouvé', 'Simulation ID not found'));
       }
 
       toast.dismiss();
-      toast.success(t_('Simulation créée avec succès', 'Simulation created successfully'));
 
-      // Step 3: Redirect to simulation room - let the room page handle starting
-      // The simulation room will check if it's accessible and allow the user to start it
-      // This supports both immediate start (user clicks start button) and scheduled access (via email link)
-      router.push(`/simulation-vocale/${simulationId}`);
+      // Step 4: Redirect directly to guide page (guide will handle auto-start after completion)
+      // Mark this as a direct start so guide knows to auto-start
+      localStorage.setItem(`direct_start_${simulationId}`, 'true');
+      router.push(`/simulation-vocale/${simulationId}/guide`);
     } catch (error: any) {
       console.error('Error starting VAPI simulation:', error);
       toast.dismiss();
